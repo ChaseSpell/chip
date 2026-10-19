@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA22">
+<meta name="chip-version" content="ALPHA25">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -317,6 +317,14 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 .qr-check.warn { color: var(--yellow-ink); background: var(--yellow); }
 .qr-check.bad { color: #fff; background: var(--red); font-weight: 700; }
 .app-ver { margin: 18px 0 0; text-align: center; font-size: .85em; }
+/* Phone view setup: what's missing after a check, the folded address fields, the hint under the key */
+.ph-issue { margin: 12px 0; padding: 12px 14px; border: 2px solid var(--yellow); border-radius: 12px; background: color-mix(in srgb, var(--yellow) 12%, transparent); }
+.ph-issue p { margin: 6px 0 0; }
+.ph-issue textarea { margin-top: 10px; }
+.ph-adv { margin-top: 16px; }
+.ph-adv > summary { cursor: pointer; padding: 6px 0; color: var(--blue); font-weight: 700; }
+.ph-adv[open] > summary { margin-bottom: 8px; }
+.ph-hint { display: block; margin-top: 5px; line-height: 1.35; }
 textarea.mono { font-size: .82em; line-height: 1.35; }
 
 /* ---------- the read-only phone page (opened from the QR link) ---------- */
@@ -365,6 +373,18 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-row .r { text-align: right; white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
 .vw .champ { padding-bottom: 6px; }
 .vw-foot { margin-top: 28px; color: var(--chalk-dim); font-size: .85rem; text-align: center; }
+.vw-tt { min-width: 0; }
+.vw-end { color: var(--chalk-dim); font-size: .85rem; font-weight: 700; }
+.vw-wins { margin-top: 14px; padding: 8px 12px; border: 1.5px solid var(--yellow); border-radius: 10px; background: color-mix(in srgb, var(--yellow) 12%, transparent); font-weight: 800; letter-spacing: .02em; }
+.vw-wins .lbl { color: var(--yellow); font-size: .85em; letter-spacing: .05em; text-transform: uppercase; }
+.vw-wins .sep { color: var(--chalk-dim); }
+.vw-wd-btn { margin-top: 12px; }
+.vw-wd { margin-top: 12px; padding: 12px 14px; border: 2px solid var(--red); border-radius: 12px; background: color-mix(in srgb, var(--red) 10%, transparent); }
+.vw-wd p { margin: 6px 0 0; }
+.vw-wd-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.vw-wd-note { margin: 10px 0 0; color: var(--yellow); font-weight: 700; }
+.vw-wd-err { color: var(--red-text); font-weight: 700; }
+.wd-who { font-size: 1.15em; }
 /* the spot shot pop-up: 🎯 or ❌, a word and a line, for under three seconds */
 #fx-root { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
 .shotfx { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, #021014 55%, transparent);
@@ -1305,15 +1325,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   /* ---------- roster changes during play (late entries are not permitted) ---------- */
-  function dropPlayer(s, id, now) {
+  /* how = 'phone' when the player asked to withdraw from their phone and the director agreed */
+  function dropPlayer(s, id, now, how) {
     if (s.phase !== 'active') return { error: 'The tournament is not running' };
     if (s.rr) return blockedByPlayoff(s);
     var p = P(s, id);
     if (!p || p.status !== 'active') return { error: 'Only active players can be dropped' };
     if (activeCount(s) <= 1) return { error: 'Cannot drop the last player' };
-    return act(s, 'Drop ' + p.name, function () {
+    return act(s, (how === 'phone' ? 'Withdraw ' : 'Drop ') + p.name, function () {
       knockOut(s, p, now, 'dropped');
-      addLog(s, now, 'drop', { player: p.id }, p.name + ' dropped out');
+      addLog(s, now, 'drop', { player: p.id, via: how || null }, p.name + (how === 'phone' ? ' withdrew from their phone' : ' dropped out'));
       afterPlay(s, now);
       return { ok: true };
     });
@@ -2260,7 +2281,65 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var s = statusOf(mine);
     return '<section class="vw-me"><div class="vw-me-top"><div class="nm">' + esc(up(mine.n)) + '</div><button class="btn small ghost" data-vw="pick">Not you?</button></div>' +
       '<div class="big">' + esc(s.big) + '</div>' + (s.sub ? '<div class="sub">' + esc(s.sub) + '</div>' : '') +
-      '<div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div></section>';
+      '<div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div>' +
+      wdHTML(mine) + '</section>';
+  }
+
+  /* ---------- withdrawing from this phone ----------
+     A player who picked their name can ask to withdraw: two confirmations, then a request goes to the director, who
+     confirms it or keeps them in. The request is remembered on this phone so the card can say what happened. */
+  var WDK = 'chipTourney.wd', wdStep = 0, wdBusy = false, wdErr = '';
+  function wdMine(mine) {
+    try {
+      var o = JSON.parse(localStorage.getItem(WDK) || 'null');
+      return o && o.code === code && String(o.pid) === String(mine.id) ? o : null;
+    } catch (e) { return null; }
+  }
+  function wdHTML(mine) {
+    var req = wdMine(mine), ans = req && VM.wd ? VM.wd[req.rid] : null, h = '';
+    var kept = !!(VM.wdNo && VM.wdNo[mine.id]);   /* the director kept this player in: no asking again, from any phone */
+    if (mine.st === 'd' && req) return '<p class="vw-wd-note">You withdrew from the tournament.</p>';
+    if (mine.st !== 'a') return '';
+    if (kept) return '<p class="vw-wd-note">The director kept you in. If you need to leave, talk to the director in person.</p>';
+    if (req && !ans) return '<p class="vw-wd-note">Withdrawal sent. Waiting for the director to confirm\u2026</p>';
+    if (!VM.wdOn || VM.phase !== 'active' || VM.rr) return h;
+    if (wdStep === 1) return h + '<div class="vw-wd"><b>Withdraw from the tournament?</b>' +
+      '<p>You\'d leave the tournament and give up your chips. Your request goes to the director, who confirms it.</p>' +
+      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Cancel</button><button class="btn danger" data-vw="wd2">Continue</button></div></div>';
+    if (wdStep === 2) return h + '<div class="vw-wd"><b>Are you sure?</b><p>If you withdraw by mistake, you can\'t be added back.</p>' +
+      (wdErr ? '<p class="vw-wd-err">' + esc(wdErr) + '</p>' : '') +
+      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Keep playing</button><button class="btn danger" data-vw="wd-go"' + (wdBusy ? ' disabled' : '') + '>' +
+      (wdBusy ? 'Sending\u2026' : 'Yes, withdraw ' + esc(up(mine.n))) + '</button></div></div>';
+    return h + '<button class="btn small ghost vw-wd-btn" data-vw="wd1">Withdraw from the tournament</button>';
+  }
+  function sendWithdraw(mine) {
+    wdBusy = true; wdErr = ''; render();
+    fetch('https://' + db + '/requests/' + code + '.json', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p: String(mine.id), n: String(mine.n).slice(0, 60) })
+    }).then(function (r) {
+      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'off' : 'http');
+      return r.json();
+    }).then(function (j) {
+      if (!j || !j.name) throw new Error('http');
+      try { localStorage.setItem(WDK, JSON.stringify({ code: code, pid: mine.id, rid: j.name, at: Date.now() })); } catch (e) { /* the card can't follow it after a reload */ }
+      wdStep = 0; wdBusy = false; render();
+    }).catch(function (e) {
+      wdBusy = false;
+      wdErr = e && e.message === 'off' ? 'Withdrawing from phones is off right now. Tell the director in person.' : 'Couldn\'t send it. Check your connection and try again.';
+      render();
+    });
+  }
+  /* the most wins and 2nd most, like the ticker on the TV, kept still */
+  function joinNames(ids) {
+    var n = list(ids).map(P).filter(Boolean).map(function (p) { return esc(up(p.n)); });
+    return n.length > 2 ? n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1] : n.join(' and ');
+  }
+  function winsHTML() {
+    var t = list(VM.tiers).filter(function (x) { return x && list(x.ids).length; });
+    if (!t.length || VM.phase === 'finished') return '';
+    return '<div class="vw-wins"><span aria-hidden="true">\uD83E\uDD81</span> ' + t.slice(0, 2).map(function (x, i) {
+      return '<span class="lbl">' + (i ? '2nd' : 'Most wins') + ':</span> ' + joinNames(x.ids) + ' ' + (x.w || 0);
+    }).join('<span class="sep"> \u00B7 </span>') + '</div>';
   }
   function plRow(p, mine) {
     return '<div class="pl' + (isMe(p, mine) ? ' me' : '') + '"><b>' + esc(up(p.n)) + '</b><span class="pchips">' + chips(p) + '<span class="frac">(' + p.c + '/' + p.s + ')</span>' + run(p) + '</span></div>';
@@ -2372,6 +2451,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     else if (conn === 'gone') body = '<div class="banner info vw-sec">This tournament isn\'t shared anymore. Ask the director for the new QR code.</div>';
     else if (!VM || !Object.keys(pmap).length) body = '<p class="vw-wait">Nothing to show yet. This page fills in by itself once the tournament starts.</p>';
     else {
+      body += winsHTML();
       if (VM.stage) body += '<div class="banner vw-sec">' + esc(VM.stage) + '</div>';
       body += meHTML(mine);
       if (!picking) {
@@ -2385,8 +2465,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       }
     }
     var keep = window.pageYOffset;
-    app.innerHTML = '<header class="vw-bar"><div class="vw-title">' + esc((VM && VM.title) || 'Chip tournament') + '</div>' + liveHTML() + '</header>' +
-      '<main class="vw">' + body + '<p class="vw-foot">Read-only. Results are entered by the tournament director.' + (VM && VM.at ? ' Last change ' + E.fmtTime(VM.at) + '.' : '') + '<br>' + VERSION + '</p></main>';
+    var endT = VM && VM.end && VM.phase === 'active' ? '<div class="vw-end">Ends \u2248 ' + E.fmtTime(VM.end) + '</div>' : '';
+    app.innerHTML = '<header class="vw-bar"><div class="vw-tt"><div class="vw-title">' + esc((VM && VM.title) || 'Chip tournament') + '</div>' + endT + '</div>' + liveHTML() + '</header>' +
+      '<main class="vw">' + body + '<p class="vw-foot">Results are entered by the tournament director.' + (VM && VM.at ? ' Last change ' + E.fmtTime(VM.at) + '.' : '') + '<br>' + VERSION + '</p></main>';
     window.scrollTo(0, keep);
   }
 
@@ -2394,7 +2475,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var el = e.target.closest('[data-vw]');
     if (!el) return;
     var a = el.getAttribute('data-vw');
-    if (a === 'pick') { picking = true; render(); window.scrollTo(0, 0); }
+    if (a === 'pick') { picking = true; wdStep = 0; render(); window.scrollTo(0, 0); }
+    else if (a === 'wd1') { wdStep = 1; wdErr = ''; render(); }
+    else if (a === 'wd2') { wdStep = 2; render(); }
+    else if (a === 'wd-cancel') { wdStep = 0; wdErr = ''; render(); }
+    else if (a === 'wd-go') { var wm = findMe(); if (wm && !wdBusy) sendWithdraw(wm); }
     else if (a === 'unpick') { picking = false; render(); }
     else if (a === 'me') {
       me = el.getAttribute('data-n') || '';
@@ -2522,6 +2607,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (S.phase !== 'registration') ui.tablesTouched = true;
     if (ui.modal && ui.modal.type !== 'colors') { ui.modal = null; ui.shownType = null; modalRoot.innerHTML = ''; }
     render();
+    setTimeout(maybeShowWd, 0);
     if (conflict) toast('This tournament was changed in another tab or window, so your last change was not saved. This is the latest version.', { bad: true });
   }
   /* catch up when this tab comes back into view */
@@ -2537,11 +2623,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      [key, CSS variable, label, what it paints]. The two chip colors (CHIP_ROWS) are part of each scheme, so the Default,
      Light and Dark buttons set the chips too; CHIP_PRESETS change only the chips. */
   var COLOR_KEY = 'chipTourney.colors', PREF_KEY = 'chipTourney.prefs';
-  var prefs = { showEnd: false, keepAwake: false };
+  var prefs = { showEnd: false, keepAwake: false, withdraw: true };
   function loadPrefs() {
     try {
       var po0 = JSON.parse(localStorage.getItem(PREF_KEY) || 'null');
-      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; }
+      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; prefs.withdraw = po0.withdraw !== false; }
     } catch (e) { /* defaults */ }
   }
   loadPrefs();
@@ -2606,7 +2692,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return c;
   }
   var colors = loadColors();
-  function saveColors() { try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) { /* colors still apply for this visit */ } }
+  function saveColors() {
+    try { localStorage.setItem(COLOR_KEY, JSON.stringify(colors)); } catch (e) { /* colors still apply for this visit */ }
+    /* phones show the director's colors: send them a moment after the last change (a few quick picks go out once) */
+    if (phoneLive() && S.phase !== 'registration') schedulePublish(800);
+  }
   function applyColors() {
     var root = document.documentElement;
     ALL_COLORS.forEach(function (r) { root.style.setProperty('--' + r[1], colors[r[0]]); });
@@ -2736,7 +2826,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      sign-in. Running the tournament never waits on any of this; with no internet, phones catch up once it's back.
      The setup (Firebase project, sign-in, phone page address, link code) is saved in this browser only, never in backups. */
   function loadPhone() {
-    phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '' };
+    phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '', project: '' };
     try {
       var o = JSON.parse(localStorage.getItem(PHONE_KEY) || 'null');
       if (o && typeof o === 'object') Object.keys(phone).forEach(function (k) { if (o[k] !== undefined && o[k] !== null) phone[k] = o[k]; });
@@ -2834,13 +2924,276 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (host && !/^[0-9a-z\-.]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(host)) host = '';
     return { apiKey: key ? key.trim() : '', db: host };
   }
-  function foundText(c) {
-    if (!c || (!c.apiKey && !c.db)) return 'Nothing found yet.';
-    return (c.apiKey ? 'API key ✓' : 'API key not found yet') + ' · ' +
-      (c.db ? 'database ' + c.db + ' ✓' : 'database address not found yet. It\'s at the top of the Realtime Database page; paste it here too.');
+  /* a database address typed or pasted in any common form: https://name.firebaseio.com/, name.firebaseio.com, or a config block */
+  function dbHost(text) {
+    var c = parseConfig(text).db;
+    if (c) return c;
+    var h = String(text || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    return /^[0-9a-z\-.]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(h) ? h : '';
   }
+  /* the Firebase project a sign-in token belongs to (the token's "aud" field) */
+  function tokenProject(t) {
+    try {
+      var b = String(t || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b.length % 4) b += '=';
+      return String(JSON.parse(decodeURIComponent(escape(atob(b)))).aud || '');
+    } catch (e) { return ''; }
+  }
+  /* When this app is opened from a web address (GitHub Pages), players open that same address: it's the phone page.
+     A copy running on this device (a file, HTML Serve, a local address) can't tell, so it uses the saved address. */
+  function autoPage() {
+    if (!/^https?:$/.test(location.protocol)) return '';
+    var h = String(location.hostname || '').toLowerCase();
+    if (!h || h === 'localhost' || /^127\.|^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|^0\.0\.0\.0$|^\[?::1\]?$|\.local$/.test(h)) return '';
+    return normalizePage(location.origin + location.pathname);
+  }
+  /* Finds the project's database by itself. A project's own database is named after the project, in one of the three
+     places Firebase keeps them (or, in projects from before 2020, under the bare project name). A database that exists
+     answers a read of live/… (allowed by the rules, or refused while it's still locked); one that doesn't, doesn't. */
+  function findDatabase(pid, preferred) {
+    var c = [];
+    function add(h) { h = String(h || '').toLowerCase(); if (/^[0-9a-z\-.]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(h) && c.indexOf(h) < 0) c.push(h); }
+    add(preferred);
+    if (/^[0-9a-z\-]+$/.test(pid)) {
+      add(pid + '-default-rtdb.firebaseio.com');
+      add(pid + '-default-rtdb.europe-west1.firebasedatabase.app');
+      add(pid + '-default-rtdb.asia-southeast1.firebasedatabase.app');
+      add(pid + '.firebaseio.com');
+    }
+    var i = 0;
+    function next() {
+      if (i >= c.length) return Promise.resolve('');
+      var h = c[i++];
+      return fetch('https://' + h + '/live/__probe.json', { cache: 'no-store' })
+        .then(function (r) { return (r.status === 200 || r.status === 401 || r.status === 403) ? h : next(); }, function () { return next(); });
+    }
+    return next();
+  }
+  /* a tiny update ("still here") that shows whether the database accepts this login's updates */
+  function testWrite() {
+    return sendToDB('PATCH', JSON.stringify({ hb: now() })).then(function (r) {
+      if (r.ok) return 'ok';
+      if (r.status === 401 || r.status === 403) return 'refused';
+      if (r.status === 404) return 'nodb';
+      return 'error:' + r.status;
+    }, function (e) { return e && e.firebase ? 'fail:' + e.message : 'offline'; });
+  }
+  /* After signing in (or on Check again): find the database, work out the phone page, then try an update.
+     Answers 'ok', or what's missing: 'refused' (rules not published), 'nodb', 'baddb', 'nopage', 'offline', 'error:…', 'fail:…' */
+  function phoneConnect(m) {
+    return idToken().then(function (t) {
+      var pid = tokenProject(t) || phone.project || '';
+      var typedDb = m.db !== undefined && String(m.db).trim() !== '' && String(m.db).trim() !== 'https://' + phone.db;
+      var typed = typedDb ? dbHost(m.db) : '';
+      if (typedDb && !typed) return 'baddb';
+      var same = !!(phone.db && pid && (phone.project === pid || (!phone.project && phone.db.indexOf(pid) === 0)));
+      return findDatabase(pid, typed || m.cfgDb || (same ? phone.db : '')).then(function (host) {
+        if (!host) return 'nodb';
+        phone.db = host;
+        if (pid) phone.project = pid;
+        var pv = m.page !== undefined && String(m.page).trim() ? String(m.page) : (autoPage() || phone.page);
+        var page = normalizePage(pv);
+        if (!/^https?:\/\/[^\s\/$.?#][^\s]*$/i.test(page)) { savePhone(); return 'nopage'; }
+        phone.page = page;
+        if (!phone.code) phone.code = newLinkCode();
+        savePhone();
+        return testWrite();
+      });
+    }, function (e) { return e && e.firebase ? 'fail:' + e.message : 'offline'; });
+  }
+  function connectIssueText(res) {
+    if (res === 'offline') return 'Couldn\'t reach Firebase. Check this device is online, then tap Check again.';
+    if (res === 'baddb') return 'That database address doesn\'t look right. It ends in firebaseio.com or firebasedatabase.app.';
+    if (/^error:/.test(res)) return 'Firebase answered with error ' + res.slice(6) + '. Tap Check again in a moment.';
+    if (/^fail:/.test(res)) return res.slice(5);
+    return '';
+  }
+  /* a sign-in or Check again that worked, then (with withdrawals on) a look at whether the rules let players send requests */
+  function connectAndCheck(m) {
+    return phoneConnect(m).then(function (res) {
+      if (res !== 'ok' || prefs.withdraw === false) return res;
+      return checkWdRules().then(function (w) { return w === 'old' ? 'wdrules' : 'ok'; });
+    });
+  }
+  /* what happens after a sign-in or Check again: on success phone view turns on; otherwise the pop-up says what's missing.
+     'wdrules': phone view works, but the rules are from before phone withdrawals, so the pop-up stays open with the new ones */
+  function afterConnect(m, res) {
+    if (res === 'ok' || res === 'wdrules') {
+      var first = !phone.on;
+      phone.on = true; savePhone(); PUB.state = 'idle';
+      if (S.phase !== 'registration') schedulePublish(0);
+      pollRequests();
+      if (res === 'wdrules') {
+        render();
+        if (ui.modal === m) { m.issue = 'wdrules'; renderModal(); }
+        toast(first ? 'Phone view is on. One more step lets players withdraw from their phones.' : 'Players still can\'t withdraw from their phones: the rules haven\'t changed yet.', first ? null : { bad: true });
+        return;
+      }
+      var wasWd = !!(m && (m.issue === 'wdrules' || m.wdShown));
+      if (ui.modal === m) closeModal();
+      render();
+      var said = wasWd ? 'Done: players can withdraw from their phones now.' : (first ? 'Phone view is on. ' : 'Saved. ') + (S.phase === 'registration' ? 'Phones start updating when the tournament starts.' : 'Sending an update now.');
+      toast(said);
+      /* then check the page players will open, and speak up if they'd get the setup screen */
+      checkPhonePage(true).then(function (r) {
+        var c = pageCheckText(r);
+        if (c.cls === 'bad' || c.cls === 'warn') toast(c.txt, { bad: true });
+        else if (r && r.state === 'ok') toast(said + ' ' + c.txt);
+      });
+      return;
+    }
+    render();
+    if (ui.modal !== m) return;
+    m.issue = res; m.issueText = connectIssueText(res);
+    renderModal();
+  }
+  /* The database rules: anyone with the link reads the tournament (live/…), only this login changes it. Players' phones may
+     add a withdrawal request (requests/…) while the tournament says withdrawals are on, and can't read, change or remove
+     any request; only this login reads and removes them. */
   function rulesText() {
-    return JSON.stringify({ rules: { live: { $code: { '.read': true, '.write': "auth != null && auth.uid === '" + phone.uid + "'" } } } }, null, 2);
+    var me = "auth != null && auth.uid === '" + phone.uid + "'";
+    return JSON.stringify({ rules: {
+      live: { $code: { '.read': true, '.write': me } },
+      requests: { $code: { '.read': me, '.write': me,
+        $req: {
+          '.write': "!data.exists() && root.child('live').child($code).child('wdOn').val() === true",
+          '.validate': "newData.hasChildren(['p', 'n'])",
+          p: { '.validate': 'newData.isString() && newData.val().length <= 12' },
+          n: { '.validate': 'newData.isString() && newData.val().length <= 60' },
+          $other: { '.validate': false }
+        } } }
+    } }, null, 2);
+  }
+
+  /* ---------- withdrawals from phones ----------
+     A player's phone can ask to withdraw: it adds a request under requests/<link code> (the rules allow it only while the
+     tournament says withdrawals are on). This device looks for requests every 10 seconds, chimes, and shows each one in a
+     pop-up that stays until the director answers: Withdraw (the same as Drop) or Keep in. Answers are kept with the
+     tournament (S.wd: request -> 'done', 'kept' or 'out') and go to phones in the summary; the request is then removed.
+     A player kept in can't ask again (S.wdNo: player -> 1): their phone loses the button, and any later request for them
+     is answered 'kept' at once, with no pop-up or chime. */
+  var WD = { rules: '', timer: null, busy: false, queue: [], warned: false };
+  function wdWanted() { return phoneLive() && prefs.withdraw !== false; }
+  function wdOn() { return wdWanted() && WD.rules === 'ok' && S.phase === 'active' && !S.rr; }
+  function reqURL(rid) { return 'https://' + phone.db + '/requests/' + phone.code + (rid ? '/' + rid : '') + '.json'; }
+  /* do the rules let this login read requests? Only the new rules do: that's how old rules are spotted */
+  function checkWdRules() {
+    return idToken().then(function (t) {
+      return fetch(reqURL() + '?shallow=true&auth=' + encodeURIComponent(t), { cache: 'no-store' });
+    }).then(function (r) {
+      var w = (r.status === 401 || r.status === 403) ? 'old' : (r.ok ? 'ok' : 'unknown');
+      if (w !== 'unknown') setWdRules(w);
+      return w;
+    }, function () { return 'unknown'; });
+  }
+  function setWdRules(w) {
+    if (WD.rules === w) return;
+    WD.rules = w;
+    schedulePublish(0);   /* phones show the Withdraw button only while this is 'ok' */
+    showPhoneStatus();
+    if (w === 'old' && !WD.warned && prefs.withdraw !== false) {
+      WD.warned = true;
+      toast('Players can\'t withdraw from their phones until you update the database rules: Menu › Phone view setup.');
+    }
+  }
+  function pollRequests() {
+    clearTimeout(WD.timer); WD.timer = null;
+    if (!wdWanted() || S.phase !== 'active' || WD.busy) return;   /* the next save or switch starts it again */
+    if (document.hidden) { WD.timer = setTimeout(pollRequests, 10000); return; }
+    WD.busy = true;
+    idToken().then(function (t) {
+      return fetch(reqURL() + '?auth=' + encodeURIComponent(t), { cache: 'no-store' });
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) { setWdRules('old'); return; }
+      if (!r.ok) return;
+      return r.json().then(function (d) { setWdRules('ok'); takeRequests(d); });
+    }).catch(function () { /* offline: the next check catches up */ }).then(function () {
+      WD.busy = false;
+      if (wdWanted() && S.phase === 'active') WD.timer = setTimeout(pollRequests, WD.rules === 'old' ? 60000 : 10000);
+    });
+  }
+  function takeRequests(data) {
+    if (!data || typeof data !== 'object') return;
+    var fresh = false, changed = false;
+    if (!S.wd) S.wd = {};
+    Object.keys(data).forEach(function (rid) {
+      var q = data[rid] || {}, pid = parseInt(q.p, 10);
+      if (S.wd[rid]) { removeRequest(rid); return; }   /* answered already: just tidy up */
+      if (S.wdNo && S.wdNo[pid]) { S.wd[rid] = 'kept'; removeRequest(rid); changed = true; return; }   /* kept in before: no asking again */
+      if (WD.queue.some(function (x) { return x.rids.indexOf(rid) >= 0; })) return;
+      var p = P(pid);
+      if (!p || p.status !== 'active' || S.phase !== 'active') { S.wd[rid] = 'out'; removeRequest(rid); changed = true; return; }
+      var same = WD.queue.filter(function (x) { return x.pid === pid; })[0];
+      if (same) { same.rids.push(rid); return; }   /* a second tap from the same player joins the first */
+      WD.queue.push({ pid: pid, rids: [rid], at: now() });
+      fresh = true;
+    });
+    if (changed && save()) render();
+    if (fresh) chime();
+    maybeShowWd();
+  }
+  function removeRequest(rid) {
+    idToken().then(function (t) {
+      return fetch(reqURL(rid) + '?auth=' + encodeURIComponent(t), { method: 'DELETE' });
+    }).catch(function () { /* removed on a later check */ });
+  }
+  /* the answer, for every request in the item (the same player may have asked twice) */
+  function settleWd(item, outcome) {
+    if (!S.wd) S.wd = {};
+    item.rids.forEach(function (rid) { S.wd[rid] = outcome; removeRequest(rid); });
+    WD.queue = WD.queue.filter(function (x) { return x !== item; });
+  }
+  /* shows the oldest unanswered request when nothing else is on screen; it waits behind any pop-up already open */
+  function maybeShowWd() {
+    if (ui.modal) return;
+    while (WD.queue.length) {
+      var item = WD.queue[0], p = P(item.pid);
+      if (S.wd && item.rids.every(function (rid) { return S.wd[rid]; })) { WD.queue.shift(); continue; }   /* answered in another tab */
+      if (!p || p.status !== 'active' || S.phase !== 'active') { settleWd(item, 'out'); if (save()) render(); continue; }
+      openModal({ type: 'wd-req', item: item });
+      return;
+    }
+  }
+  function wdStatusText() {
+    if (prefs.withdraw === false) return 'Off: players tell you in person.';
+    if (!phoneLive()) return 'Works while phone view is on.';
+    if (WD.rules === 'old') return 'Needs the updated database rules: tap Phone view setup.';
+    return 'On: a request pops up here for you to confirm.';
+  }
+
+  /* ---------- the chime for a withdrawal request (it plays when this device's sound is on) ----------
+     Made here, with no sound file. Browsers play sound only after a tap on the page, so the first tap gets it ready. */
+  var AC = null;
+  function audioCtx() {
+    if (AC) return AC;
+    var C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    try { AC = new C(); } catch (e) { AC = null; }
+    return AC;
+  }
+  function unlockChime() {
+    if (AC && AC.state === 'running') return;
+    var c = audioCtx();
+    if (!c) return;
+    try { if (c.state === 'suspended') c.resume(); } catch (e) { /* ignore */ }
+    try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* ignore */ }
+  }
+  function chime() {
+    var c = audioCtx();
+    if (!c) return;
+    try {
+      if (c.state === 'suspended') c.resume();
+      var t = c.currentTime + 0.03;
+      [[880, 0], [1318.5, 0.18], [1760, 0.36]].forEach(function (n) {   /* three rising notes */
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = 'sine'; o.frequency.value = n[0];
+        g.gain.setValueAtTime(0.0001, t + n[1]);
+        g.gain.exponentialRampToValueAtTime(0.35, t + n[1] + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + n[1] + 0.6);
+        o.connect(g); g.connect(c.destination);
+        o.start(t + n[1]); o.stop(t + n[1] + 0.65);
+      });
+    } catch (e) { /* no sound here */ }
   }
 
   /* ---------- signing in (Firebase's sign-in service, called directly: no extra code to load) ---------- */
@@ -2851,7 +3204,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       /PASSWORD_LOGIN_DISABLED|OPERATION_NOT_ALLOWED/.test(m) ? 'Email/password sign-in isn\'t turned on in Firebase (Security › Authentication › Sign-in method).' :
       /USER_DISABLED/.test(m) ? 'That user is turned off in Firebase.' :
       /TOO_MANY_ATTEMPTS/.test(m) ? 'Too many tries. Wait a few minutes and try again.' :
-      /API key not valid|API_KEY_INVALID/i.test(m) ? 'Firebase didn\'t accept the API key. Paste the config block again.' :
+      /API key not valid|API_KEY_INVALID/i.test(m) ? 'Firebase didn\'t accept that key. Copy it again from Firebase › Project settings › General (it starts with AIza).' :
       /TOKEN_EXPIRED|INVALID_REFRESH_TOKEN|USER_NOT_FOUND|INVALID_ID_TOKEN/.test(m) ? 'The saved sign-in no longer works. Open Phone view setup and sign in again.' :
       'Firebase said: ' + (m || 'error ' + status) + '.');
     e.firebase = true;
@@ -2909,7 +3262,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var body;
     try { body = JSON.stringify(viewModel()); } catch (e) { PUB.busy = false; return; }
     sendToDB('PUT', body).then(function (r) {
-      if (r.ok) { PUB.state = 'ok'; PUB.err = ''; PUB.lastOk = now(); }
+      if (r.ok) { PUB.state = 'ok'; PUB.err = ''; PUB.lastOk = now(); if (wdWanted() && !WD.timer && !WD.busy) pollRequests(); }
       else if (r.status === 401 || r.status === 403) { PUB.state = 'refused'; PUB.err = ''; }
       else if (r.status === 404) { PUB.state = 'failed'; PUB.err = 'Firebase can\'t find that database. Check the database address in setup.'; }
       else { PUB.state = 'failed'; PUB.err = 'Firebase answered with error ' + r.status + '.'; }
@@ -2929,7 +3282,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function heartbeat() {
     if (!phoneLive() || S.phase !== 'active' || PUB.busy || document.hidden) return;
     if (PUB.state !== 'ok') { publishNow(); return; }
-    sendToDB('PATCH', JSON.stringify({ hb: now() })).then(function (r) { if (r.ok) { PUB.lastOk = now(); showPhoneStatus(); } }, function () { /* the next save or heartbeat tries again */ });
+    sendToDB('PATCH', JSON.stringify({ hb: now(), end: phoneEnd() })).then(function (r) { if (r.ok) { PUB.lastOk = now(); showPhoneStatus(); } }, function () { /* the next save or heartbeat tries again */ });
+    if (wdWanted() && !WD.timer && !WD.busy) pollRequests();
   }
   function phoneStatus() {
     if (!phoneReady()) return { cls: '', txt: 'Not set up yet.' };
@@ -2947,6 +3301,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var st = phoneStatus(), dot = document.getElementById('qr-dot');
     if (dot) dot.className = 'pdot ' + st.cls;
     ['phone-status', 'qr-status'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = st.txt; });
+    var ws = document.getElementById('wd-status');
+    if (ws) ws.textContent = wdStatusText();
+    var wq = document.getElementById('qr-wd');
+    if (wq) wq.hidden = !(wdWanted() && WD.rules === 'old');
   }
 
   /* ---------- what phones get: everything the phone page shows, worked out here ---------- */
@@ -2983,6 +3341,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (S.mode === 'MANUAL') return 'The director is throwing matches by hand for now.';
     return '';
   }
+  function phoneEnd() {
+    if (!prefs.showEnd || S.phase !== 'active') return 0;
+    var fe = E.finishEstimate(S, now());
+    return fe ? Math.round((now() + fe.min * 60000) / 300000) * 300000 : 0;
+  }
   function viewModel() {
     var rn = E.runs(S), we = E.waitEstimate(S), am = E.avgMatch(S), mw = E.mostWins(S), rr = S.rr;
     var vm = {
@@ -2994,7 +3357,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       tables: [], queue: S.queue.slice(), ordered: !S.pr, eta: we ? Math.round(we.perSpotMin * 100) / 100 : 0,
       avg: am ? Math.round(am.avgMin * 100) / 100 : 0, champ: S.champion || 0,
       mw: mw ? { ids: mw.ids, w: mw.wins } : null, lr: rn.top >= 2 ? { ids: rn.ids, n: rn.top } : null,
-      rr: null, rounds: null, colors: colors
+      rr: null, rounds: null, colors: colors,
+      tiers: E.winTiers(S, 2).map(function (t) { return { ids: t.ids, w: t.wins }; }),   /* the most wins and 2nd most, as on the TV */
+      end: phoneEnd(),                                                                    /* the finish time, when it shows on the TV */
+      wdOn: wdOn(), wd: S.wd || {}, wdNo: S.wdNo || {}                                    /* phone withdrawals: allowed now, the answers, who can't ask again */
     };
     if (rr && rr.stage !== 'done') {
       var so = rr.shootout;
@@ -3031,6 +3397,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       '<p class="muted" style="margin:6px 0 0;font-size:.9em">Lets players follow the tournament live on their phones. Needs internet on this device and a free Firebase project.</p>';
     return '<div class="grp">Phone view</div><label class="opt" for="phone-opt"><input id="phone-opt" type="checkbox" data-act="phone-toggle"' + (phone.on ? ' checked' : '') + '>' +
       '<span><b>Send updates to phones</b><small id="phone-status">' + esc(phoneStatus().txt) + '</small></span></label>' +
+      '<label class="opt" for="wd-opt"><input id="wd-opt" type="checkbox" data-act="wd-toggle"' + (prefs.withdraw !== false ? ' checked' : '') + '>' +
+      '<span><b>Let players withdraw from their phones</b><small id="wd-status">' + esc(wdStatusText()) + '</small></span></label>' +
       '<div class="stack"><button class="btn" data-act="qr-open">Show the QR code</button><button class="btn" data-act="phone-open-page">Open the phone page</button><button class="btn" data-act="phone-setup">Phone view setup</button></div>';
   }
 
@@ -3987,6 +4355,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ui.modal = null; ui.shownType = null; modalRoot.innerHTML = '';
     if (ui.lastFocus && document.body.contains(ui.lastFocus)) { try { ui.lastFocus.focus(); } catch (e) { /* ignore */ } }
     ui.lastFocus = null;
+    setTimeout(maybeShowWd, 0);   /* a withdrawal request that came in meanwhile */
   }
   function modalErr(msg) { var el = modalRoot.querySelector('.err'); if (el) el.textContent = msg; }
 
@@ -4164,41 +4533,83 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         }
         break;
       }
+      case 'wd-req': {
+        /* a player asked to withdraw from their phone: it stays until the director answers (no Cancel, Escape or tap outside) */
+        var it = m.item, wp = P(it.pid), wn = esc(dn(wp.name)), canDrop = S.phase === 'active' && !S.rr && wp.status === 'active' && E.activeCount(S) > 1;
+        var wt = S.tables.filter(function (t) { return t.a === wp.id || t.b === wp.id; })[0];
+        var opp = wt && wt.a && wt.b ? P(wt.a === wp.id ? wt.b : wt.a) : null;
+        h = shell('Withdrawal request',
+          '<p class="wd-who"><b>' + wn + '</b> asked to withdraw from their phone at ' + E.fmtTime(it.at) + '.</p>' +
+          '<p>Right now: ' + esc(whereText(wp.id) || 'still in') + (opp ? ', playing ' + esc(dn(opp.name)) + '. ' + esc(dn(opp.name)) + ' would wait for a new challenger.' : '.') + '</p>' +
+          (canDrop ? '<p>If they withdraw, they finish ' + E.ordinal(E.activeCount(S)) + ', marked dropped.</p>'
+            : '<p>' + (S.rr ? 'Players can\'t be dropped during the round robin playoff, so talk to them in person.' : 'They can\'t be dropped right now.') + '</p>') +
+          '<p>If you keep them in, they can\'t ask again from their phone.</p>' +
+          '<p class="muted">Anyone with the phone link can send a request, so check with them if you can.</p>',
+          '<button type="button" class="btn" data-act="wd-keep">Keep ' + wn + ' in</button>' + (canDrop ? '<button type="button" class="btn danger" data-act="wd-drop" data-autofocus>Withdraw ' + wn + '</button>' : ''));
+        break;
+      }
       case 'qr': {
         if (!phone.page || !phone.code) { ui.modal = null; modalRoot.innerHTML = ''; return; }
         var plink = phoneLink();
         h = shell('Follow on your phone', '<div class="qr-wrap"><div class="qr-box">' + qrSVG(plink) + '</div>' +
           '<p class="qr-say">Point your phone camera here to see the tables, the waitlist and your wait, live.</p>' +
           '<p class="qr-url">' + esc(plink) + '</p><p class="muted" id="qr-status">' + esc(phoneStatus().txt) + '</p>' +
+          '<p class="qr-check warn" id="qr-wd"' + (wdWanted() && WD.rules === 'old' ? '' : ' hidden') + '>Players can\'t withdraw from their phones until the database rules are updated: Menu › Phone view setup.</p>' +
           '<p id="qr-pagecheck" class="qr-check ' + pageCheckText(PAGECHECK.busy ? null : PAGECHECK.res).cls + '">' + esc(pageCheckText(PAGECHECK.busy ? null : PAGECHECK.res).txt) + '</p></div>',
           '<button class="btn" data-act="phone-open-page">Open it here</button><button class="btn primary" data-act="m-close" data-autofocus>Done</button>');
         break;
       }
       case 'phone-setup': {
-        var pc = m.cfg || { apiKey: '', db: '' }, signed = !!(phone.refresh && phone.apiKey && phone.apiKey === pc.apiKey);
-        h = shell('Phone view setup',
-          '<p class="muted">Players open a read-only page from a QR code and follow the tournament live. This device sends each change to your own free Firebase database.</p>' +
-          '<div class="grp">1. Your Firebase project</div>' +
-          '<p class="muted">In Firebase, tap the gear icon › Project settings › General. Under Your apps, add a web app (the &lt;/&gt; icon) if there isn\'t one yet, then copy its firebaseConfig block and paste it here.</p>' +
-          '<textarea id="ph-config" class="input mono" rows="4" data-input="ph-config" spellcheck="false" placeholder="const firebaseConfig = { apiKey: &quot;…&quot;, databaseURL: &quot;…&quot;, … };">' + esc(m.cfgText || '') + '</textarea>' +
-          '<p class="muted" id="ph-found">' + esc(foundText(pc)) + '</p>' +
-          '<div class="grp">2. Your login</div>' +
-          (signed ? '<p>Signed in as <b>' + esc(phone.email) + '</b>. <button type="button" class="btn small" data-act="ph-signout">Sign out</button></p>'
-            : '<p class="muted">The user you added in Firebase under Security › Authentication › Users.</p>' +
-              '<div class="field"><label for="ph-email">Email</label><input id="ph-email" class="input" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="' + esc(m.email || phone.email || '') + '"></div>' +
-              '<div class="field" style="margin-top:8px"><label for="ph-pw">Password</label><input id="ph-pw" class="input" type="password" autocomplete="current-password"></div>' +
-              '<div class="stack"><button type="button" class="btn primary" data-act="ph-signin">Sign in</button></div>') +
-          '<div class="grp">3. Database rules</div>' +
-          (signed ? '<p class="muted">In Firebase, open Databases &amp; Storage › Realtime Database › Rules. Replace everything there with these rules and tap Publish. Anyone with the link can read the tournament; only your login can change it.</p>' +
-              '<textarea class="input mono" rows="9" readonly id="ph-rules">' + esc(rulesText()) + '</textarea><div class="stack"><button type="button" class="btn" data-act="ph-copy-rules">Copy the rules</button></div>'
-            : '<p class="muted">These show up after you sign in.</p>') +
-          '<div class="grp">4. Phone page address</div>' +
-          '<p class="muted">Where the phone page lives, like https://yourname.github.io/chip/</p>' +
-          '<input id="ph-page" class="input" type="url" autocapitalize="off" spellcheck="false" placeholder="https://yourname.github.io/chip/" value="' + esc(m.page !== undefined ? m.page : phone.page) + '" data-input="ph-page">' +
-          (phone.code ? '<p class="muted" style="margin-top:10px">Link code <b class="mono">' + esc(phone.code) + '</b> <button type="button" class="btn small" data-act="ph-newcode">New link</button><br><small>A new link makes old QR codes and saved links show nothing.</small></p>' : '') +
-          '<p class="err" role="alert"></p>' +
-          (phoneReady() ? '<div class="stack"><button type="button" class="btn danger" data-act="ph-forget">Turn off and forget this setup</button></div>' : ''),
-          CANCEL + '<button class="btn primary" data-act="ph-save">' + (phone.on ? 'Save' : 'Save and turn on') + '</button>');
+        /* Signed out: the Firebase key (saved on this device after the first time), email and password. That's all: the
+           database is found from the login, and the phone page is this app's own address.
+           Signed in: status, link code, and what's missing if the last check found something (the rules, mostly). */
+        var signed = !!(phone.refresh && phone.apiKey), autoP = autoPage(), issue = m.issue || '';
+        if (!issue && signed && phone.on && wdWanted() && WD.rules === 'old') { issue = 'wdrules'; m.wdShown = true; }   /* rules from before phone withdrawals */
+        var pageVal = m.page !== undefined ? m.page : (autoP || phone.page);
+        var dbVal = m.db !== undefined ? m.db : (phone.db ? 'https://' + phone.db : '');
+        var issueHTML = '';
+        if (issue === 'refused') issueHTML = '<div class="ph-issue"><b>One more step: Firebase refused the test update.</b>' +
+          '<p>In Firebase, open Databases &amp; Storage › Realtime Database › Rules. Replace everything there with these rules, tap Publish, then tap Check again here.</p>' +
+          '<textarea class="input mono" rows="8" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
+          '<div class="stack"><button type="button" class="btn" data-act="ph-copy-rules">Copy the rules</button></div></div>';
+        else if (issue === 'wdrules') issueHTML = '<div class="ph-issue"><b>One more step lets players withdraw from their phones.</b>' +
+          '<p>In Firebase, open Databases &amp; Storage › Realtime Database › Rules. Replace everything there with these rules, tap Publish, then tap Check again here. Phone view keeps working in the meantime.</p>' +
+          '<textarea class="input mono" rows="10" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
+          '<div class="stack"><button type="button" class="btn" data-act="ph-copy-rules">Copy the rules</button></div></div>';
+        else if (issue === 'nodb') issueHTML = '<div class="ph-issue"><b>Couldn\'t find your database by itself.</b>' +
+          '<p>Copy its address from the top of Firebase › Realtime Database (like https://name-default-rtdb.firebaseio.com) into Database address below, then tap Check again.</p></div>';
+        else if (issue === 'nopage') issueHTML = '<div class="ph-issue"><b>Where do players open the phone page?</b>' +
+          '<p>This copy is running from this device, so it can\'t tell. Enter the page address below (like https://yourname.github.io/chip/), then tap Check again.</p></div>';
+        else if (issue) issueHTML = '<div class="ph-issue"><b>That didn\'t work.</b><p>' + esc(m.issueText || '') + '</p></div>';
+        var adv = '<details class="ph-adv"' + (issue === 'nodb' || issue === 'nopage' || issue === 'baddb' ? ' open' : '') + '><summary>Database and page address</summary>' +
+          '<div class="field"><label for="ph-db">Database address</label><input id="ph-db" class="input mono" type="url" autocapitalize="off" spellcheck="false" placeholder="Found by itself when you sign in" value="' + esc(dbVal) + '" data-input="ph-db"></div>' +
+          '<div class="field" style="margin-top:8px"><label for="ph-page">Phone page address</label><input id="ph-page" class="input" type="url" autocapitalize="off" spellcheck="false" placeholder="https://yourname.github.io/chip/" value="' + esc(pageVal) + '" data-input="ph-page"></div>' +
+          '<p class="muted"><small>' + (autoP ? 'This app is running from ' + esc(autoP) + ', so players open that address.' : 'This copy is running from this device, so enter the address where players open the phone page.') + '</small></p>' +
+          (signed && issue !== 'refused' && issue !== 'wdrules' ? '<p class="muted" style="margin:12px 0 4px"><small>Database rules, needed once per Firebase project:</small></p>' +
+            '<textarea class="input mono" rows="6" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
+            '<div class="stack"><button type="button" class="btn small" data-act="ph-copy-rules">Copy the rules</button></div>' : '') +
+          '</details>';
+        if (!signed) {
+          h = shell('Phone view setup',
+            '<p class="muted">Players follow the tournament live on their phones. Sign in with your Firebase login to turn it on.</p>' +
+            '<div class="field"><label for="ph-key">Firebase key</label><input id="ph-key" class="input mono" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="' + (phone.apiKey ? 'Saved on this device' : 'AIza…') + '" value="' + esc(m.key || '') + '" data-input="ph-key">' +
+              '<small class="muted ph-hint">' + (phone.apiKey ? 'Saved on this device. Paste a key only to switch to a different Firebase project.'
+                : 'From Firebase › Project settings › General (it starts with AIza), or paste the whole firebaseConfig block. It stays on this device: it\'s never on the phone page.') + '</small></div>' +
+            '<div class="field" style="margin-top:8px"><label for="ph-email">Email</label><input id="ph-email" class="input" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" value="' + esc(m.email !== undefined ? m.email : (phone.email || '')) + '" data-input="ph-email"></div>' +
+            '<div class="field" style="margin-top:8px"><label for="ph-pw">Password</label><input id="ph-pw" class="input" type="password" autocomplete="current-password"></div>' +
+            '<p class="err" role="alert"></p>' + adv +
+            (phone.apiKey ? '<div class="stack"><button type="button" class="btn danger" data-act="ph-forget">Forget this setup on this device</button></div>' : ''),
+            CANCEL + '<button class="btn primary" data-act="ph-signin">Sign in and turn on</button>');
+        } else {
+          h = shell('Phone view setup',
+            '<p>Signed in as <b>' + esc(phone.email) + '</b>. <button type="button" class="btn small" data-act="ph-signout">Sign out</button></p>' +
+            issueHTML +
+            (!issue || issue === 'wdrules' ? '<p class="muted" id="phone-status">' + esc(phoneStatus().txt) + '</p>' : '') +
+            (phone.code ? '<p class="muted">Link code <b class="mono">' + esc(phone.code) + '</b> <button type="button" class="btn small" data-act="ph-newcode">New link</button><br><small>A new link makes old QR codes and saved links show nothing.</small></p>' : '') +
+            '<p class="err" role="alert"></p>' + adv +
+            '<div class="stack"><button type="button" class="btn danger" data-act="ph-forget">Turn off and forget this setup</button></div>',
+            CANCEL + '<button class="btn primary" data-act="ph-save">' + (issue ? 'Check again' : (phone.on ? 'Save' : 'Turn on')) + '</button>');
+        }
         break;
       }
       case 'menu':
@@ -4348,6 +4759,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     maybePrompt();
   }
   function maybePrompt() {
+    if (!ui.modal && WD.queue.length) maybeShowWd();
     if (ui.modal || S.phase !== 'active') return;
     /* three players left with auto-throw paused: offer the round robin playoff once (the banner stays after "Not now") */
     var po = E.playoffCandidates(S);
@@ -4618,29 +5030,65 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     'title-open': function () { openModal({ type: 'title' }); },
     'end-toggle': function (el) {
       prefs.showEnd = !!el.checked; savePrefs(); showTitle();
+      if (phoneLive() && S.phase !== 'registration') schedulePublish(0);   /* phones follow this switch */
       toast(prefs.showEnd ? (endText() ? 'Showing the estimated finish time.' : 'The estimated finish time shows once the tournament is running.') : 'Estimated finish time hidden.');
     },
     /* phone view */
-    'phone-setup': function () { openModal({ type: 'phone-setup', cfg: { apiKey: phone.apiKey, db: phone.db }, cfgText: '', page: phone.page }); },
+    'phone-setup': function () {
+      openModal({ type: 'phone-setup' });
+      if (phone.refresh && wdWanted()) checkWdRules().then(function () { if (ui.modal && ui.modal.type === 'phone-setup' && !ui.modal.issue) renderModal(); });
+    },
+    /* the answer to a withdrawal request from a phone */
+    'wd-drop': function () {
+      var m = ui.modal;
+      if (!m || m.type !== 'wd-req') return;
+      var it = m.item, p = P(it.pid), hadPr = !!S.pr, before = tableKeys();
+      var r = E.dropPlayer(S, it.pid, now(), 'phone');
+      if (r.error) { modalErr(r.error); return; }
+      settleWd(it, 'done');
+      var msg = p.name + ' withdrew and finishes ' + (E.isTied(p) ? 'tied for ' : '') + E.placeText(p) + '.' + (!hadPr && S.pr ? ' Playoff rounds: ' + E.activeCount(S) + ' players left, so auto-throw has stopped.' : '') + seatedNote(before);
+      if (S.phase === 'finished') msg = p.name + ' withdrew. ' + P(S.champion).name + ' wins the tournament';
+      closeModal(); afterChange({ toast: msg, undo: true });
+    },
+    'wd-keep': function () {
+      var m = ui.modal;
+      if (!m || m.type !== 'wd-req') return;
+      var p = P(m.item.pid);
+      if (!S.wdNo) S.wdNo = {};
+      S.wdNo[m.item.pid] = 1;   /* no asking again from a phone */
+      settleWd(m.item, 'kept');
+      closeModal(); afterChange({ toast: (p ? p.name : 'They') + ' stays in and can\'t ask again from their phone.' });
+    },
+    'wd-toggle': function (el) {
+      prefs.withdraw = !!el.checked; savePrefs();
+      schedulePublish(0); pollRequests(); renderModal();
+      toast(prefs.withdraw ? (WD.rules === 'old' ? 'Turned on. Players can withdraw once the database rules are updated (Phone view setup).' : 'Players can ask to withdraw from their phones. You confirm each one.') : 'Players can\'t withdraw from their phones now.');
+    },
     'ph-signin': function (el) {
-      var m = ui.modal, cfg = (m && m.cfg) || {};
-      if (!cfg.apiKey) { modalErr('Paste the firebaseConfig block first (step 1).'); return; }
+      var m = ui.modal;
+      if (!m) return;
+      var keyText = String((document.getElementById('ph-key') || {}).value || '').trim();
+      var cfg = keyText ? parseConfig(keyText) : { apiKey: '', db: '' };
+      if (keyText && !cfg.apiKey) { modalErr('That doesn\'t look like a Firebase key. It starts with AIza, under Firebase › Project settings › General.'); return; }
+      var apiKey = cfg.apiKey || phone.apiKey;
+      if (!apiKey) { modalErr('Paste your Firebase key first.'); return; }
       var email = String((document.getElementById('ph-email') || {}).value || '').trim(), pw = String((document.getElementById('ph-pw') || {}).value || '');
-      if (!email || !pw) { modalErr('Enter the email and password of the user you added in Firebase.'); return; }
+      if (!email || !pw) { modalErr('Enter the email and password of your Firebase login.'); return; }
+      if (cfg.db) m.cfgDb = cfg.db;   /* a pasted firebaseConfig block names the database: no need to look for it */
       m.email = email; el.disabled = true; el.textContent = 'Signing in…'; modalErr('');
-      signIn(cfg.apiKey, email, pw).then(function () {
-        if (cfg.db) phone.db = cfg.db;
-        savePhone();
-        if (ui.modal && ui.modal.type === 'phone-setup') renderModal();
-        toast('Signed in. Next, copy the rules into Firebase (step 3).');
-      }, function (e) {
-        el.disabled = false; el.textContent = 'Sign in';
+      signIn(apiKey, email, pw).then(function () {
+        el.textContent = 'Connecting…';
+        return connectAndCheck(m);
+      }).then(function (res) { afterConnect(m, res); }, function (e) {
+        el.disabled = false; el.textContent = 'Sign in and turn on';
         modalErr(e instanceof TypeError ? 'Couldn\'t reach Firebase. Check this device is online.' : ((e && e.message) || 'Sign-in didn\'t work.'));
       });
     },
     'ph-signout': function () {
       phone.refresh = ''; phone.uid = ''; phone.on = false; tok = { id: null, exp: 0 }; PUB.state = 'idle';
-      savePhone(); render(); renderModal(); toast('Signed out. Phone view is off.');
+      savePhone(); render();
+      if (ui.modal && ui.modal.type === 'phone-setup') { ui.modal.issue = ''; renderModal(); }
+      toast('Signed out. Phone view is off.');
     },
     'ph-copy-rules': function () { copyText(rulesText(), 'Database rules'); },
     'ph-newcode': function () {
@@ -4653,32 +5101,20 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     'ph-forget': function () {
       if (!window.confirm('Turn off phone view and forget this setup on this device?')) return;
-      phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '' }; tok = { id: null, exp: 0 }; PUB.state = 'idle';
+      phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '', project: '' }; tok = { id: null, exp: 0 }; PUB.state = 'idle';
       savePhone(); closeModal(); render(); toast('Phone view setup forgotten on this device.');
     },
-    'ph-save': function () {
-      var m = ui.modal, cfg = (m && m.cfg) || {}, page = String(m && m.page !== undefined ? m.page : phone.page).trim();
-      if (!cfg.apiKey || !cfg.db) { modalErr('Step 1 needs both the API key and the database address.'); return; }
-      if (!phone.refresh || phone.apiKey !== cfg.apiKey) { modalErr('Sign in first (step 2).'); return; }
-      if (!/^https?:\/\/[^\s\/$.?#][^\s]*$/i.test(page)) { modalErr('Enter the phone page address (step 4), starting with https://'); return; }
-      var first = !phone.on;
-      phone.db = cfg.db; phone.page = normalizePage(page); phone.on = true;
-      if (!phone.code) phone.code = newLinkCode();
-      savePhone(); PUB.state = 'idle'; closeModal(); render();
-      if (S.phase !== 'registration') schedulePublish(0);
-      var said = (first ? 'Phone view is on. ' : 'Saved. ') + (S.phase === 'registration' ? 'Phones start updating when the tournament starts.' : 'Sending an update now.');
-      toast(said);
-      /* then check the page players will open, and speak up if they'd get the setup screen */
-      checkPhonePage(true).then(function (res) {
-        var c = pageCheckText(res);
-        if (c.cls === 'bad' || c.cls === 'warn') toast(c.txt, { bad: true });
-        else if (res && res.state === 'ok') toast(said + ' ' + c.txt);
-      });
+    /* signed in: Turn on, Save (after changing an address) or Check again (after publishing the rules) */
+    'ph-save': function (el) {
+      var m = ui.modal;
+      if (!m) return;
+      el.disabled = true; el.textContent = 'Checking…'; modalErr('');
+      connectAndCheck(m).then(function (res) { afterConnect(m, res); });
     },
     'phone-toggle': function (el) {
       phone.on = !!el.checked; savePhone(); PUB.state = 'idle';
       render(); renderModal();
-      if (phone.on) schedulePublish(0);
+      if (phone.on) { schedulePublish(0); pollRequests(); }
       toast(phone.on ? 'Phone view is on.' : 'Phone view is off. Phones keep showing the last update they got.');
     },
     'qr-open': function () {
@@ -4729,7 +5165,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     'toast-close': function () { clearTimeout(ui.toastTimer); toastRoot.innerHTML = ''; },
     'm-close': function () { closeModal(); },
-    scrim: function (el, e) { if (e.target === el) closeModal(); }
+    scrim: function (el, e) { if (e.target === el && !(ui.modal && ui.modal.type === 'wd-req')) closeModal(); }
   };
 
   var forms = {
@@ -4843,17 +5279,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       S.title = e.target.value.slice(0, 60); save(); showTitle();
     } else if (k === 'pr-opt') {
       S.playoffRounds = !!e.target.checked; commit();
-    } else if (k === 'ph-config') {
-      if (ui.modal && ui.modal.type === 'phone-setup') {
-        var pcf = parseConfig(e.target.value), prev = ui.modal.cfg || {};
-        var wasSigned = !!(phone.refresh && phone.apiKey && phone.apiKey === prev.apiKey);
-        ui.modal.cfgText = e.target.value;
-        ui.modal.cfg = { apiKey: pcf.apiKey || prev.apiKey || '', db: pcf.db || prev.db || '' };
-        if (wasSigned !== !!(phone.refresh && phone.apiKey && phone.apiKey === ui.modal.cfg.apiKey)) renderModal();   /* a different project: step 2 asks to sign in again */
-        else { var fnd = document.getElementById('ph-found'); if (fnd) fnd.textContent = foundText(ui.modal.cfg); }
-      }
-    } else if (k === 'ph-page') {
-      if (ui.modal) ui.modal.page = e.target.value;
+    } else if (k === 'ph-key' || k === 'ph-email' || k === 'ph-db' || k === 'ph-page') {
+      /* kept with the pop-up so a redraw doesn't lose what was typed (the key is saved only once a sign-in works) */
+      if (ui.modal && ui.modal.type === 'phone-setup') ui.modal[k.slice(3)] = e.target.value;
     }
   });
   document.addEventListener('change', function (e) {
@@ -4863,7 +5291,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (k === 'pr-opt' && S.playoffRounds !== !!e.target.checked) { S.playoffRounds = !!e.target.checked; commit(); }
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && ui.modal) closeModal();
+    if (e.key === 'Escape' && ui.modal && ui.modal.type !== 'wd-req') closeModal();
     if ((e.key === 'Enter' || e.key === ' ') && e.target.getAttribute && e.target.getAttribute('role') === 'button' && e.target.hasAttribute('data-act')) {
       e.preventDefault();
       var fn = actions[e.target.getAttribute('data-act')];
@@ -4919,6 +5347,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   holdWake();
   /* phone view: catch phones up after a reload, keep them posted while playing, and retry as soon as the internet is back */
   if (phoneLive() && S.phase !== 'registration') schedulePublish(1500);
+  if (wdWanted()) setTimeout(function () { checkWdRules(); pollRequests(); }, 2500);   /* the rules are checked even before a tournament starts */
+  document.addEventListener('pointerdown', unlockChime, true);
+  document.addEventListener('keydown', unlockChime, true);
   setInterval(heartbeat, 60000);
   window.addEventListener('online', function () { if (phoneLive()) schedulePublish(500); });
 })();
