@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA25">
+<meta name="chip-version" content="ALPHA28">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -61,6 +61,15 @@ button { cursor: pointer; }
 .brand-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* if space runs out, the title shortens with "..." */
 .brand-end { flex: none; white-space: pre; font-weight: 600; opacity: .9; }                     /* the finish time always stays whole */
 .bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
+/* the Pause / Resume button's symbol, drawn here so it looks the same on every device */
+.pause-btn .pi { display: inline-block; box-sizing: border-box; margin-right: .45em; vertical-align: -.05em; }
+.pause-btn .pi-pause { width: .62em; height: .78em; border-left: .22em solid currentColor; border-right: .22em solid currentColor; }
+.pause-btn .pi-play { width: 0; height: 0; border-top: .4em solid transparent; border-bottom: .4em solid transparent; border-left: .66em solid currentColor; }
+@media (max-width: 519px) {
+  .bar-long { display: none; }   /* "Pause" and "Resume" on a phone, "Pause tournament" on wider screens */
+  .bar-actions { flex: 1 1 auto; justify-content: flex-end; gap: 6px; }   /* the buttons wrap onto a second row when they don't fit */
+  .bar-actions .btn.small { padding-left: 10px; padding-right: 10px; }
+}
 @media (max-width: 519px) {
   .rail-bar { padding: 8px 12px 14px; flex-wrap: nowrap; }
   .brand-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -132,7 +141,7 @@ button { cursor: pointer; }
 .vs { align-self: center; color: var(--chalk-dim); font-style: italic; }
 .seat { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pname { font-family: var(--display); font-weight: 800; font-size: var(--nf, 1.6rem); line-height: 1.1; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; overflow: hidden; }
-.pname.wrap { white-space: normal; overflow-wrap: anywhere; }   /* only when a name cannot fit on one line even at the smallest size */
+.pname.pwrap { white-space: normal; overflow-wrap: anywhere; }   /* only when a name cannot fit on one line even at the smallest size */
 .pname.cut { text-overflow: ellipsis; }
 /* tap a player's name when they win: a faint plate behind the name shows it can be tapped */
 button.pname.won {
@@ -165,7 +174,7 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 .waitlist ol { list-style: none; margin: 0; padding: 0; border-left: 3px solid var(--line); }
 .waitlist li { display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; padding: 10px 6px 10px 10px; border-bottom: 1px solid var(--line); }
 /* a player's name is the way to edit them (waitlist, the playoff draw list, the Players tab) */
-.who[data-act], .nm-edit { cursor: pointer; border-radius: 6px; -webkit-tap-highlight-color: transparent; }
+.who[data-act], .nm-edit { cursor: pointer; border-radius: 6px; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .who[data-act]:active, .nm-edit:active { opacity: .65; }
 @media (hover: hover) { .who[data-act]:hover b, .nm-edit:hover { text-decoration: underline; text-decoration-thickness: .08em; text-underline-offset: .12em; } }
 .nm-edit { display: inline-block; padding: 6px 0; }
@@ -176,6 +185,7 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 /* estimated waits: the inputs behind them under the heading, and each spot's time on its chip line */
 .eta-note { color: var(--chalk-dim); font-size: .9rem; margin: -2px 0 10px; }
 .eta { margin-left: 8px; font-weight: 700; color: var(--chalk); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.eta.paused { color: var(--chalk-dim); }   /* "Paused" in place of a wait while the tournament is paused */
 
 /* ---------- most-wins ticker ---------- */
 .ticker { overflow: hidden; white-space: nowrap; font-family: var(--display); font-weight: 800; letter-spacing: .035em; text-transform: uppercase; color: var(--chalk); line-height: 1.25;
@@ -249,6 +259,7 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 .log { list-style: none; margin: 0; padding: 0; }
 .log li { display: grid; grid-template-columns: 82px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
 .log .t { color: var(--chalk-dim); font-variant-numeric: tabular-nums; }
+.log li > span { min-width: 0; overflow-wrap: anywhere; }   /* a very long name wraps instead of pushing the page sideways */
 .draw { columns: 2 220px; padding-left: 1.4em; margin: 0; }
 .draw li { padding: 2px 0; break-inside: avoid; }
 
@@ -345,7 +356,7 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-me .nm { min-width: 0; font-weight: 800; font-size: 1.7rem; letter-spacing: .03em; line-height: 1.1; overflow-wrap: anywhere; }
 .vw-me .big { margin-top: 6px; font-weight: 700; font-size: 1.3rem; }
 .vw-me .sub { margin-top: 2px; color: var(--chalk-dim); }
-.vw-me .pchips { margin-top: 8px; }
+.vw-me-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }   /* chips and wins, the Withdraw button at the right */
 .vw-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 8px; }
 .vw-pick .btn { font-weight: 800; letter-spacing: .03em; overflow-wrap: anywhere; }
 .vw-tbl { margin-bottom: 10px; padding: 10px 12px; border: 3px solid var(--rail); border-radius: 12px; background: var(--cloth); }
@@ -378,12 +389,37 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-wins { margin-top: 14px; padding: 8px 12px; border: 1.5px solid var(--yellow); border-radius: 10px; background: color-mix(in srgb, var(--yellow) 12%, transparent); font-weight: 800; letter-spacing: .02em; }
 .vw-wins .lbl { color: var(--yellow); font-size: .85em; letter-spacing: .05em; text-transform: uppercase; }
 .vw-wins .sep { color: var(--chalk-dim); }
-.vw-wd-btn { margin-top: 12px; }
+.vw-wd-btn { flex: none; margin-left: auto; border-width: 1.5px; }
+.vw-wd-btn .fl { margin-right: .3em; }
 .vw-wd { margin-top: 12px; padding: 12px 14px; border: 2px solid var(--red); border-radius: 12px; background: color-mix(in srgb, var(--red) 10%, transparent); }
 .vw-wd p { margin: 6px 0 0; }
 .vw-wd-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .vw-wd-note { margin: 10px 0 0; color: var(--yellow); font-weight: 700; }
 .vw-wd-err { color: var(--red-text); font-weight: 700; }
+/* the player's match history: a line of text opens it; one row per match, latest first (W or L, the opponent, when it
+   started and under that how long it lasted, and a line with the table, a playoff match's name, and the chips left after
+   a loss). The line of text is in the Main text color, which the color settings keep readable on every background. */
+.vw-hist-tg { display: inline-flex; align-items: center; gap: .45em; margin-top: 8px; min-height: 36px; padding: 0; border: 0; background: none;
+  color: var(--chalk); font: inherit; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+  text-decoration: underline; text-decoration-thickness: .08em; text-underline-offset: .22em; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+.vw-hist-tg::after { content: ""; width: .42em; height: .42em; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: translateY(-.12em) rotate(45deg); }
+.vw-hist-tg[aria-expanded="true"]::after { transform: translateY(.12em) rotate(-135deg); }
+.vw-hist { margin: 2px 0 0; padding: 0; list-style: none; }
+.vw-hist li { display: grid; grid-template-columns: 1.85rem minmax(0, 1fr) auto; column-gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.vw-hist .res { grid-row: span 2; display: flex; align-items: center; justify-content: center; width: 1.85rem; height: 1.85rem; box-sizing: border-box;
+  border-radius: 50%; font-weight: 800; font-size: .9rem; }
+.vw-hist .w .res { background: var(--blue); color: var(--blue-ink); }
+.vw-hist .l .res { border: 2px solid var(--red-text); color: var(--red-text); }
+.vw-hist .so .res { font-size: 1.15rem; }
+.vw-hist .opp { align-self: start; min-width: 0; font-weight: 800; letter-spacing: .03em; overflow-wrap: anywhere; }
+.vw-hist .vs { margin-right: .3em; color: var(--chalk-dim); font-weight: 600; letter-spacing: 0; }
+.vw-hist .tm { align-self: start; justify-self: end; color: var(--chalk-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vw-hist .det { grid-column: 2; color: var(--chalk-dim); font-size: .88rem; }
+.vw-hist .dur { grid-column: 3; justify-self: end; align-self: start; color: var(--chalk-dim); font-size: .88rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vw-hist .out { color: var(--red-text); font-weight: 700; }
+.vw-hist-none { margin: 4px 0 0; color: var(--chalk-dim); }
+.vw-paused { color: var(--chalk-dim); font-weight: 700; }   /* a waitlist spot while the tournament is paused */
 .wd-who { font-size: 1.15em; }
 /* the spot shot pop-up: 🎯 or ❌, a word and a line, for under three seconds */
 #fx-root { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
@@ -734,7 +770,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var VERSION = 1;
   var UNDO_CAP = 150;
   // Parts of the state that Undo rewinds. Settings (default chips, planned tables, table numbers, match minutes, playoff rounds) and mode are not rewound.
-  var SNAP_KEYS = ['phase', 'nextId', 'seq', 'players', 'tables', 'queue', 'draw', 'champion', 'startedAt', 'finishedAt', 'rr', 'pr'];
+  var SNAP_KEYS = ['phase', 'nextId', 'seq', 'players', 'tables', 'queue', 'draw', 'champion', 'startedAt', 'finishedAt', 'rr', 'pr', 'pause', 'pauses'];
 
   /* ---------- small helpers ---------- */
   function clone(o) { return o === undefined ? null : JSON.parse(JSON.stringify(o)); }
@@ -790,6 +826,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       finishedAt: null,
       rr: null,                   // the three-player round robin playoff, once started
       pr: null,                   // the playoff rounds, once 6 players or fewer are left (with the option on)
+      pause: null,                // the tournament is paused: { at: when }
+      pauses: [],                 // pauses that have ended: [start, end] each (time paused never counts toward a match)
       log: [],
       undo: []
     };
@@ -971,7 +1009,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         s.tables = nums.map(function (tn) { return { n: tn, open: true, a: null, b: null, since: null, wseq: 0, note: null }; });
         s.queue = s.players.map(function (p) { return p.id; });
         s.phase = 'active'; s.mode = 'AUTO'; s.rr = null; s.pr = null; s.champion = null;
-        s.startedAt = now; s.finishedAt = null; s.seq = 0; s.log = [];
+        s.startedAt = now; s.finishedAt = null; s.seq = 0; s.log = []; s.pause = null; s.pauses = [];
         addLog(s, now, 'start', { tables: nTables }, 'Tournament started: ' + n + ' players, ' + nTables + ' table' + (nTables === 1 ? '' : 's') + ' (' + (nTables === 1 ? 'Table ' : 'Tables ') + nums.join(', ') + '). Playoff rounds from the start: the players draw in person');
         prBegin(s, now, true);
         prAdvance(s, now);
@@ -1000,6 +1038,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       s.finishedAt = null;
       s.seq = 0;
       s.log = [];
+      s.pause = null;
+      s.pauses = [];
       addLog(s, now, 'start', { tables: nTables }, 'Tournament started: ' + n + ' players, ' + nTables + ' table' + (nTables === 1 ? '' : 's') + ' (' + (nTables === 1 ? 'Table ' : 'Tables ') + nums.join(', ') + ')');
       s.tables.forEach(function (t) {
         addLog(s, now, 'throw', { table: t.n }, 'Table ' + t.n + ': ' + P(s, t.a).name + ' vs ' + P(s, t.b).name);
@@ -1125,6 +1165,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   /* ---------- results ---------- */
   function finish(s, champ, now) {
+    endPause(s, now);   /* a result entered during a pause ended the tournament */
     s.phase = 'finished';
     s.champion = champ.id;
     champ.place = 1;
@@ -1209,7 +1250,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     var loserId = t.a === winnerId ? t.b : t.a;
     var L = P(s, loserId);
     return act(s, 'Result: ' + W.name + ' def. ' + L.name, function () {
-      var start = t.since;
+      var start = t.since, prName = prResultName(s, t.n);
       W.W += 1;
       L.C -= 1;
       W.lastOpp = L.id; L.lastOpp = W.id;
@@ -1217,9 +1258,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       prRecord(s, t.n, W.id, L.id);
       var elim = L.C <= 0;
       if (elim) { eliminate(s, L, now); } else { s.queue.push(L.id); }
-      addLog(s, now, 'result', {
-        table: t.n, winner: W.id, loser: L.id, start: start, loserC: L.C, elim: elim
-      }, 'Table ' + t.n + ': ' + W.name + ' def. ' + L.name + (elim ? ' (' + L.name + ' eliminated)' : ' (' + L.name + ' ' + L.C + '/' + L.S + ')'));
+      var data = { table: t.n, winner: W.id, loser: L.id, start: start, loserC: L.C, elim: elim };
+      if (prName) data.pr = prName;   /* a playoff-round match keeps its name ("semi-final 1"), for players' match history */
+      addLog(s, now, 'result', data, 'Table ' + t.n + ': ' + W.name + ' def. ' + L.name + (elim ? ' (' + L.name + ' eliminated)' : ' (' + L.name + ' ' + L.C + '/' + L.S + ')'));
       afterPlay(s, now);
       return { ok: true, table: t.n, eliminated: elim, loser: L.id };
     });
@@ -1438,6 +1479,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     addLog(s, now, 'throw', { table: t.n }, 'Table ' + t.n + ': ' + P(s, m.a).name + ' vs ' + P(s, m.b).name + ' (' + prMatchName(s.pr.cur, m) + ')');
   }
 
+  /* the name of the playoff-round match on a table ("semi-final 1", "final"), or '' for a regular match */
+  function prResultName(s, tableN) {
+    if (!s.pr) return '';
+    if (s.pr.stage === 'final') return 'final';
+    var name = '';
+    if (s.pr.cur) s.pr.cur.matches.forEach(function (m) { if (m.state === 'on' && m.table === tableN) name = prMatchName(s.pr.cur, m); });
+    return name;
+  }
   function prRecord(s, tableN, w, l) {
     if (!s.pr || !s.pr.cur) return;
     s.pr.cur.matches.forEach(function (m) {
@@ -1489,6 +1538,53 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       return;
     }
     pr.stage = 'draw';
+  }
+
+  /* ---------- pausing the whole tournament ----------
+     For a break or a problem in the room: match clocks stop, and wait times and the finish time give way to a "paused"
+     notice. Time paused never counts toward a match's length, so it doesn't change the average match either. Results can
+     still be entered while paused (a match that ended as the pause was called); a match thrown during a pause starts its
+     clock when play resumes. Pausing and resuming are steps Undo can take back, like a result. */
+  function isPaused(s) { return !!(s.pause && s.pause.at && s.phase === 'active'); }
+  /* every pause as [start, end], the one in progress ending at `to` */
+  function pauseSpans(s, to) {
+    var out = [];
+    (Array.isArray(s.pauses) ? s.pauses : []).forEach(function (p) { if (p && p[1] > p[0]) out.push([p[0], p[1]]); });
+    if (s.pause && s.pause.at && to > s.pause.at) out.push([s.pause.at, to]);
+    return out;
+  }
+  /* milliseconds of play between two times: the time in between, less any time paused */
+  function playMs(s, from, to) {
+    if (!(from > 0) || !(to > from)) return 0;
+    var off = 0;
+    pauseSpans(s, to).forEach(function (p) { var a = Math.max(p[0], from), b = Math.min(p[1], to); if (b > a) off += b - a; });
+    return Math.max(0, to - from - off);
+  }
+  /* ends the pause in progress (if any); gives its length in milliseconds */
+  function endPause(s, now) {
+    if (!s.pause || !s.pause.at) { s.pause = null; return 0; }
+    var at = s.pause.at, end = Math.max(at, now);
+    if (!Array.isArray(s.pauses)) s.pauses = [];
+    s.pauses.push([at, end]);
+    s.pause = null;
+    return end - at;
+  }
+  function pausePlay(s, now) {
+    if (s.phase !== 'active') return { error: 'The tournament is not running' };
+    if (s.pause && s.pause.at) return { error: 'The tournament is already paused' };
+    return act(s, 'Pause tournament', function () {
+      s.pause = { at: now };
+      addLog(s, now, 'pause', {}, 'Tournament paused');
+      return { ok: true };
+    });
+  }
+  function resumePlay(s, now) {
+    if (!(s.pause && s.pause.at)) return { error: 'The tournament is not paused' };
+    return act(s, 'Resume tournament', function () {
+      var at = s.pause.at, min = Math.round(endPause(s, now) / 60000);
+      addLog(s, now, 'resume', { from: at }, 'Tournament resumed after ' + (min < 1 ? 'under a minute' : min + ' min') + ' paused (since ' + fmtTime(at) + ')');
+      return { ok: true, minutes: min };
+    });
   }
 
   /* The setup option can be changed during play until the playoffs begin (playoff rounds or the round robin).
@@ -1776,7 +1872,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
      were tables at the start (the first matches to finish are the quick ones), then the actual average. */
   /* the average match length: the setup estimate until as many matches have finished as there were starting tables, then the real average */
   function avgMatch(s) {
-    var durs = s.log.filter(function (e) { return e.type === 'result' && e.start; }).map(function (e) { return Math.max(0, e.t - e.start); });
+    var durs = s.log.filter(function (e) { return e.type === 'result' && e.start; }).map(function (e) { return playMs(s, e.start, e.t); });
     var need = 1;
     for (var i = 0; i < s.log.length; i++) if (s.log[i].type === 'start') { need = Math.max(1, s.log[i].tables || 1); break; }
     if (durs.length >= need) return { avgMin: durs.reduce(function (a, b) { return a + b; }, 0) / durs.length / 60000, source: 'actual', finished: durs.length, need: need };
@@ -1795,8 +1891,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* How the rest of the night plays out. Every match takes one chip out of play, and fewer tables stay busy as players go out,
      so the rest is played out 200 times from the real chip counts (two random players per open table, a coin flip for each
      result) and the typical (median) number of rounds is used. The answer depends only on the chip counts and the number of
-     tables, which change once per result, so it is worked out once and kept; the same situation always gives the same answer. */
+     tables, which change once per result, so it is worked out once and kept; the same situation always gives the same answer.
+     The work is capped so a huge field or a mistyped chip count (thousands) can't freeze the screen: a normal night takes well
+     under 1 million player-rounds for all 200 runs and is never affected. Past 1.5 million, the runs done so far are used (at
+     least 25); past 3 million it stops, and a night too long to play out even once gets a plain estimate (each round takes one
+     chip from every busy table). */
   var roundsCache = { key: null, rounds: 0 };
+  var SIM_RUNS = 200, SIM_MIN_RUNS = 25, SIM_BUDGET = 1.5e6, SIM_HARD = 3e6;
   function roundsKey(chips, tables) { return tables + ':' + chips.slice().sort(function (a, b) { return a - b; }).join(','); }
   function medianRounds(chips, tables) {
     var key = roundsKey(chips, tables);
@@ -1805,20 +1906,31 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     for (var q = 0; q < key.length; q++) seed = (seed * 31 + key.charCodeAt(q)) % 2147483647;
     seed = seed || 1;
     function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
-    var runs = [];
-    for (var r = 0; r < 200; r++) {
-      var c = chips.slice(), n = 0;
-      while (c.length > 1) {
-        var k = Math.max(1, Math.min(tables, Math.floor(c.length / 2)));
-        for (var i = c.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), tmp = c[i]; c[i] = c[j]; c[j] = tmp; }
+    /* one array, reused: players out of chips are squeezed out in place (same order as before, so the same answers) */
+    var runs = [], work = 0, c = [], stopped = false;
+    for (var r = 0; r < SIM_RUNS && !stopped; r++) {
+      var len = chips.length, n = 0;
+      for (var y = 0; y < len; y++) c[y] = chips[y];
+      while (len > 1) {
+        var k = Math.max(1, Math.min(tables, Math.floor(len / 2)));
+        for (var i = len - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)), tmp = c[i]; c[i] = c[j]; c[j] = tmp; }
         for (var x = 0; x < k; x++) c[rnd() < 0.5 ? 2 * x : 2 * x + 1]--;
-        c = c.filter(function (v) { return v > 0; });
-        n++;
+        var keep = 0;
+        for (var z = 0; z < len; z++) if (c[z] > 0) c[keep++] = c[z];
+        work += len; len = keep; n++;
+        if (work > SIM_HARD) { stopped = true; break; }
       }
-      runs.push(n);
+      if (!stopped) runs.push(n);
+      if (work > SIM_BUDGET && runs.length >= SIM_MIN_RUNS) break;
     }
-    runs.sort(function (a, b) { return a - b; });
-    roundsCache = { key: key, rounds: runs[runs.length >> 1] };
+    var est;
+    if (runs.length) { runs.sort(function (a, b) { return a - b; }); est = runs[runs.length >> 1]; }
+    else {
+      var total = 0;
+      for (var t = 0; t < chips.length; t++) total += chips[t];
+      est = Math.ceil(total / Math.max(1, Math.min(tables, Math.floor(chips.length / 2))));
+    }
+    roundsCache = { key: key, rounds: est };
     return roundsCache.rounds;
   }
   function liveChips(s) { return s.players.filter(function (p) { return p.status === 'active'; }).map(function (p) { return p.C; }); }
@@ -1839,7 +1951,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     var running = s.rr ? (s.rr.current ? [s.rr.current.since] : []) : s.tables.filter(function (t) { return t.open && tableState(t) === 'match'; }).map(function (t) { return t.since; });
     var first = m;
     if (running.length) {
-      var left = running.map(function (since) { return since ? Math.max(m * 0.15, m - (now - since) / 60000) : m; });
+      var left = running.map(function (since) { return since ? Math.max(m * 0.15, m - playMs(s, since, now) / 60000) : m; });
       first = left.reduce(function (a, b) { return a + b; }, 0) / left.length;
     }
     if (s.rr) {   /* the round robin playoff: a few more matches on one table */
@@ -1916,7 +2028,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   function stats(s) {
     var res = s.log.filter(function (e) { return e.type === 'result'; });
-    var durs = res.filter(function (e) { return e.start; }).map(function (e) { return e.t - e.start; });
+    var durs = res.filter(function (e) { return e.start; }).map(function (e) { return playMs(s, e.start, e.t); });
     var avg = durs.length ? durs.reduce(function (a, b) { return a + b; }, 0) / durs.length : null;
     var act1 = s.players.filter(function (p) { return p.status === 'active'; });
     return {
@@ -2050,7 +2162,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       rows.push([
         e.i, timeFn(e.t), e.type, e.table || '',
         any && e.start ? timeFn(e.start) : '',
-        any && e.start ? (Math.round((e.t - e.start) / 600) / 100).toFixed(2) : '',
+        any && e.start ? (Math.round(playMs(s, e.start, e.t) / 600) / 100).toFixed(2) : '',
         any ? P(s, e.winner).name : '', any ? P(s, e.loser).name : '',
         isRes ? e.loserC : '', isRes ? (e.elim ? 'yes' : '') : '', e.text
       ]);
@@ -2060,13 +2172,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   /* ---------- persistence ---------- */
   function serialize(s) { return JSON.stringify(s); }
+  /* The words the app writes for itself (a phase, a status, a stage, a type) never contain < > or ", and numbers are shown on
+     screen just as they are. A backup file changed by hand could put page code in such a place, so it is refused. Names,
+     notes, log lines and other typed text may contain anything: the screen always shows those as plain text. */
+  var FREE_TEXT = { name: 1, text: 1, note: 1, title: 1, label: 1, tableNums: 1, matchMinutes: 1 };
+  function plainData(v, key, depth) {
+    if (typeof v === 'string') return FREE_TEXT[key] === 1 || !/[<>"]/.test(v);
+    if (!v || typeof v !== 'object') return true;
+    if (depth > 16) return false;
+    if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) if (!plainData(v[i], key, depth + 1)) return false; return true; }
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k) && !plainData(v[k], k, depth + 1)) return false;
+    return true;
+  }
   function deserialize(str) {
     var o = JSON.parse(str);
     if (!o || o.v !== VERSION || !Array.isArray(o.players) || !Array.isArray(o.tables) || !Array.isArray(o.queue) || !Array.isArray(o.log)) throw new Error('Not a valid tournament file');
+    if (!plainData(o, '', 0)) throw new Error('Not a valid tournament file');
     if (!Array.isArray(o.undo)) o.undo = [];
     if (!Array.isArray(o.tableNums)) o.tableNums = [];   // backups from earlier versions
     if (o.rr === undefined) o.rr = null;
     if (o.pr === undefined) o.pr = null;
+    if (o.pause === undefined) o.pause = null;   // backups from before the Pause button
+    if (!Array.isArray(o.pauses)) o.pauses = [];
     if (typeof o.title !== 'string') o.title = '';
     /* playoff rounds are new: on for a tournament not started yet, off for one already running so its rules don't change */
     if (typeof o.playoffRounds !== 'boolean') o.playoffRounds = o.phase === 'registration';
@@ -2082,6 +2209,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     pendingConsolidation: pendingConsolidation, consolidate: consolidate,
     throwMatch: throwMatch, closeTable: closeTable, reopenTable: reopenTable, addTable: addTable,
     setMode: setMode,
+    pausePlay: pausePlay, resumePlay: resumePlay, isPaused: isPaused, playMs: playMs,
     dropPlayer: dropPlayer, editPlayer: editPlayer, reinstate: reinstate,
     checkTableNums: checkTableNums, nextTableNum: nextTableNum,
     playoffCandidates: playoffCandidates, startPlayoff: startPlayoff, playoffResult: playoffResult,
@@ -2130,7 +2258,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   var SRC = 'https://' + db + '/live/' + code + '.json';
   var ME_KEY = 'chipTourney.me';
   var app = document.getElementById('app');
-  var VM = null, got = false, conn = 'connecting', es = null, errs = 0, pollT = null, picking = false, rq = 0, pmap = {}, moreOpen = false;
+  var VM = null, got = false, conn = 'connecting', es = null, errs = 0, pollT = null, picking = false, rq = 0, pmap = {}, moreOpen = false, histOpen = false;
+  var retryT = null, polling = false, pollBusy = false, lastMsg = 0;   /* the stream's retry timer, checking every 5 s instead, the last word from Firebase */
   var me = '';
   try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) { /* this visit only */ }
   /* the director's colors arrive with the tournament, so phones match the TV */
@@ -2139,6 +2268,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
 
   function esc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function up(s) { return String(s === undefined || s === null ? '' : s).toUpperCase(); }
+  /* Everything on this page comes from the database the link names, and a link can name any database, not just yours. So
+     numbers are made numbers and words made words before use: nothing from there can turn into part of the page itself. */
+  function num(v) { v = Number(v); return isFinite(v) ? v : 0; }
+  function str(v) { return v === undefined || v === null ? '' : String(v); }
+  function cleanPlayer(p) {
+    return { id: num(p.id), n: str(p.n), c: num(p.c), s: num(p.s), w: num(p.w), st: p.st === 'a' || p.st === 'd' ? p.st : 'e',
+      pl: num(p.pl), pt: num(p.pt), r: num(p.r), wh: str(p.wh) };
+  }
   function now() { return Date.now(); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function list(x) { if (!x) return []; if (Array.isArray(x)) return x.filter(function (v) { return v !== null && v !== undefined; }); return Object.keys(x).map(function (k) { return x[k]; }); }
@@ -2167,35 +2304,47 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       for (var i = 0; i < parts.length - 1; i++) { if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {}; o = o[parts[i]]; }
       var last = parts[parts.length - 1];
       if (kind === 'put') { if (data === null) delete o[last]; else o[last] = data; }
-      else { if (!o[last] || typeof o[last] !== 'object') o[last] = {}; for (var k2 in data) o[last][k2] = data[k2]; }
+      else { if (!o[last] || typeof o[last] !== 'object') o[last] = {}; for (var k2 in data) { if (data[k2] === null) delete o[last][k2]; else o[last][k2] = data[k2]; } }
     }
     got = true; conn = 'live';
     schedule();
   }
   function connect() {
-    clearTimeout(pollT); pollT = null;
-    if (!window.EventSource) { poll(); return; }
+    clearTimeout(pollT); pollT = null; clearTimeout(retryT); retryT = null; polling = false;
+    if (!window.EventSource) { polling = true; poll(); return; }
     try { if (es) es.close(); } catch (e) { /* ignore */ }
+    lastMsg = now();
     es = new EventSource(SRC);
-    es.addEventListener('put', function (e) { try { var m = JSON.parse(e.data); apply('put', m.path, m.data); } catch (x) { /* ignore */ } });
-    es.addEventListener('patch', function (e) { try { var m = JSON.parse(e.data); apply('patch', m.path, m.data); } catch (x) { /* ignore */ } });
-    es.addEventListener('keep-alive', function () { if (got && conn !== 'live') { conn = 'live'; schedule(); } });
+    es.addEventListener('put', function (e) { lastMsg = now(); try { var m = JSON.parse(e.data); apply('put', m.path, m.data); } catch (x) { /* ignore */ } });
+    es.addEventListener('patch', function (e) { lastMsg = now(); try { var m = JSON.parse(e.data); apply('patch', m.path, m.data); } catch (x) { /* ignore */ } });
+    es.addEventListener('keep-alive', function () { lastMsg = now(); if (got && conn !== 'live') { conn = 'live'; schedule(); } });
     es.addEventListener('cancel', function () { conn = 'gone'; try { es.close(); } catch (x) { /* ignore */ } es = null; schedule(); });
-    es.onopen = function () { errs = 0; };
+    es.onopen = function () { errs = 0; lastMsg = now(); };
     es.onerror = function () {
       errs++;
       if (conn !== 'gone') { conn = got ? 'reconnecting' : 'connecting'; schedule(); }
-      if (!got && errs >= 3) { try { es.close(); } catch (x) { /* ignore */ } es = null; poll(); return; }
-      if (es && es.readyState === 2) { es = null; setTimeout(connect, 5000); }   /* the browser gave up: try again shortly */
+      if (!got && errs >= 3) { try { es.close(); } catch (x) { /* ignore */ } es = null; polling = true; poll(); return; }
+      if (es && es.readyState === 2) { es = null; retryT = setTimeout(connect, 5000); }   /* the browser gave up: try again shortly */
     };
   }
+  /* checking every 5 seconds, when the stream can't get through; one check at a time */
   function poll() {
     clearTimeout(pollT); pollT = null;
+    if (pollBusy) return;
+    pollBusy = true;
     fetch(SRC, { cache: 'no-store' })
       .then(function (r) { if (r.status === 401 || r.status === 403) { conn = 'gone'; throw new Error('gone'); } return r.json(); })
-      .then(function (d) { apply('put', '/', d); })
+      .then(function (d) { lastMsg = now(); apply('put', '/', d); })
       .catch(function () { if (conn !== 'gone') { conn = got ? 'reconnecting' : 'connecting'; schedule(); } })
-      .then(function () { if (conn !== 'gone') pollT = setTimeout(poll, 5000); });
+      .then(function () { pollBusy = false; if (conn !== 'gone' && polling) pollT = setTimeout(poll, 5000); });
+  }
+  /* A phone that slept, or changed Wi-Fi, can be left holding a stream that has quietly stopped. Firebase sends something at
+     least every 30 seconds, so a stream quiet for longer is opened again: at once when the page comes back into view (quiet
+     45 seconds), otherwise on the 20-second check (quiet 2.5 minutes). */
+  function revive(woke) {
+    if (conn === 'gone') return;
+    if (polling) { if (woke) poll(); return; }
+    if (!es || es.readyState === 2 || now() - lastMsg > (woke ? 45000 : 150000)) connect();
   }
 
   /* ---------- drawing ---------- */
@@ -2228,10 +2377,17 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return h + '</span>';
   }
   function run(p) { return p.r >= 3 ? '<span class="run" aria-label="' + p.r + ' wins in a row">🔥' + p.r + '</span>' : ''; }
+  /* the director paused the tournament: VM.pz is when (0 while playing), VM.pzs the pauses that ended. Match clocks count
+     play only, so they stand still while paused. */
+  function paused() { return !!(VM && num(VM.pz) > 0 && VM.phase === 'active'); }
+  function pauseState() {
+    var spans = list(VM && VM.pzs).map(function (p) { p = list(p); return [num(p[0]), num(p[1])]; }).filter(function (p) { return p[0] > 0 && p[1] > p[0]; });
+    return { pauses: spans, pause: paused() ? { at: num(VM.pz) } : null };
+  }
   function clock(since) {
-    var m = (now() - since) / 60000, a = VM.avg || 0;
+    var m = E.playMs(pauseState(), num(since), now()) / 60000, a = num(VM.avg);
     var cls = a ? (m > 2 * a ? ' vslow' : (m > 1.5 * a ? ' slow' : '')) : '';
-    return '⏱️ <span class="elapsed' + cls + '">' + Math.max(0, Math.floor(m)) + ' min</span>';
+    return (paused() ? '\u23F8\uFE0F' : '⏱️') + ' <span class="elapsed' + cls + '">' + Math.max(0, Math.floor(m)) + ' min</span>';
   }
   function findMe() {
     if (!me) return null;
@@ -2250,7 +2406,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (p.st === 'e') return { big: 'Out: finished ' + (p.pt && p.pt !== p.pl ? 'tied for ' : '') + placeText(p), sub: '' };
     if (p.st === 'd') return { big: 'Dropped: finished ' + (p.pt && p.pt !== p.pl ? 'tied for ' : '') + placeText(p), sub: '' };
     if (VM.rr && list(VM.rr.order).indexOf(p.id) >= 0) {
-      var rr = VM.rr, ri = list(rr.order).indexOf(p.id), rec = rr.rec && list(rr.rec)[ri] ? list(list(rr.rec)[ri]) : [0, 0], cur = rr.cur ? list(rr.cur) : null;
+      var rr = VM.rr, ri = list(rr.order).indexOf(p.id), rec = (rr.rec && list(rr.rec)[ri] ? list(list(rr.rec)[ri]) : [0, 0]).map(num), cur = rr.cur ? list(rr.cur) : null;
       var playing = !!(cur && (cur[0] === p.id || cur[1] === p.id)), rival = playing ? P(cur[0] === p.id ? cur[1] : cur[0]) : null;
       if (rr.stage === 'decider') return { big: playing ? 'Playing for 2nd place' : 'Round robin playoff', sub: playing && rival ? 'vs ' + up(rival.n) + ' on Table ' + rr.table : '' };
       return { big: playing ? 'Playing on Table ' + rr.table : 'Round robin playoff', sub: (playing && rival ? 'vs ' + up(rival.n) + ' · ' : (cur ? 'Sitting out this match · ' : '')) + 'record ' + rec[0] + '–' + rec[1] };
@@ -2266,7 +2422,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var qq = list(VM.queue), pos = qq.indexOf(p.id);
     if (pos >= 0) {
       if (VM.ordered === false) return { big: 'Waiting for the draw', sub: 'The players left draw in person for the next round' };
-      return { big: 'Waitlist #' + (pos + 1), sub: VM.eta ? waitText((pos + 1) * VM.eta) + ' wait (an estimate)' : '' };
+      return { big: 'Waitlist #' + (pos + 1), sub: paused() ? '\u23F8\uFE0F Tournament paused' : (VM.eta ? waitText((pos + 1) * VM.eta) + ' wait (an estimate)' : '') };
     }
     return { big: p.wh || 'Still in', sub: '' };
   }
@@ -2278,39 +2434,43 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         '</div><button class="btn ghost" data-vw="unpick" style="margin-top:10px">Cancel</button></section>';
     }
     if (!mine) return '<section class="vw-sec"><button class="btn primary big" data-vw="pick" style="width:100%">Find me: tap to pick your name</button></section>';
-    var s = statusOf(mine);
+    var s = statusOf(mine), wd = wdHTML(mine);
     return '<section class="vw-me"><div class="vw-me-top"><div class="nm">' + esc(up(mine.n)) + '</div><button class="btn small ghost" data-vw="pick">Not you?</button></div>' +
       '<div class="big">' + esc(s.big) + '</div>' + (s.sub ? '<div class="sub">' + esc(s.sub) + '</div>' : '') +
-      '<div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div>' +
-      wdHTML(mine) + '</section>';
+      '<div class="vw-me-row"><div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div>' + wd.btn + '</div>' +
+      wd.box + histHTML(mine) + '</section>';
   }
 
   /* ---------- withdrawing from this phone ----------
-     A player who picked their name can ask to withdraw: two confirmations, then a request goes to the director, who
-     confirms it or keeps them in. The request is remembered on this phone so the card can say what happened. */
+     A player who picked their name can ask to withdraw: the small Withdraw button beside their chips, one confirmation,
+     then a request goes to the director, who confirms it or keeps them in. The request is remembered on this phone so the
+     card can say what happened. Gives the button (beside the chips) and what shows under them. */
   var WDK = 'chipTourney.wd', wdStep = 0, wdBusy = false, wdErr = '';
   function wdMine(mine) {
     try {
       var o = JSON.parse(localStorage.getItem(WDK) || 'null');
-      return o && o.code === code && String(o.pid) === String(mine.id) ? o : null;
+      if (!o || o.code !== code || String(o.pid) !== String(mine.id)) return null;
+      /* sent in an earlier tournament on the same link (player numbers start again at 1 in each one): not this tournament's */
+      var sa = num(VM && VM.sa);
+      if (sa && (o.sa ? o.sa !== sa : num(o.at) < sa - 600000)) return null;
+      return o;
     } catch (e) { return null; }
   }
   function wdHTML(mine) {
-    var req = wdMine(mine), ans = req && VM.wd ? VM.wd[req.rid] : null, h = '';
+    var req = wdMine(mine), ans = req && VM.wd ? VM.wd[req.rid] : null, none = { btn: '', box: '' };
     var kept = !!(VM.wdNo && VM.wdNo[mine.id]);   /* the director kept this player in: no asking again, from any phone */
-    if (mine.st === 'd' && req) return '<p class="vw-wd-note">You withdrew from the tournament.</p>';
-    if (mine.st !== 'a') return '';
-    if (kept) return '<p class="vw-wd-note">The director kept you in. If you need to leave, talk to the director in person.</p>';
-    if (req && !ans) return '<p class="vw-wd-note">Withdrawal sent. Waiting for the director to confirm\u2026</p>';
-    if (!VM.wdOn || VM.phase !== 'active' || VM.rr) return h;
-    if (wdStep === 1) return h + '<div class="vw-wd"><b>Withdraw from the tournament?</b>' +
+    function note(t) { return { btn: '', box: '<p class="vw-wd-note">' + t + '</p>' }; }
+    if (mine.st === 'd' && req) return note('You withdrew from the tournament.');
+    if (mine.st !== 'a') return none;
+    if (kept) return note('The director kept you in. If you need to leave, talk to the director in person.');
+    if (req && !ans) return note('Withdrawal sent. Waiting for the director to confirm\u2026');
+    if (!VM.wdOn || VM.phase !== 'active' || VM.rr) return none;
+    if (wdStep === 1) return { btn: '', box: '<div class="vw-wd"><b>Withdraw from the tournament?</b>' +
       '<p>You\'d leave the tournament and give up your chips. Your request goes to the director, who confirms it.</p>' +
-      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Cancel</button><button class="btn danger" data-vw="wd2">Continue</button></div></div>';
-    if (wdStep === 2) return h + '<div class="vw-wd"><b>Are you sure?</b><p>If you withdraw by mistake, you can\'t be added back.</p>' +
       (wdErr ? '<p class="vw-wd-err">' + esc(wdErr) + '</p>' : '') +
-      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Keep playing</button><button class="btn danger" data-vw="wd-go"' + (wdBusy ? ' disabled' : '') + '>' +
-      (wdBusy ? 'Sending\u2026' : 'Yes, withdraw ' + esc(up(mine.n))) + '</button></div></div>';
-    return h + '<button class="btn small ghost vw-wd-btn" data-vw="wd1">Withdraw from the tournament</button>';
+      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Cancel</button><button class="btn danger" data-vw="wd-go"' + (wdBusy ? ' disabled' : '') + '>' +
+      (wdBusy ? 'Sending\u2026' : 'Yes, withdraw') + '</button></div></div>' };
+    return { btn: '<button class="btn small vw-wd-btn" data-vw="wd1"><span class="fl" aria-hidden="true">\uD83C\uDFF3\uFE0F</span>Withdraw</button>', box: '' };
   }
   function sendWithdraw(mine) {
     wdBusy = true; wdErr = ''; render();
@@ -2321,13 +2481,59 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       return r.json();
     }).then(function (j) {
       if (!j || !j.name) throw new Error('http');
-      try { localStorage.setItem(WDK, JSON.stringify({ code: code, pid: mine.id, rid: j.name, at: Date.now() })); } catch (e) { /* the card can't follow it after a reload */ }
+      try { localStorage.setItem(WDK, JSON.stringify({ code: code, pid: mine.id, rid: j.name, at: Date.now(), sa: num(VM && VM.sa) })); } catch (e) { /* the card can't follow it after a reload */ }
       wdStep = 0; wdBusy = false; render();
     }).catch(function (e) {
       wdBusy = false;
       wdErr = e && e.message === 'off' ? 'Withdrawing from phones is off right now. Tell the director in person.' : 'Couldn\'t send it. Check your connection and try again.';
       render();
     });
+  }
+  /* ---------- this player's match history, latest first ----------
+     The director sends every finished match, oldest first (VM.mh: winner, loser, table, when it started in seconds after
+     the tournament started, its length in seconds of play or -1, the loser's chips after it or -1 where chips don't count,
+     a playoff match's name) and a finished spot shot shootout (VM.sh). */
+  function histRows(mine) {
+    var sa = num(VM.sa), rows = [];
+    list(VM.mh).forEach(function (h) {
+      if (!h || typeof h !== 'object') return;
+      h = list(h);
+      var w = num(h[0]), l = num(h[1]);
+      if (!w || !l || (w !== mine.id && l !== mine.id)) return;
+      rows.push({ won: w === mine.id, opp: P(w === mine.id ? l : w), n: num(h[2]), t: sa ? sa + num(h[3]) * 1000 : 0, d: h.length > 4 ? num(h[4]) : -1,
+        c: h.length > 5 ? num(h[5]) : -1, lbl: str(h[6]) });
+    });
+    var so = VM.sh && typeof VM.sh === 'object' ? VM.sh : null;
+    if (so) list(so.r).forEach(function (r) {
+      r = list(r);
+      if (num(r[0]) === mine.id) rows.push({ so: true, made: num(r[1]), shots: num(r[2]), place: num(r[3]), n: num(so.n), t: sa ? sa + num(so.s) * 1000 : 0, d: so.d === undefined ? -1 : num(so.d) });
+    });
+    return rows;
+  }
+  /* how long a match lasted: "14 min", "1 h 5 min" */
+  function durText(sec) {
+    if (!(sec >= 0)) return '';
+    var m = Math.round(sec / 60);
+    return m < 1 ? '&lt;1 min' : (m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''));
+  }
+  function histRow(r) {
+    var dt = durText(r.d);
+    var tm = '<span class="tm" title="Started">' + (r.t ? E.fmtTime(r.t) : '') + '</span>', det = r.n ? ['Table ' + r.n] : [];
+    var dur = '<span class="dur"' + (dt ? ' title="Match length">⏱️ ' + dt : '>') + '</span>';
+    if (r.so) {
+      det.push((r.place === 1 ? 'Won' : (r.place ? E.ordinal(r.place) + ' place' : 'Done')) + ', made ' + r.made + ' of ' + r.shots);
+      return '<li class="so"><span class="res" aria-hidden="true">\uD83C\uDFAF</span><span class="opp">Spot shot shootout</span>' + tm + '<span class="det">' + det.join(' · ') + '</span>' + dur + '</li>';
+    }
+    if (r.lbl) det.push(esc(r.lbl));
+    if (!r.won && r.c >= 0) det.push(r.c === 0 ? '<span class="out">Out of chips</span>' : plural(r.c, 'chip') + ' left');
+    return '<li class="' + (r.won ? 'w' : 'l') + '"><span class="res" title="' + (r.won ? 'Won' : 'Lost') + '">' + (r.won ? 'W' : 'L') + '</span>' +
+      '<span class="opp"><span class="vs">vs</span>' + esc(up(r.opp ? r.opp.n : '?')) + '</span>' + tm + '<span class="det">' + det.join(' · ') + '</span>' + dur + '</li>';
+  }
+  function histHTML(mine) {
+    var h = '<button type="button" class="vw-hist-tg" data-vw="hist" aria-expanded="' + histOpen + '">' + (histOpen ? 'Hide' : 'View') + ' My Match History</button>';
+    if (!histOpen) return h;
+    var rows = histRows(mine);
+    return h + (rows.length ? '<ol class="vw-hist" reversed>' + rows.reverse().map(histRow).join('') + '</ol>' : '<p class="vw-hist-none">No finished matches yet.</p>');
   }
   /* the most wins and 2nd most, like the ticker on the TV, kept still */
   function joinNames(ids) {
@@ -2338,7 +2544,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var t = list(VM.tiers).filter(function (x) { return x && list(x.ids).length; });
     if (!t.length || VM.phase === 'finished') return '';
     return '<div class="vw-wins"><span aria-hidden="true">\uD83E\uDD81</span> ' + t.slice(0, 2).map(function (x, i) {
-      return '<span class="lbl">' + (i ? '2nd' : 'Most wins') + ':</span> ' + joinNames(x.ids) + ' ' + (x.w || 0);
+      return '<span class="lbl">' + (i ? '2nd' : 'Most wins') + ':</span> ' + joinNames(x.ids) + ' ' + num(x.w);
     }).join('<span class="sep"> \u00B7 </span>') + '</div>';
   }
   function plRow(p, mine) {
@@ -2370,8 +2576,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     }
     var h = '<section class="vw-sec"><div class="vw-h">Waitlist <span class="count">' + qq.length + '</span></div>';
     if (!qq.length) return h + '<p class="muted">Empty. Everyone still in is on a table.</p></section>';
-    qq.forEach(function (id, i) { h += row(i + 1, P(id), VM.eta ? esc(waitText((i + 1) * VM.eta)) : '', mine); });
-    if (VM.eta) h += '<p class="vw-note">Waits are estimates from the average match so far.</p>';
+    var pz = paused();
+    qq.forEach(function (id, i) { h += row(i + 1, P(id), pz ? '<span class="vw-paused">Paused</span>' : (VM.eta ? esc(waitText((i + 1) * VM.eta)) : ''), mine); });
+    if (pz) h += '<p class="vw-note">Wait times are on hold while the tournament is paused.</p>';
+    else if (VM.eta) h += '<p class="vw-note">Waits are estimates from the average match so far.</p>';
     return h + '</section>';
   }
   function rrHTML(mine) {
@@ -2379,7 +2587,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var cur = rr.cur ? list(rr.cur) : null;
     /* chips stop counting in the round robin: each player shows their playoff record instead */
     function rrPl(id) {
-      var p = P(id), i = order.indexOf(id), r = i >= 0 && rec[i] ? list(rec[i]) : [0, 0];
+      var p = P(id), i = order.indexOf(id), r = (i >= 0 && rec[i] ? list(rec[i]) : [0, 0]).map(num);
       return '<div class="pl' + (isMe(p, mine) ? ' me' : '') + '"><b>' + esc(up(p.n)) + '</b><span class="pchips"><span class="frac">' + (rr.stage === 'decider' ? 'For 2nd' : 'Playoff ' + r[0] + '–' + r[1]) + '</span>' + run(p) + '</span></div>';
     }
     if (cur && P(cur[0]) && P(cur[1])) {
@@ -2390,7 +2598,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var so = rr.shoot;
     order.forEach(function (id, i) {
       var p = P(id); if (!p) return;
-      var r = rec[i] ? list(rec[i]) : [0, 0], right = so ? (list(so.strikes)[i] || 0) + ' of ' + (list(so.allowed)[i] || 0) + ' misses' : r[0] + '–' + r[1];
+      var r = (rec[i] ? list(rec[i]) : [0, 0]).map(num), right = so ? num(list(so.strikes)[i]) + ' of ' + num(list(so.allowed)[i]) + ' misses' : r[0] + '–' + r[1];
       if (so && so.turn === id) right = 'Shooting · ' + right;
       h += row(i + 1, p, right, mine, '', true);
     });
@@ -2418,8 +2626,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var h = '<section class="champ vw-champ"><div class="champ-box"><div class="trophy" aria-hidden="true">🏆</div><div class="sub">Champion</div><div class="nm">' + esc(up(c.n)) + '</div>' +
       '<div class="sub">' + plural(c.w || 0, 'match win') + '</div></div>';
     var aw = '';
-    if (VM.mw) aw += award('🦁', 'Most wins', VM.mw.ids, plural(VM.mw.w || 0, 'match win') + (list(VM.mw.ids).length > 1 ? ' each' : ''));
-    if (VM.lr) aw += award('🔥', 'Longest run', VM.lr.ids, (VM.lr.n || 0) + ' wins in a row' + (list(VM.lr.ids).length > 1 ? ' each' : ''));
+    if (VM.mw) aw += award('🦁', 'Most wins', VM.mw.ids, plural(num(VM.mw.w), 'match win') + (list(VM.mw.ids).length > 1 ? ' each' : ''));
+    if (VM.lr) aw += award('🔥', 'Longest run', VM.lr.ids, num(VM.lr.n) + ' wins in a row' + (list(VM.lr.ids).length > 1 ? ' each' : ''));
     if (aw) h += '<div class="awards">' + aw + '</div>';
     return h + '</section>';
   }
@@ -2445,7 +2653,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     applyColors();
     document.title = (VM && VM.title) ? VM.title : 'Chip tournament';
     pmap = {};
-    if (VM) list(VM.players).forEach(function (p) { if (p && p.id) pmap[p.id] = p; });
+    if (VM) list(VM.players).forEach(function (p) { var cp = p && typeof p === 'object' ? cleanPlayer(p) : null; if (cp && cp.id) pmap[cp.id] = cp; });
     var mine = findMe(), body = '';
     if (!got) body = '<p class="vw-wait">Connecting…</p>';
     else if (conn === 'gone') body = '<div class="banner info vw-sec">This tournament isn\'t shared anymore. Ask the director for the new QR code.</div>';
@@ -2475,9 +2683,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var el = e.target.closest('[data-vw]');
     if (!el) return;
     var a = el.getAttribute('data-vw');
-    if (a === 'pick') { picking = true; wdStep = 0; render(); window.scrollTo(0, 0); }
+    if (a === 'pick') { picking = true; wdStep = 0; histOpen = false; render(); window.scrollTo(0, 0); }
     else if (a === 'wd1') { wdStep = 1; wdErr = ''; render(); }
-    else if (a === 'wd2') { wdStep = 2; render(); }
+    else if (a === 'hist') { histOpen = !histOpen; render(); }
     else if (a === 'wd-cancel') { wdStep = 0; wdErr = ''; render(); }
     else if (a === 'wd-go') { var wm = findMe(); if (wm && !wdBusy) sendWithdraw(wm); }
     else if (a === 'unpick') { picking = false; render(); }
@@ -2489,15 +2697,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   });
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) return;
-    if (conn !== 'gone') {
-      if (es && es.readyState === 2) connect();
-      else if (!es) poll();
-    }
+    revive(true);
     schedule();
   });
   /* Chip counts stays open (or closed) across live updates */
   document.addEventListener('toggle', function (e) { if (e.target && e.target.classList && e.target.classList.contains('vw-more')) moreOpen = e.target.open; }, true);
-  setInterval(function () { if (!document.hidden) schedule(); }, 20000);   /* match clocks and the Live / Last update label */
+  setInterval(function () { if (!document.hidden) { revive(false); schedule(); } }, 20000);   /* match clocks, the Live / Last update label, a stream gone quiet */
   render();
   connect();
 })();
@@ -2742,7 +2947,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   /* the estimated finish, rounded to 5 minutes (no false precision, and it does not twitch every minute) */
   var endShown = '', endTimer = null;
   function endText() {
-    if (!prefs.showEnd || S.phase !== 'active') { endShown = ''; return ''; }
+    if (!prefs.showEnd || S.phase !== 'active' || E.isPaused(S)) { endShown = ''; return ''; }
     /* right after a result the rest of the night has to be played out again: show the screen first, work it out a moment later */
     if (!E.finishReady(S)) { scheduleEnd(); return endShown; }
     var fe = E.finishEstimate(S, now());
@@ -3112,6 +3317,24 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (wdWanted() && S.phase === 'active') WD.timer = setTimeout(pollRequests, WD.rules === 'old' ? 60000 : 10000);
     });
   }
+  /* A request belongs to this tournament only if it was sent after this tournament started (Firebase puts the time in each
+     request's id; 2 minutes' grace for clocks) by the player who has that number now. The link stays the same from one
+     tournament to the next while player numbers start again at 1, so an old request would otherwise pop up for someone else.
+     An old request is answered "out" with no pop-up. */
+  var PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+  function pushTime(rid) {
+    var t = 0;
+    if (typeof rid !== 'string' || rid.length < 8) return 0;
+    for (var i = 0; i < 8; i++) { var k = PUSH_CHARS.indexOf(rid.charAt(i)); if (k < 0) return 0; t = t * 64 + k; }
+    return t;
+  }
+  function wdName(x) { return String(x === undefined || x === null ? '' : x).replace(/\s+/g, ' ').trim().toUpperCase(); }
+  function wdFresh(rid, q, p) {
+    var t = pushTime(rid);
+    if (t && S.startedAt && t < S.startedAt - 120000) return false;
+    var sent = wdName(q.n);
+    return !sent || sent === wdName(p.name.slice(0, 60));
+  }
   function takeRequests(data) {
     if (!data || typeof data !== 'object') return;
     var fresh = false, changed = false;
@@ -3122,7 +3345,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (S.wdNo && S.wdNo[pid]) { S.wd[rid] = 'kept'; removeRequest(rid); changed = true; return; }   /* kept in before: no asking again */
       if (WD.queue.some(function (x) { return x.rids.indexOf(rid) >= 0; })) return;
       var p = P(pid);
-      if (!p || p.status !== 'active' || S.phase !== 'active') { S.wd[rid] = 'out'; removeRequest(rid); changed = true; return; }
+      if (!p || p.status !== 'active' || S.phase !== 'active' || !wdFresh(rid, q, p)) { S.wd[rid] = 'out'; removeRequest(rid); changed = true; return; }
       var same = WD.queue.filter(function (x) { return x.pid === pid; })[0];
       if (same) { same.rids.push(rid); return; }   /* a second tap from the same player joins the first */
       WD.queue.push({ pid: pid, rids: [rid], at: now() });
@@ -3172,6 +3395,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return AC;
   }
   function unlockChime() {
+    if (!wdWanted()) return;   /* no sound set up on a device that never gets phone requests */
     if (AC && AC.state === 'running') return;
     var c = audioCtx();
     if (!c) return;
@@ -3325,6 +3549,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
   function stageText() {
     if (S.phase === 'finished') return '';
+    if (E.isPaused(S)) return '\u23F8\uFE0F The tournament is paused. Match clocks and wait times are on hold until play resumes.';
     var rr = S.rr, pr = S.pr, n = E.activeCount(S);
     if (rr) {
       if (rr.stage === 'tie') return 'Round robin playoff: everyone is 1–1, and the director is choosing the tie-break.';
@@ -3342,9 +3567,36 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return '';
   }
   function phoneEnd() {
-    if (!prefs.showEnd || S.phase !== 'active') return 0;
+    if (!prefs.showEnd || S.phase !== 'active' || E.isPaused(S)) return 0;
     var fe = E.finishEstimate(S, now());
     return fe ? Math.round((now() + fe.min * 60000) / 300000) * 300000 : 0;
+  }
+  /* Every finished match, oldest first, for players' match history on their phones, kept small (it goes out with every
+     update): [winner, loser, table, when it started (seconds after the tournament started), how long it lasted (seconds of
+     play, time paused left out), the loser's chips after it (-1 in the round robin playoff, where chips don't count), and
+     a playoff match's name]. */
+  function histVM() {
+    var sa = S.startedAt || 0, out = [];
+    S.log.forEach(function (e) {
+      if ((e.type !== 'result' && e.type !== 'presult') || !e.winner || !e.loser) return;
+      var st = e.start || e.t, h = [e.winner, e.loser, e.table || 0, Math.max(0, Math.round((st - sa) / 1000)), e.start ? Math.round(E.playMs(S, e.start, e.t) / 1000) : -1];
+      if (e.type === 'presult') h.push(-1, e.decider ? 'For 2nd place' : 'Round robin playoff');
+      else { h.push(typeof e.loserC === 'number' ? Math.max(0, e.loserC) : -1); if (e.pr) h.push(capFirst(/^round/.test(e.pr) ? 'playoff ' + e.pr : e.pr)); }
+      out.push(h);
+    });
+    return out;
+  }
+  /* a finished spot shot shootout: the table, when it started (seconds after the tournament started), how long it took
+     (seconds of play), and [player, shots made, shots taken, place] for each of the three */
+  function shootVM() {
+    var rr = S.rr, so = rr && rr.shootout;
+    if (!so || rr.stage !== 'done' || !so.attempts.length) return null;
+    var sa = S.startedAt || 0, t0 = so.t0 || so.attempts[0].t;
+    return { n: rr.table, s: Math.max(0, Math.round((t0 - sa) / 1000)), d: Math.round(E.playMs(S, t0, so.attempts[so.attempts.length - 1].t) / 1000),
+      r: rr.order.map(function (id) {
+        var mine = so.attempts.filter(function (x) { return x.id === id; });
+        return [id, mine.filter(function (x) { return x.made; }).length, mine.length, (P(id) || {}).place || 0];
+      }) };
   }
   function viewModel() {
     var rn = E.runs(S), we = E.waitEstimate(S), am = E.avgMatch(S), mw = E.mostWins(S), rr = S.rr;
@@ -3360,7 +3612,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       rr: null, rounds: null, colors: colors,
       tiers: E.winTiers(S, 2).map(function (t) { return { ids: t.ids, w: t.wins }; }),   /* the most wins and 2nd most, as on the TV */
       end: phoneEnd(),                                                                    /* the finish time, when it shows on the TV */
-      wdOn: wdOn(), wd: S.wd || {}, wdNo: S.wdNo || {}                                    /* phone withdrawals: allowed now, the answers, who can't ask again */
+      wdOn: wdOn(), wd: S.wd || {}, wdNo: S.wdNo || {},                                   /* phone withdrawals: allowed now, the answers, who can't ask again */
+      sa: S.startedAt || 0,                                                               /* which tournament this is (phones forget requests from earlier ones) */
+      mh: histVM(), sh: shootVM(),                                                        /* every finished match, and a finished shootout: players' match history */
+      pz: E.isPaused(S) ? S.pause.at : 0, pzs: (S.pauses || []).slice()                  /* paused since (0 when playing), and the pauses that ended: match clocks count play only */
     };
     if (rr && rr.stage !== 'done') {
       var so = rr.shootout;
@@ -3415,7 +3670,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       capKey = key;
       names.sort(function (a, b) { return b.length - a.length; });
       try {
-        capRe = names.length ? new RegExp('(^|[^\\p{L}\\p{N}])(' + names.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&'); }).join('|') + ')(?![\\p{L}\\p{N}])', 'gu') : null;
+        capRe = names.length ? new RegExp('(^|[^\\p{L}\\p{N}])(' + names.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&'); }).join('|') + ')(?![\\p{L}\\p{N}])', 'gu') : null;
       } catch (e) { capRe = null; }
     }
     var t = String(text);
@@ -3434,7 +3689,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var h = Math.floor(min / 60), m = min % 60;
     return h + ' h' + (m ? ' ' + m + ' min' : '');
   }
-  function elapsed(since) { return Math.max(0, Math.floor((now() - since) / 60000)) + ' min'; }
+  function elapsed(since) { return Math.max(0, Math.floor(E.playMs(S, since, now()) / 60000)) + ' min'; }   /* time paused doesn't count */
+  function clockIcon() { return E.isPaused(S) ? '\u23F8\uFE0F' : '\u23F1\uFE0F'; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function suggestedTables() {
     var n = S.players.length;
@@ -3582,7 +3838,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!tables || !tables.children.length) return;
     var section = tables.parentNode, chipBoxes = tables.querySelectorAll('.pchips'), avail = window.innerHeight - TV_PAD;
     var names = tables.querySelectorAll('.pname'), seen = {}, chips46 = {}, pre = {}, fresh = true;
-    for (var c = 0; c < names.length && fresh; c++) fresh = !names[c].style.getPropertyValue('--nf') && !names[c].classList.contains('cut') && !names[c].classList.contains('wrap');
+    for (var c = 0; c < names.length && fresh; c++) fresh = !names[c].style.getPropertyValue('--nf') && !names[c].classList.contains('cut') && !names[c].classList.contains('pwrap');
     /* a size fits when every table (and the Closed row under them) is on screen with full-size chips, and the smallest allowed chips still fit sideways
        (checked with full-size chips first: where those fit, smaller ones do too). Each size is measured once; while the screen is laid
        out at a size that fits, the names are measured too, so they need no extra pass if that size is the one chosen. */
@@ -3604,8 +3860,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (touchScreen()) lo = Math.max(lo, Math.ceil(TOUCH_MIN_TAP / 1.08 / parseFloat(getComputedStyle(rootEl).fontSize) * 10) / 10);   /* big enough for a finger */
     var ts = largestNear(lo, Math.max(lo, 4.2), 0.1, fits, fitMemo.ts1);
     fitMemo.ts1 = ts !== null ? ts : lo;   /* if nothing fits in one column, next time one measurement at the smallest size confirms it */
-    var phone = lo > 1.2 && rootEl.classList.contains('tv-short');
-    if (ts === null && !phone) {   /* only when even the smallest size cannot fit in one column */
+    var heldShort = lo > 1.2 && rootEl.classList.contains('tv-short');   /* a phone held sideways */
+    if (ts === null && !heldShort) {   /* only when even the smallest size cannot fit in one column */
       board.classList.add('tcols2'); ts = largestNear(lo, Math.max(lo, 4.2), 0.1, fits, fitMemo.ts2);
       fitMemo.ts2 = ts !== null ? ts : lo;
     }
@@ -3633,7 +3889,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      and only work name by name where a name does not fit and has not been fitted before in the same room at the same size */
   function fitNames(names, start, min, onFail, measured) {
     var i, todo = [], ctx = memoContext();
-    for (i = 0; i < names.length; i++) { names[i].classList.remove('cut', 'wrap'); names[i].style.setProperty('--nf', start + 'rem'); }
+    for (i = 0; i < names.length; i++) { names[i].classList.remove('cut', 'pwrap'); names[i].style.setProperty('--nf', start + 'rem'); }
     var m = measured && measured.length === names.length ? measured : widths(names);
     for (i = 0; i < names.length; i++) {
       var e = names[i], sw = m[i][0], cw = m[i][1];
@@ -3656,7 +3912,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      trying every step from the top: the same answer in fewer measurements. `sw`/`cw` are the name's measured widths at `start`, if known. */
   function fitName(e, start, min, onFail, sw, cw) {
     if (sw === undefined) {
-      e.classList.remove('cut', 'wrap');
+      e.classList.remove('cut', 'pwrap');
       e.style.setProperty('--nf', start + 'rem');
       sw = e.scrollWidth; cw = e.clientWidth;
     }
@@ -3685,7 +3941,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
   /* compact layout (phones, tablets): the same idea, and a name that still cannot fit on one line is allowed to wrap */
   function fitCompactNames() {
-    fitNames(app.querySelectorAll('.tables .pname'), 1.6, 1.05, 'wrap');
+    fitNames(app.querySelectorAll('.tables .pname'), 1.6, 1.05, 'pwrap');
   }
 
   function fitWaitlist() {
@@ -3832,6 +4088,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var auto = S.mode === 'AUTO';
       h += '<button class="btn small mode-btn" data-act="mode" aria-pressed="' + auto + '">' + (auto ? 'Auto-throw on' : 'Auto-throw paused') + '</button>';
     }
+    if (S.phase === 'active') {
+      var pz = E.isPaused(S);
+      h += pz
+        ? '<button class="btn small warn pause-btn" data-act="play-resume" title="Resume play: match clocks and wait times start again"><span class="pi pi-play" aria-hidden="true"></span>Resume<span class="bar-long"> tournament</span></button>'
+        : '<button class="btn small on-rail pause-btn" data-act="play-pause" title="Pause play for everyone: match clocks stop, and wait times and the finish time are hidden"><span class="pi pi-pause" aria-hidden="true"></span>Pause<span class="bar-long"> tournament</span></button>';
+    }
     if (phoneLive()) h += '<button class="btn small on-rail qr-btn" data-act="qr-open" title="Show the QR code for the phone page"><i id="qr-dot" class="pdot ' + phoneStatus().cls + '"></i>QR</button>';
     if (S.phase !== 'registration') {
       var ul = E.undoLabel(S);
@@ -3895,6 +4157,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (S.phase === 'finished') h += champHTML();
     h += statsHTML();
     if (ui.tab === 'tables') h += tickerHTML();
+    if (E.isPaused(S)) {
+      h += '<div class="banner pause-banner" role="status"><span><b>\u23F8\uFE0F Tournament paused</b> since ' + E.fmtTime(S.pause.at) + '. Match clocks, wait times and the finish time are on hold.</span>' +
+        '<button class="btn" data-act="play-resume" style="border-color:var(--yellow-ink)">Resume tournament</button></div>';
+    }
     var po = E.playoffCandidates(S);
     if (po) {
       h += '<div class="banner"><span>Three players left: ' + po.map(function (id) { return esc(dn(P(id).name)); }).join(', ') + '. You can finish with a round robin playoff.</span><button class="btn" data-act="po-offer" style="border-color:var(--yellow-ink)">Begin playoff</button></div>';
@@ -3940,11 +4206,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return run ? '<div class="ticker" role="marquee" aria-label="Most wins"><div class="tk-track"><span class="tk-run">' + run + '</span></div></div>' : '';
   }
   /* on the TV the ticker sits in the space beside the counts and tabs, over the right-hand column; everywhere it scrolls at a steady speed */
+  /* The ticker's scroll never ends by itself, and every redraw builds a new ticker, so the last scroll is stopped first;
+     otherwise each one kept running on a ticker no longer on screen, and a night of taps piled up hundreds of them. */
+  var tickerAnim = null;
   function placeTicker() {
+    if (tickerAnim) { tickerAnim.cancel(); tickerAnim = null; }
     var t = app.querySelector('.ticker');
     if (!t) return;
     var track = t.querySelector('.tk-track'), run = track.querySelector('.tk-run');
-    if (t.tkAnim) { t.tkAnim.cancel(); t.tkAnim = null; }
     [].slice.call(track.querySelectorAll('.tk-run[aria-hidden]')).forEach(function (c) { track.removeChild(c); });
     t.style.left = t.style.top = t.style.height = t.style.fontSize = '';
     if (rootEl.classList.contains('tv')) {
@@ -3968,8 +4237,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!runW) return;
     for (var i = Math.ceil(t.clientWidth / runW) + 1; i > 0; i--) { var c = run.cloneNode(true); c.setAttribute('aria-hidden', 'true'); track.appendChild(c); }
     var dur = runW / (parseFloat(getComputedStyle(t).fontSize) * TK_SPEED) * 1000;
-    t.tkAnim = track.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (-runW) + 'px)' }], { duration: dur, iterations: Infinity });
-    t.tkAnim.currentTime = performance.now() % dur;   /* position follows the clock, so a new render (a result, Undo) does not restart the scroll */
+    tickerAnim = track.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(' + (-runW) + 'px)' }], { duration: dur, iterations: Infinity });
+    tickerAnim.currentTime = performance.now() % dur;   /* position follows the clock, so a new render (a result, Undo) does not restart the scroll */
   }
 
   function statsHTML() {
@@ -4023,7 +4292,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function clockClass(since) {
     var a = avgMin();
     if (!a || !since) return '';
-    var m = (now() - since) / 60000;
+    var m = E.playMs(S, since, now()) / 60000;
     return m > 2 * a ? ' vslow' : (m > 1.5 * a ? ' slow' : '');
   }
   function clockHTML(since) { return '<span class="elapsed' + clockClass(since) + '" data-since="' + since + '">' + elapsed(since) + '</span>'; }
@@ -4052,7 +4321,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function tableCard(t) {
     var st = E.tableState(t), meta, felt;
     if (st === 'match') {
-      meta = prTableLabel(t) + '<span class="time">' + E.fmtTime(t.since) + '</span> ⏱️ ' + clockHTML(t.since);
+      meta = prTableLabel(t) + '<span class="time">' + E.fmtTime(t.since) + '</span> ' + clockIcon() + ' ' + clockHTML(t.since);
       felt = seat(P(t.a), true) + '<div class="vs">vs.</div>' + seat(P(t.b), true);
       if (t.note) {
         var fl = ui.flips[t.n];
@@ -4122,8 +4391,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       }).join('') + '</div>';
     }
     h += '</section><aside class="waitlist" aria-label="Waitlist"><h2 class="section-title">Waitlist <span class="count">' + S.queue.length + '</span></h2>';
-    var we = S.queue.length ? E.waitEstimate(S) : null;
-    if (we) {
+    var we = S.queue.length ? E.waitEstimate(S) : null, paused = E.isPaused(S);
+    if (paused && S.queue.length) h += '<p class="eta-note">\u23F8\uFE0F Tournament paused: wait times come back when play resumes.</p>';
+    else if (we) {
       h += '<p class="eta-note">' + oneDec(we.avgMin) + ' min average ' + (we.source === 'actual' ? '(actual)' : '(your estimate)') + ' &divide; ' + plural(we.playing, 'table') + ' playing &asymp; ' + oneDec(we.perSpotMin) + ' min per spot</p>';
     }
     if (!S.queue.length) h += '<p class="empty">Queue empty. Everyone still in is on a table.</p>';
@@ -4133,7 +4403,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         var p = P(id), held = E.heldFrom(S, id);
         h += '<li><span class="pos">' + (i + 1) + '</span><div class="who" data-act="edit" data-id="' + id + '" role="button" tabindex="0" title="Tap to edit"><b>' + esc(dn(p.name)) + '</b>' +
           '<span class="pchips">' + chipsHTML(p) + '<span class="frac">(' + p.C + '/' + p.S + ')</span>' +
-          (we ? '<span class="eta" title="Estimated wait">' + waitText((i + 1) * we.perSpotMin) + '</span>' : '') + '</span>' +
+          (paused ? '<span class="eta paused">Paused</span>' : (we ? '<span class="eta" title="Estimated wait">' + waitText((i + 1) * we.perSpotMin) + '</span>' : '')) + '</span>' +
           (held ? '<small>Just lost to ' + esc(dn(P(held).name)) + ', plays after the next result</small>' : '') + '</div></li>';
       });
       h += '</ol>';
@@ -4211,7 +4481,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var rr = S.rr, meta = '', felt = '';
     if (rr.current) {
       var dec = rr.stage === 'decider', c = rr.current;
-      meta = (dec ? 'For 2nd place' : 'Match ' + (rr.matches.length + 1)) + ' &middot; <span class="time">' + E.fmtTime(c.since) + '</span> ⏱️ ' + clockHTML(c.since);
+      meta = (dec ? 'For 2nd place' : 'Match ' + (rr.matches.length + 1)) + ' &middot; <span class="time">' + E.fmtTime(c.since) + '</span> ' + clockIcon() + ' ' + clockHTML(c.since);
       felt = poSeat(c.a, dec ? 'Playing for 2nd' : 'Playoff ' + poRecord(c.a)) + '<div class="vs">vs.</div>' + poSeat(c.b, dec ? 'Playing for 2nd' : 'Playoff ' + poRecord(c.b));
     } else if (rr.stage === 'tie') {
       meta = 'Tied';
@@ -4312,7 +4582,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       h += '<ol class="log" reversed style="list-style:none">';
       for (var i = S.log.length - 1; i >= 0; i--) {
         var e = S.log[i];
-        var dur = (e.type === 'result' || e.type === 'presult') && e.start ? ' <span class="muted">(' + Math.max(0, Math.round((e.t - e.start) / 60000)) + ' min)</span>' : '';
+        var dur = (e.type === 'result' || e.type === 'presult') && e.start ? ' <span class="muted">(' + Math.round(E.playMs(S, e.start, e.t) / 60000) + ' min)</span>' : '';
         h += '<li><span class="t">' + E.fmtTime(e.t) + '</span><span>' + esc(capNames(e.text)) + dur + '</span></li>';
       }
       h += '</ol>';
@@ -4349,7 +4619,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!ui.modal) ui.lastFocus = document.activeElement;
     ui.modal = m; renderModal();
   }
+  /* A yes-or-no question in the app's own pop-up. The browser's confirm() box is switched off without a word in some viewers
+     (a file previewed inside another app, for one), where it always answers Cancel: Import backup, New link, Forget this setup
+     and throwing a rematch did nothing there. Cancel goes back to the pop-up the question was asked from. */
+  function askConfirm(o, yes) {
+    openModal({ type: 'confirm', title: o.title, text: o.text, ok: o.ok, danger: !!o.danger, yes: yes, back: ui.modal || null });
+  }
   function closeModal() {
+    if (ui.modal && ui.modal.type === 'confirm' && ui.modal.back) { ui.modal = ui.modal.back; renderModal(); return; }   /* a question: back to where it was asked */
     if (ui.modal && ui.modal.type === 'po-offer' && ui.poKey) ui.poDismissed = ui.poKey;   /* closing the offer any way counts as "Not now" */
     if (ui.modal && ui.modal.type === 'pr-draw' && ui.prKey) ui.prDismissed = ui.prKey;   /* the banner brings the draw back */
     ui.modal = null; ui.shownType = null; modalRoot.innerHTML = '';
@@ -4525,14 +4802,21 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
               return '<button class="btn" data-act="throw-go" data-n="' + tt.n + '" data-a="' + c.id + '"><span class="pick"><span><b>' + esc(dn(cp.name)) + '</b> <span class="frac">(' + cp.C + '/' + cp.S + ')</span></span><span class="muted">' + esc(c.from) + (blocked ? ', just played ' + esc(dn(w.name)) : '') + '</span></span></button>';
             }).join('') + '</div>' : '<p class="muted">No one is waiting.</p>') + '<p class="err" role="alert"></p>', CANCEL);
         } else {
-          var opts = pool.map(function (c) { var cp = P(c.id); return '<option value="' + c.id + '">' + esc(dn(cp.name)) + ' (' + cp.C + '/' + cp.S + '), ' + esc(c.from) + '</option>'; }).join('');
+          /* the pickers start on the first two players waiting who may play each other, so Throw match works as it is */
+          var sel1 = m.p1 || (pool[0] && pool[0].id), sel2 = m.p2, others = pool.filter(function (c) { return c.id !== sel1; });
+          if (!sel2) sel2 = (others.filter(function (c) { return E.canPair(S, sel1, c.id); })[0] || others[0] || {}).id;
+          var opts = function (sel) { return pool.map(function (c) { var cp = P(c.id); return '<option value="' + c.id + '"' + (c.id === sel ? ' selected' : '') + '>' + esc(dn(cp.name)) + ' (' + cp.C + '/' + cp.S + '), ' + esc(c.from) + '</option>'; }).join(''); };
           h = shell('Throw a match on Table ' + tt.n,
-            '<form data-form="throw-empty" data-n="' + tt.n + '"><div class="field"><label for="t1">First player</label><select id="t1" name="p1" class="input" data-autofocus>' + opts + '</select></div>' +
-            '<div class="field" style="margin-top:10px"><label for="t2">Second player</label><select id="t2" name="p2" class="input">' + opts + '</select></div><p class="err" role="alert"></p>' +
+            '<form data-form="throw-empty" data-n="' + tt.n + '"><div class="field"><label for="t1">First player</label><select id="t1" name="p1" class="input" data-autofocus>' + opts(sel1) + '</select></div>' +
+            '<div class="field" style="margin-top:10px"><label for="t2">Second player</label><select id="t2" name="p2" class="input">' + opts(sel2) + '</select></div><p class="err" role="alert"></p>' +
             '<div class="actions">' + CANCEL + '<button class="btn primary" type="submit">Throw match</button></div></form>');
         }
         break;
       }
+      case 'confirm':
+        h = shell(esc(m.title), '<p>' + esc(m.text) + '</p><p class="err" role="alert"></p>',
+          '<button type="button" class="btn" data-act="m-close">Cancel</button><button type="button" class="btn ' + (m.danger ? 'danger' : 'primary') + '" data-act="cf-yes" data-autofocus>' + esc(m.ok) + '</button>');
+        break;
       case 'wd-req': {
         /* a player asked to withdraw from their phone: it stays until the director answers (no Cancel, Escape or tap outside) */
         var it = m.item, wp = P(it.pid), wn = esc(dn(wp.name)), canDrop = S.phase === 'active' && !S.rr && wp.status === 'active' && E.activeCount(S) > 1;
@@ -4544,7 +4828,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
           (canDrop ? '<p>If they withdraw, they finish ' + E.ordinal(E.activeCount(S)) + ', marked dropped.</p>'
             : '<p>' + (S.rr ? 'Players can\'t be dropped during the round robin playoff, so talk to them in person.' : 'They can\'t be dropped right now.') + '</p>') +
           '<p>If you keep them in, they can\'t ask again from their phone.</p>' +
-          '<p class="muted">Anyone with the phone link can send a request, so check with them if you can.</p>',
+          '<p class="muted">Anyone with the phone link can send a request, so check with them if you can.</p><p class="err" role="alert"></p>',
           '<button type="button" class="btn" data-act="wd-keep">Keep ' + wn + ' in</button>' + (canDrop ? '<button type="button" class="btn danger" data-act="wd-drop" data-autofocus>Withdraw ' + wn + '</button>' : ''));
         break;
       }
@@ -4791,7 +5075,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ui.flips = {};
     if (commit()) toast('Undid: ' + r.label);
   }
-  function tooSoon(t) { return !!t && now() - t < TAP_GUARD_MS; }
+  function tooSoon(t) { var d = now() - t; return !!t && d >= 0 && d < TAP_GUARD_MS; }   /* a start time ahead of this clock (a backup from another device) never blocks taps */
   function fail(r) { toast(r.error, { bad: true }); }
   function openPrDraw() {
     var di = E.prDrawInfo(S);
@@ -4886,6 +5170,16 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (r.error) { fail(r); return; }
       afterChange({ toast: S.mode === 'AUTO' ? 'Auto-throw is on' : 'Auto-throw paused. Results still count; throw matches yourself.', undo: false });
     },
+    'play-pause': function () {
+      var r = E.pausePlay(S, now());
+      if (r.error) { fail(r); return; }
+      afterChange({ toast: 'Tournament paused. Match clocks and wait times are on hold.', undo: true });
+    },
+    'play-resume': function () {
+      var r = E.resumePlay(S, now());
+      if (r.error) { fail(r); return; }
+      afterChange({ toast: 'Tournament resumed' + (r.minutes >= 1 ? ' after ' + fmtDur(r.minutes) + ' paused' : '') + '.', undo: true });
+    },
     tab: function (el) { ui.tab = el.dataset.tab; render(); },
     flip: function (el) {
       var t = E.T(S, +el.dataset.n); if (!t) return;
@@ -4903,10 +5197,19 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     'throw-open': function (el) { openModal({ type: 'throw', n: +el.dataset.n }); },
     'throw-go': function (el) {
       var n = +el.dataset.n, a = +el.dataset.a, t = E.T(S, n);
-      if (t.a && !E.canPair(S, t.a, a) && !window.confirm(dn(P(a).name) + ' and ' + dn(P(t.a).name) + ' just played each other. Throw the rematch anyway?')) return;
-      var r = E.throwMatch(S, n, a, null, now());
-      if (r.error) { modalErr(r.error); return; }
-      closeModal(); afterChange({ toast: 'Match thrown on Table ' + n, undo: true });
+      var go = function () {
+        var r = E.throwMatch(S, n, a, null, now());
+        if (r.error) { modalErr(r.error); return; }
+        closeModal(); afterChange({ toast: 'Match thrown on Table ' + n, undo: true });
+      };
+      if (t.a && !E.canPair(S, t.a, a)) askConfirm({ title: 'Throw the rematch?', text: dn(P(a).name) + ' and ' + dn(P(t.a).name) + ' just played each other. Throw the rematch anyway?', ok: 'Throw the rematch' }, go);
+      else go();
+    },
+    'cf-yes': function () {
+      var m = ui.modal;
+      if (!m || m.type !== 'confirm') return;
+      closeModal();   /* back to the pop-up it was asked from, or closed */
+      m.yes();
     },
     'close-table': function (el) {
       var r = E.closeTable(S, +el.dataset.n, now()); if (r.error) { fail(r); return; }
@@ -5092,17 +5395,19 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     'ph-copy-rules': function () { copyText(rulesText(), 'Database rules'); },
     'ph-newcode': function () {
-      if (!window.confirm('Make a new link? Old QR codes and saved links will show nothing, and players will need to scan the new code.')) return;
-      var old = phone.code;
-      phone.code = newLinkCode(); savePhone();
-      if (phone.apiKey && phone.db && phone.refresh && old) sendToDB('DELETE', null, old).catch(function () { /* the old summary just stays behind */ });
-      renderModal(); schedulePublish(0);
-      toast('New link made. Show players the new QR code.');
+      askConfirm({ title: 'Make a new link?', text: 'Old QR codes and saved links will show nothing, and players will need to scan the new code.', ok: 'Make a new link' }, function () {
+        var old = phone.code;
+        phone.code = newLinkCode(); savePhone();
+        if (phone.apiKey && phone.db && phone.refresh && old) sendToDB('DELETE', null, old).catch(function () { /* the old summary just stays behind */ });
+        renderModal(); schedulePublish(0);
+        toast('New link made. Show players the new QR code.');
+      });
     },
     'ph-forget': function () {
-      if (!window.confirm('Turn off phone view and forget this setup on this device?')) return;
-      phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '', project: '' }; tok = { id: null, exp: 0 }; PUB.state = 'idle';
-      savePhone(); closeModal(); render(); toast('Phone view setup forgotten on this device.');
+      askConfirm({ title: 'Forget phone view setup?', text: 'Turn off phone view and forget this setup on this device?', ok: 'Turn off and forget', danger: true }, function () {
+        phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '', project: '' }; tok = { id: null, exp: 0 }; PUB.state = 'idle';
+        savePhone(); closeModal(); render(); toast('Phone view setup forgotten on this device.');
+      });
     },
     /* signed in: Turn on, Save (after changing an address) or Check again (after publishing the rules) */
     'ph-save': function (el) {
@@ -5221,11 +5526,15 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     'throw-empty': function (form) {
       var n = +form.dataset.n, a = +form.elements.p1.value, b = +form.elements.p2.value;
+      if (ui.modal && ui.modal.type === 'throw') { ui.modal.p1 = a; ui.modal.p2 = b; }   /* kept if the question below is cancelled */
       if (a === b) { modalErr('Pick two different players.'); return; }
-      if (!E.canPair(S, a, b) && !window.confirm('Those two just played each other. Throw the rematch anyway?')) return;
-      var r = E.throwMatch(S, n, a, b, now());
-      if (r.error) { modalErr(r.error); return; }
-      closeModal(); afterChange({ toast: 'Match thrown on Table ' + n, undo: true });
+      var go = function () {
+        var r = E.throwMatch(S, n, a, b, now());
+        if (r.error) { modalErr(r.error); return; }
+        closeModal(); afterChange({ toast: 'Match thrown on Table ' + n, undo: true });
+      };
+      if (!E.canPair(S, a, b)) askConfirm({ title: 'Throw the rematch?', text: 'Those two just played each other. Throw the rematch anyway?', ok: 'Throw the rematch' }, go);
+      else go();
     }
   };
 
@@ -5303,12 +5612,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!f) return;
     var rd = new FileReader();
     rd.onload = function () {
-      try {
-        var s = E.deserialize(String(rd.result));
-        if (!window.confirm('Replace the current tournament with this backup (' + s.players.length + ' players)?')) return;
+      var s;
+      try { s = E.deserialize(String(rd.result)); } catch (err) { toast('That file is not a tournament backup.', { bad: true }); return; }
+      askConfirm({ title: 'Load this backup?', text: 'Replace the current tournament with this backup (' + plural(s.players.length, 'player') + ')?', ok: 'Replace', danger: true }, function () {
         ui.rev = readRev();   /* a backup replaces whatever is saved, even a newer version from another tab */
         S = s; ui.tablesTouched = true; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null; closeModal(); commit(); toast('Backup loaded');
-      } catch (err) { toast('That file is not a tournament backup.', { bad: true }); }
+      });
     };
     rd.readAsText(f);
   });
