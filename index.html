@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA28">
+<meta name="chip-version" content="ALPHA30">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -61,15 +61,13 @@ button { cursor: pointer; }
 .brand-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* if space runs out, the title shortens with "..." */
 .brand-end { flex: none; white-space: pre; font-weight: 600; opacity: .9; }                     /* the finish time always stays whole */
 .bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
-/* the Pause / Resume button's symbol, drawn here so it looks the same on every device */
-.pause-btn .pi { display: inline-block; box-sizing: border-box; margin-right: .45em; vertical-align: -.05em; }
-.pause-btn .pi-pause { width: .62em; height: .78em; border-left: .22em solid currentColor; border-right: .22em solid currentColor; }
-.pause-btn .pi-play { width: 0; height: 0; border-top: .4em solid transparent; border-bottom: .4em solid transparent; border-left: .66em solid currentColor; }
-@media (max-width: 519px) {
-  .bar-long { display: none; }   /* "Pause" and "Resume" on a phone, "Pause tournament" on wider screens */
-  .bar-actions { flex: 1 1 auto; justify-content: flex-end; gap: 6px; }   /* the buttons wrap onto a second row when they don't fit */
-  .bar-actions .btn.small { padding-left: 10px; padding-right: 10px; }
-}
+@media (max-width: 519px) { .bar-actions { flex: 1 1 auto; justify-content: flex-end; } }   /* the buttons wrap onto a second row if they ever don't fit */
+/* the Menu's Pause / Resume tournament button: its symbol is drawn here so it looks the same on every device */
+.pause-item { display: flex; align-items: center; justify-content: center; }
+.pi { display: inline-block; flex: none; box-sizing: border-box; margin-right: .55em; }
+.pi-pause { width: .62em; height: .78em; border-left: .22em solid currentColor; border-right: .22em solid currentColor; }
+.pi-play { width: 0; height: 0; border-top: .4em solid transparent; border-bottom: .4em solid transparent; border-left: .66em solid currentColor; }
+.pause-note { margin: 6px 0 0; font-size: .92em; }
 @media (max-width: 519px) {
   .rail-bar { padding: 8px 12px 14px; flex-wrap: nowrap; }
   .brand-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -95,8 +93,6 @@ button { cursor: pointer; }
 .btn.ghost { border-color: transparent; }
 .btn.on-rail { border-color: color-mix(in srgb, var(--sight) 67%, transparent); }
 .btn.big { min-height: 54px; font-size: 1.1rem; }
-.mode-btn[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: var(--blue-ink); }
-.mode-btn[aria-pressed="false"] { background: var(--yellow); border-color: var(--yellow); color: var(--yellow-ink); }
 
 /* ---------- layout ---------- */
 .wrap { max-width: 1240px; margin: 0 auto; padding: 16px 16px 120px; }
@@ -549,12 +545,17 @@ html.tv { font-size: clamp(12px, .83333vw, 40px); }
 .tv .tabs { margin: 0 0 .6rem; }
 .tv .section-title { font-size: 1.5rem; margin-bottom: .35rem; }
 .tv .hint { display: none; }
-.tv .board { grid-template-columns: var(--tw, 26vw) minmax(0, 1fr); gap: 1.75rem; }
-.tv .board.tcols2 { --tw: 33vw; }
+.tv .board { grid-template-columns: var(--tw, 26vw) minmax(0, 1fr); gap: 1.75rem; }   /* the script widens the tables' part (--tw) when they need it */
 
 /* ---------- the tables ---------- */
-.tv .tables { grid-template-columns: 1fr; gap: .16em 1.25rem; font-size: var(--ts, 2.6rem); }
-.tv .board.tcols2 .tables { grid-template-columns: 1fr 1fr; }
+.tv .tables { grid-template-columns: repeat(var(--tc, 1), minmax(0, 1fr)); gap: .16em 1.25rem; font-size: var(--ts, 2.6rem); }
+/* a narrow table card (many tables, or a phone held sideways): the header stays on one line and leaves out the start time
+   (the match clock stays); if even that is too wide, the clock moves under the table number */
+.tv .tables > article { container-type: inline-size; }
+.tv .thead { flex-wrap: wrap; row-gap: 0; }
+.tv .thead h3, .tv .tmeta { white-space: nowrap; }
+.tv .tmeta { margin-left: auto; }
+@container (max-width: 17rem) { .tv .tmeta .time { display: none; } }
 .tv .thead { line-height: 1; padding: 0 .1em .08em; margin: 0; align-items: flex-end; }
 .tv .thead h3 { font-size: max(1.4rem, .4em); line-height: 1; font-weight: 800; }
 .tv .tmeta { font-size: max(1.15rem, .32em); line-height: 1; color: var(--chalk); font-weight: 700; }
@@ -603,6 +604,10 @@ html.tv { font-size: clamp(12px, .83333vw, 40px); }
 .tv .waitlist .frac { font-size: max(1rem, .4em); color: var(--chalk-dim); }
 .tv .who small { grid-column: 1 / -1; font-size: max(.9rem, .3em); line-height: 1.2; margin-top: .15em; }
 .tv .scrim, .tv .toast { font-size: max(16px, 1.15rem); }   /* pop-ups and result messages read from further away on a big screen */
+/* when the whole waitlist can't fit beside the tables: the top of the list, and how many more are waiting */
+.wl-more { display: none; }
+.tv .wl-more:not(:empty) { display: block; margin: .35rem 0 0; font-size: 1.4rem; font-weight: 700; color: var(--chalk-dim); }
+.tv .waitlist li.wl-cut { display: none; }
 /* while the size is being chosen: names at 72%, the smallest a too-wide name may shrink to */
 .tv .waitlist ol.probe .who b { font-size: .72em; }
 /* a touch screen in this layout (an iPad or a phone held sideways): buttons stay big enough for a finger */
@@ -808,7 +813,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return {
       v: VERSION,
       phase: 'registration',      // registration | active | finished
-      mode: 'AUTO',               // AUTO | MANUAL
+      mode: 'AUTO',               // always AUTO now; kept so earlier versions can still open new backups
       defaultChips: 3,
       plannedTables: 4,
       tableNums: [],              // the numbers on the physical tables, as typed on the setup screen
@@ -1111,7 +1116,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   function settle(s, now) {
-    if (s.phase !== 'active' || s.mode !== 'AUTO' || s.rr || s.pr) return;
+    if (s.phase !== 'active' || s.rr || s.pr) return;   /* auto-throw is always on */
     fillWaiting(s, now);
     fillEmpty(s, now);
     s.tables.forEach(function (t) {
@@ -1352,17 +1357,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     });
   }
 
-  function setMode(s, mode, now) {
-    if (s.rr) return blockedByPlayoff(s);
-    if (s.pr) return blockedByRounds(s);
-    if (mode === 'MANUAL') { s.mode = 'MANUAL'; return { ok: true }; }
-    if (s.mode === 'AUTO') return { ok: true };
-    var snapMode = 'MANUAL';
-    return act(s, 'Resume auto-throw', function () {
-      s.mode = 'AUTO';
-      settle(s, now);
-      return { ok: true, prev: snapMode };
-    }, true);
+  /* Auto-throw is always on (the switch to pause it is gone). A tournament saved while it was paused, by an earlier
+     version, is switched back on here and the matches waiting to be thrown are thrown. True when anything changed. */
+  function ensureAuto(s, now) {
+    if (s.mode === 'AUTO') return false;
+    s.mode = 'AUTO';
+    if (s.phase === 'active') tick(s, now);
+    return true;
   }
 
   /* ---------- roster changes during play (late entries are not permitted) ---------- */
@@ -1671,7 +1672,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   /* ---------- three-player round robin playoff ----------
-     Offered when auto-throw is paused, three players are left and none of them is in a match.
+     Offered when the playoff rounds are down to three players and none of them is in a match.
      Matches are played one at a time on one table. The players draw in person for the order: players 1 and 2 play
      match 1 and player 3 sits out. After every match the winner stays on and plays whoever sat out, so the matches
      are A-B, A-C, B-C with A = the winner of match 1. The first player to 2 wins is champion, then the other two
@@ -1684,11 +1685,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     return null;
   }
 
-  /* The three players who could start a playoff right now, or null.
-     Offered with auto-throw paused, or when the playoff rounds are down to three players and waiting for a draw. */
+  /* The three players who could start the round robin playoff right now, or null: the playoff rounds are down to three
+     players and waiting for a draw. */
   function playoffCandidates(s) {
-    if (s.phase !== 'active' || s.rr) return null;
-    if (s.pr ? s.pr.stage !== 'draw' : s.mode !== 'MANUAL') return null;
+    if (s.phase !== 'active' || s.rr || !s.pr || s.pr.stage !== 'draw') return null;
     var left = s.players.filter(function (p) { return p.status === 'active'; });
     if (left.length !== 3) return null;
     if (s.tables.some(function (t) { return tableState(t) === 'match'; })) return null;
@@ -1697,7 +1697,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
   function startPlayoff(s, order, tableN, now) {
     var cand = playoffCandidates(s);
-    if (!cand) return { error: 'The playoff needs auto-throw paused, three players left and no match in progress' };
+    if (!cand) return { error: 'The round robin playoff starts when the playoff rounds are down to three players, with no match in progress' };
     if (!Array.isArray(order) || order.length !== 3) return { error: 'Enter the draw order for all three players' };
     order = order.map(Number);
     var distinct = order[0] !== order[1] && order[0] !== order[2] && order[1] !== order[2];
@@ -2055,8 +2055,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     var ttl = String(s.title || '').trim();
     out.push('🎱 ' + (ttl ? ttl + ': ' : '') + 'TOURNAMENT DASHBOARD');
     out.push('');
-    out.push('Mode: ' + (s.mode === 'AUTO' ? 'AUTO' : 'MANUAL - PAUSED'));
-    out.push('');
+    if (isPaused(s)) { out.push('\u23F8\uFE0F Tournament paused since ' + timeFn(s.pause.at)); out.push(''); }
     if (s.phase === 'finished' && s.champion) {
       out.push('🏆 Champion: ' + P(s, s.champion).name);
       var mw = mostWins(s);
@@ -2208,7 +2207,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     reportResult: reportResult,
     pendingConsolidation: pendingConsolidation, consolidate: consolidate,
     throwMatch: throwMatch, closeTable: closeTable, reopenTable: reopenTable, addTable: addTable,
-    setMode: setMode,
+    ensureAuto: ensureAuto,
     pausePlay: pausePlay, resumePlay: resumePlay, isPaused: isPaused, playMs: playMs,
     dropPlayer: dropPlayer, editPlayer: editPlayer, reinstate: reinstate,
     checkTableNums: checkTableNums, nextTableNum: nextTableNum,
@@ -2761,6 +2760,21 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return out;
   }
   /* the tournament without its Undo history: what is saved under KEY, and what goes into a backup file */
+  /* A backup file: the tournament (without its Undo history) and this device's colors, so loading it anywhere brings
+     back the same look. Earlier versions open these files too; they just leave the colors out. */
+  function backupText() {
+    var o = JSON.parse(stateText());
+    o.colors = {};
+    ALL_COLORS.forEach(function (r) { o.colors[r[0]] = colors[r[0]]; });
+    return JSON.stringify(o);
+  }
+  /* the colors saved in a backup (any missing one is the default), or null for a backup made before backups had colors */
+  function backupColors(o) {
+    var src = o && o.colors, c = {}, any = false;
+    if (!src || typeof src !== 'object') return null;
+    ALL_COLORS.forEach(function (r) { var v = normHex(src[r[0]]); if (v) any = true; c[r[0]] = v || defaultFor(r[0]); });
+    return any ? c : null;
+  }
   function stateText() {
     var u = S.undo;
     S.undo = [];
@@ -3563,7 +3577,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (pr.stage === 'final') return 'The final: match after match until one player is out of chips.';
       return '';
     }
-    if (S.mode === 'MANUAL') return 'The director is throwing matches by hand for now.';
     return '';
   }
   function phoneEnd() {
@@ -3770,7 +3783,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
 
   /* ---------- wide-screen (TV) layout ----------
-     On a screen at least 1280px wide, the Tables tab becomes a narrow strip of tables on the left and a big, multi-column waitlist on the right.
+     On a screen at least 1280px wide, or any screen held sideways, the Tables tab becomes the tables on the left and a big,
+     multi-column waitlist on the right. Every open table is always on screen: the tables get a narrow strip when that holds
+     them at a good size, and more of the screen (in more columns) when it doesn't. The waitlist gets the rest; players have
+     the whole list on their phones, so when it can't all fit, the top of the list shows with how many more are waiting.
      The CSS (html.tv) does the styling; this code picks the largest sizes that fit the screen. Narrower screens keep the compact layout. */
   var TV_MIN_W = 1280, TV_LANDSCAPE_MIN_W = 560, TV_SHORT_H = 520, TOUCH_MIN_TAP = 36, TV_PAD = 22, LONG_NAME = 22, FONT_FACE = '"Atkinson Hyperlegible Next"';
   var rootEl = document.documentElement, fontsLoaded = !(document.fonts && document.fonts.load), fontsLoading = false, resizeTimer = null;
@@ -3810,10 +3826,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
   /* Last time's answers, the starting points for the next fit. After a tap the screen is rebuilt, and the sizes it needs are nearly
      always the ones it had, so the new screen is first laid out at those sizes (prefillFit) and the searches start there. */
-  var fitMemo = { ts1: null, ts2: null, chip: null, wl: {}, wlCols: null, wlFail: {}, names: {}, nameCount: 0, nameStep: 0 };
+  var fitMemo = { area: null, tsA: {}, chip: null, wl: {}, wlCols: null, wlFail: {}, names: {}, nameCount: 0, nameStep: 0 };
   function prefillFit() {
-    var tables = app.querySelector('.board .tables'), ol = app.querySelector('.waitlist ol');
-    if (tables && fitMemo.ts1 !== null) { tables.style.setProperty('--ts', fitMemo.ts1 + 'rem'); tables.style.setProperty('--chip', 'calc(var(--ts) * .46)'); }
+    var board = app.querySelector('.board'), tables = board && board.querySelector('.tables'), ol = app.querySelector('.waitlist ol');
+    if (tables && fitMemo.area !== null) {
+      var ar = TABLE_AREAS[fitMemo.area];
+      board.style.setProperty('--tw', ar[1] + 'vw'); tables.style.setProperty('--tc', ar[0]);
+      if (fitMemo.tsA[fitMemo.area] != null) { tables.style.setProperty('--ts', fitMemo.tsA[fitMemo.area] + 'rem'); tables.style.setProperty('--chip', 'calc(var(--ts) * .46)'); }
+    }
     if (ol && fitMemo.wlCols && fitMemo.wl[fitMemo.wlCols] != null) {
       ol.style.setProperty('--cols', fitMemo.wlCols); ol.style.setProperty('--rows', Math.ceil(ol.children.length / fitMemo.wlCols));
       ol.style.setProperty('--wl', fitMemo.wl[fitMemo.wlCols] + 'rem');
@@ -3833,45 +3853,106 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     return false;
   }
 
+  /* The tables' part of the big screen, narrowest first: [columns of tables, width in vw]. The waitlist gets the rest. */
+  var TABLE_AREAS = [[1, 26], [2, 34], [2, 44], [3, 54], [3, 64], [4, 72], [5, 80]];
+  /* Table names at least TS_GOOD (rem) before the tables take more of the screen (on a touch screen, at least big enough for a
+     finger); only when no area holds every table at that size do they go smaller, down to TS_FLOOR (a phone held sideways
+     with many tables). */
+  var TS_GOOD = 2, TS_FLOOR = 0.9;
+
   function fitTables() {
     var board = app.querySelector('.board'), tables = board && board.querySelector('.tables');
     if (!tables || !tables.children.length) return;
     var section = tables.parentNode, chipBoxes = tables.querySelectorAll('.pchips'), avail = window.innerHeight - TV_PAD;
-    var names = tables.querySelectorAll('.pname'), seen = {}, chips46 = {}, pre = {}, fresh = true;
+    var names = tables.querySelectorAll('.pname'), seen = {}, chips46 = {}, pre = {}, fresh = true, area = -1;
     for (var c = 0; c < names.length && fresh; c++) fresh = !names[c].style.getPropertyValue('--nf') && !names[c].classList.contains('cut') && !names[c].classList.contains('pwrap');
-    /* a size fits when every table (and the Closed row under them) is on screen with full-size chips, and the smallest allowed chips still fit sideways
+    function setArea(i) {
+      if (area === i) return;
+      area = i;
+      board.style.setProperty('--tw', TABLE_AREAS[i][1] + 'vw');
+      tables.style.setProperty('--tc', TABLE_AREAS[i][0]);
+    }
+    /* a size fits (in the current area) when every table (and the Closed row under them) is on screen with full-size chips, and the smallest allowed chips still fit sideways
        (checked with full-size chips first: where those fit, smaller ones do too). Each size is measured once; while the screen is laid
        out at a size that fits, the names are measured too, so they need no extra pass if that size is the one chosen. */
+    /* After the first measurement, the shortest table felt (at that size) and where the tables start give a quick check: an
+       area that needs more rows of tables than can possibly fit at a size is passed over without laying it out. (A felt
+       never gets shorter than in proportion to the size, and the table numbers above it only add to that.) */
+    var est = null;
+    function tooTall(ts) {
+      if (!est) return false;
+      var rows = Math.ceil(tables.children.length / TABLE_AREAS[area][0]);
+      return est.top + rows * (ts >= est.ts ? est.h : est.h * ts / est.ts) > avail + 1;
+    }
     function fits(ts) {
-      var key = (board.classList.contains('tcols2') ? 2 : 1) + '|' + ts;
+      var key = area + '|' + ts;
       if (key in seen) return seen[key];
+      if (tooTall(ts)) return (seen[key] = false);
       tables.style.setProperty('--ts', ts + 'rem');
       tables.style.setProperty('--chip', 'calc(var(--ts) * .46)');
       var ok = !(section.getBoundingClientRect().bottom + window.pageYOffset > avail);
-      if (ok || ts === lo) {   /* the smallest size is also what is used when nothing fits, so measure it either way */
+      if (!est) {
+        var fr = tables.querySelectorAll('.frame'), h = Infinity;
+        for (var q = 0; q < fr.length; q++) h = Math.min(h, fr[q].getBoundingClientRect().height);
+        if (h > 0 && h < Infinity) est = { top: tables.getBoundingClientRect().top + window.pageYOffset, h: h, ts: ts };
+      }
+      if (ok || ts === TS_FLOOR) {   /* the smallest size is also what is used when nothing fits, so measure it either way */
         chips46[key] = !overflowX(chipBoxes);
         if (chips46[key] && fresh) pre[key] = widths(names);
       }
       if (ok && !chips46[key]) { tables.style.setProperty('--chip', 'calc(var(--ts) * .4)'); ok = !overflowX(chipBoxes); }
       return (seen[key] = ok);
     }
-    board.classList.remove('tcols2');
     var lo = 1.2;
     if (touchScreen()) lo = Math.max(lo, Math.ceil(TOUCH_MIN_TAP / 1.08 / parseFloat(getComputedStyle(rootEl).fontSize) * 10) / 10);   /* big enough for a finger */
-    var ts = largestNear(lo, Math.max(lo, 4.2), 0.1, fits, fitMemo.ts1);
-    fitMemo.ts1 = ts !== null ? ts : lo;   /* if nothing fits in one column, next time one measurement at the smallest size confirms it */
-    var heldShort = lo > 1.2 && rootEl.classList.contains('tv-short');   /* a phone held sideways */
-    if (ts === null && !heldShort) {   /* only when even the smallest size cannot fit in one column */
-      board.classList.add('tcols2'); ts = largestNear(lo, Math.max(lo, 4.2), 0.1, fits, fitMemo.ts2);
-      fitMemo.ts2 = ts !== null ? ts : lo;
+    var good = Math.max(lo, TS_GOOD), n = TABLE_AREAS.length, pick = -1, ts = null, tsA = fitMemo.tsA;
+    /* the waitlist (or the playoff panel) beside the tables has no say in where they fit: it is left out while the tables are
+       measured, so each measurement lays out far less (it comes back before the names are fitted) */
+    var side = board.children[1], tk = app.querySelector('.ticker');
+    if (side) side.style.display = 'none';
+    if (tk) tk.style.display = 'none';   /* the most-wins ticker too: it is put back in place after everything else */
+    /* After most taps the board has the same shape as before (the same screen, and every table with the same number of names,
+       chips, notes and win-run badges; only the names change, and each name is fitted on its own): last time's answer is
+       then still the answer, so it is checked with one measurement instead of searched for. */
+    var sig = [window.innerWidth, window.innerHeight, getComputedStyle(rootEl).fontSize, lo,
+      [].map.call(tables.children, function (a) { return a.querySelectorAll('.pname').length + '.' + a.querySelectorAll('.chip').length + '.' + a.querySelectorAll('.run, .tnote, .slot').length; }).join(','),
+      section.querySelectorAll('.closed-tables .btn').length].join('|');
+    if (fitMemo.sig === sig && fitMemo.area !== null && tsA[fitMemo.area] != null) {
+      setArea(fitMemo.area);
+      if (fits(tsA[fitMemo.area])) { pick = fitMemo.area; ts = tsA[pick]; }
     }
-    if (ts === null) {
-      if (lo > 1.2) board.classList.remove('tcols2');   /* a touch screen too short for every table: one column of tappable names, and the page scrolls */
-      ts = lo;
+    fitMemo.sig = sig;
+    /* 1. the narrowest area that holds every table at a good size, at the largest size that area allows */
+    for (var i = 0; i < n && pick < 0; i++) { setArea(i); if (fits(good)) pick = i; }
+    if (ts !== null) { /* last time's answer, checked */ }
+    else if (pick >= 0) { setArea(pick); ts = largestNear(good, Math.max(good, 4.2), 0.1, fits, tsA[pick]); }
+    else {
+      /* 2. no area does: the area that allows the largest size, finger-sized at least on a touch screen; 3. failing that,
+         smaller still, down to TS_FLOOR. Last time's area is sized first; every other area is measured once, at the size it
+         would have to beat, and sized only if it can (a narrower area wins a tie, leaving the waitlist more room). */
+      [[lo, good], [TS_FLOOR, lo]].some(function (range) {
+        var a = range[0], b = r3(range[1] - 0.1);
+        if (b < a - 1e-9) return false;
+        var first = fitMemo.area !== null ? fitMemo.area : n - 1, order = [first];
+        for (var k = n - 1; k >= 0; k--) if (k !== first) order.push(k);
+        order.forEach(function (k) {
+          setArea(k);
+          var need = ts === null ? a : r3(ts + (k < pick ? 0 : 0.1));
+          if (need > b + 1e-9 || !fits(need)) return;
+          var t = largestNear(need, b, 0.1, fits, Math.max(need, tsA[k] || need));
+          if (ts === null || t > ts + 1e-9 || (Math.abs(t - ts) < 1e-9 && k < pick)) { ts = t; pick = k; }
+        });
+        return ts !== null;
+      });
+      if (ts === null) { pick = n - 1; ts = TS_FLOOR; }   /* a screen too short even for that: the smallest size in the widest area, and the page scrolls */
     }
+    setArea(pick);
+    fitMemo.area = pick; tsA[pick] = ts;
     tables.style.setProperty('--ts', ts + 'rem');
+    if (side) side.style.display = '';
+    if (tk) tk.style.display = '';
     /* one chip size for every table: as large as the tightest seat allows */
-    var key = (board.classList.contains('tcols2') ? 2 : 1) + '|' + ts, f = 0.46;
+    var key = area + '|' + ts, f = 0.46;
     var chipOK = function (v) { tables.style.setProperty('--chip', 'calc(var(--ts) * ' + v + ')'); return !overflowX(chipBoxes); };
     if (chips46[key] === true) tables.style.setProperty('--chip', 'calc(var(--ts) * ' + f + ')');   /* already measured: full size fits */
     else if (chips46[key] !== false && chipOK(f)) { /* full size fits */ }
@@ -3882,7 +3963,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       tables.style.setProperty('--chip', 'calc(var(--ts) * ' + f + ')');
     }
     /* each name takes the largest size that fits its own seat; if even the smallest size is too long it ends in an ellipsis (the full name is in the label) */
-    fitNames(names, ts, 1, 'cut', chips46[key] === true ? pre[key] : null);
+    fitNames(names, ts, Math.min(1, ts), 'cut', chips46[key] === true ? pre[key] : null);
   }
 
   /* fit many names at once: reset them all, measure them all in one go (or use measurements already taken in exactly this layout),
@@ -3944,11 +4025,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     fitNames(app.querySelectorAll('.tables .pname'), 1.6, 1.05, 'pwrap');
   }
 
+  var WL_MIN = 1.2;   /* the smallest waitlist size (rem) before only the top of the list is shown */
   function fitWaitlist() {
     var ol = app.querySelector('.waitlist ol');
     if (!ol) return;
-    var n = ol.children.length, all = ol.querySelectorAll('.who b'), names = [], best = null;
+    var n = ol.children.length, all = ol.querySelectorAll('.who b'), names = [], best = null, more = ol.parentNode.querySelector('.wl-more');
     for (var z = 0; z < all.length; z++) { all[z].style.fontSize = ''; all[z].classList.remove('cut'); }   /* start clean: a resize would otherwise keep the old sizes */
+    for (z = 0; z < n; z++) ol.children[z].classList.remove('wl-cut');
+    if (more) more.textContent = '';
     /* one absurdly long name must not shrink the whole list: sizes are chosen for ordinary names, long ones are shrunk on their own below */
     for (var j = 0; j < all.length; j++) if (all[j].firstChild.textContent.length <= LONG_NAME) names.push(all[j]);
     var etas = [].slice.call(ol.querySelectorAll('.eta')), rows = [].slice.call(ol.querySelectorAll('.who')), wide = names.concat(rows);
@@ -3961,8 +4045,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
        that fits the height, the names are measured too, so they need no extra pass if that is the size chosen. */
     function tall() {
       var v = ol.style.getPropertyValue('--wl'), ok = !(ol.scrollHeight > avail || overflowX(etas));
-      if (ok || v === '1.4rem') pre[cols + '|' + v] = widths(all);
-      if (v === '1.4rem') whole[cols] = !overflowX(names.concat(rows, etas));   /* what the fallback below needs, while it is laid out */
+      if (ok || v === WL_MIN + 'rem') pre[cols + '|' + v] = widths(all);
       return ok;
     }
     function narrow() { ol.classList.add('probe'); var ok = !overflowX(wide); ol.classList.remove('probe'); return ok; }
@@ -3980,17 +4063,19 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (failed && above) lastFail[cols] = failed;
       return (seen[key] = ok);
     }
-    /* try 2, 3 and 4 columns (filled top to bottom); keep the one that allows the largest names (on a tie, the fewer columns).
-       Last time's winner is sized first, starting from its last size; each other column count is then measured once, at the
-       smallest size that would beat it, and only sized fully if it can. Same choice as sizing all three in full, far fewer measurements. */
-    var order = [2, 3, 4], seed = fitMemo.wlCols && order.indexOf(fitMemo.wlCols) >= 0 ? fitMemo.wlCols : 3;
+    /* try 2, 3 and 4 columns (filled top to bottom), and 1 when the waitlist's part of the screen is narrow; keep the one that
+       allows the largest names (on a tie, the fewer columns). Last time's winner is sized first, starting from its last size;
+       each other column count is then measured once, at the smallest size that would beat it, and only sized fully if it can.
+       Same choice as sizing them all in full, far fewer measurements. */
+    var order = ol.getBoundingClientRect().width < window.innerWidth * 0.35 ? [1, 2, 3, 4] : [2, 3, 4];
+    var seed = fitMemo.wlCols && order.indexOf(fitMemo.wlCols) >= 0 ? fitMemo.wlCols : order[order.length - 2];
     setCols(seed);
-    var s0 = largestNear(1.4, 5.2, 0.1, works, fitMemo.wl[seed]);
+    var s0 = largestNear(WL_MIN, 5.2, 0.1, works, fitMemo.wl[seed]);
     if (s0 !== null) best = { cols: seed, rows: Math.ceil(n / seed), s: s0 };
-    fitMemo.wl[seed] = s0 !== null ? s0 : 1.4;   /* if nothing fits, next time one measurement at the smallest size confirms it */
+    fitMemo.wl[seed] = s0 !== null ? s0 : WL_MIN;   /* if nothing fits, next time one measurement at the smallest size confirms it */
     order.forEach(function (c) {
       if (c === seed) return;
-      var need = !best ? 1.4 : r3(best.s + (c < best.cols ? 0 : 0.1));   /* fewer columns win a tie; more columns must be bigger */
+      var need = !best ? WL_MIN : r3(best.s + (c < best.cols ? 0 : 0.1));   /* fewer columns win a tie; more columns must be bigger */
       if (need > 5.2 + 1e-9) return;
       setCols(c);
       widthFirst = !!best && c > best.cols;   /* more columns: names are the likely problem; fewer columns: the height is */
@@ -4002,21 +4087,36 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       best = { cols: c, rows: Math.ceil(n / c), s: sz };
     });
     fitMemo.wlCols = best ? best.cols : seed;
+    var measured = null;
     if (!best) {
-      /* nothing fits on the screen (a phone held sideways, a very long list): the smallest size, with the most columns that keep
-         every name whole at that size, and the page scrolls */
-      best = { cols: 2, rows: Math.ceil(n / 2), s: 1.4 };
-      ol.style.setProperty('--wl', '1.4rem');
-      for (var c = 4; c >= 2; c--) {
-        var fitsWhole = whole[c];
-        if (fitsWhole === undefined) {
-          ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c));
-          fitsWhole = !overflowX(names.concat(rows, etas));
+      /* even the smallest size can't fit everyone beside the tables (the tables come first): the top of the list, as many as
+         fit, with "+N more waiting" under it. The column count that shows the most players is used, among those where names
+         stay readable across their column. */
+      ol.style.setProperty('--wl', WL_MIN + 'rem');
+      if (more) more.textContent = '+' + n + ' more waiting';
+      var room = window.innerHeight - TV_PAD - (more ? more.getBoundingClientRect().height + parseFloat(getComputedStyle(more).marginTop || 0) : 0);
+      var show = function (cap) { for (var y = 0; y < n; y++) ol.children[y].classList.toggle('wl-cut', y >= cap); };
+      var rowsThatFit = function (c) {   /* the most rows (players top to bottom in each column) that fit above the "+N more" line */
+        var a = 0, b = Math.ceil(n / c);
+        while (a < b) {
+          var r = (a + b + 1) >> 1;
+          ol.style.setProperty('--rows', r); show(r * c);
+          if (ol.getBoundingClientRect().bottom + window.pageYOffset <= room) a = r; else b = r - 1;
         }
-        if (fitsWhole) { best = { cols: c, rows: Math.ceil(n / c), s: 1.4 }; break; }
+        return a;
+      };
+      var cut = null;
+      for (var c = 4; c >= 1; c--) {
+        ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c)); show(n); cols = c;
+        if (c > 1 && !narrow()) continue;   /* names too squeezed at this many columns */
+        var rf = rowsThatFit(c);
+        if (!cut || rf * c > cut.rows * cut.cols) cut = { cols: c, rows: rf };
       }
-    }
-    var measured = pre[best.cols + '|' + best.s + 'rem'] || null;
+      best = { cols: cut.cols, rows: Math.max(1, cut.rows), s: WL_MIN };
+      var shown = Math.min(n, cut.rows * cut.cols);
+      show(shown);
+      if (more) more.textContent = shown < n ? '+' + (n - shown) + ' more waiting' : '';
+    } else measured = pre[best.cols + '|' + best.s + 'rem'] || null;
     ol.style.setProperty('--cols', best.cols); ol.style.setProperty('--rows', best.rows); ol.style.setProperty('--wl', best.s + 'rem');
     /* now shrink just the names that are too wide for their column (measured all at once, or already measured in exactly this layout;
        a name fitted before in the same room is reused) */
@@ -4084,15 +4184,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       h += '<span class="po-badge">Playoff</span>';
     } else if (S.phase === 'active' && S.pr) {
       h += '<span class="po-badge">Playoff rounds</span>';
-    } else if (S.phase === 'active') {
-      var auto = S.mode === 'AUTO';
-      h += '<button class="btn small mode-btn" data-act="mode" aria-pressed="' + auto + '">' + (auto ? 'Auto-throw on' : 'Auto-throw paused') + '</button>';
-    }
-    if (S.phase === 'active') {
-      var pz = E.isPaused(S);
-      h += pz
-        ? '<button class="btn small warn pause-btn" data-act="play-resume" title="Resume play: match clocks and wait times start again"><span class="pi pi-play" aria-hidden="true"></span>Resume<span class="bar-long"> tournament</span></button>'
-        : '<button class="btn small on-rail pause-btn" data-act="play-pause" title="Pause play for everyone: match clocks stop, and wait times and the finish time are hidden"><span class="pi pi-pause" aria-hidden="true"></span>Pause<span class="bar-long"> tournament</span></button>';
     }
     if (phoneLive()) h += '<button class="btn small on-rail qr-btn" data-act="qr-open" title="Show the QR code for the phone page"><i id="qr-dot" class="pdot ' + phoneStatus().cls + '"></i>QR</button>';
     if (S.phase !== 'registration') {
@@ -4406,7 +4497,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
           (paused ? '<span class="eta paused">Paused</span>' : (we ? '<span class="eta" title="Estimated wait">' + waitText((i + 1) * we.perSpotMin) + '</span>' : '')) + '</span>' +
           (held ? '<small>Just lost to ' + esc(dn(P(held).name)) + ', plays after the next result</small>' : '') + '</div></li>';
       });
-      h += '</ol>';
+      h += '</ol><p class="wl-more" aria-live="off"></p>';   /* the big screen fills this in when only the top of the list fits */
     }
     return h + '</aside></div>';
   }
@@ -4898,6 +4989,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       }
       case 'menu':
         h = shell('Menu',
+          pauseMenuHTML() +
           (S.phase === 'active' && !S.rr ? '<div class="grp">During play</div><div class="stack"><button class="btn" data-act="add-table">Add a table</button></div>' +
             (S.pr ? '<p class="muted" style="margin:6px 0 0">Reinstating players is off during the playoff rounds.</p>' : '') : '') +
           (S.phase === 'active' ? prSettingHTML() : '') +
@@ -4982,6 +5074,16 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
 
   /* The playoff-rounds option in the Menu: the same checkbox as setup, locked once the playoffs have begun. */
+  /* the top of the Menu while a tournament is running: Pause tournament, or Resume while paused */
+  function pauseMenuHTML() {
+    if (S.phase !== 'active') return '';
+    if (E.isPaused(S)) {
+      return '<div class="stack"><button class="btn warn pause-item" data-act="play-resume" data-autofocus><span class="pi pi-play" aria-hidden="true"></span>Resume tournament</button></div>' +
+        '<p class="muted pause-note">Paused since ' + E.fmtTime(S.pause.at) + '. Match clocks, wait times and the finish time start again on the TV and on phones.</p>';
+    }
+    return '<div class="stack"><button class="btn pause-item" data-act="play-pause"><span class="pi pi-pause" aria-hidden="true"></span>Pause tournament</button></div>' +
+      '<p class="muted pause-note">For a break: match clocks stop, and wait times and the finish time are put on hold, on the TV and on phones.</p>';
+  }
   function prSettingHTML() {
     var locked = E.playoffRoundsLocked(S), on = !!S.playoffRounds;
     return '<div class="grp">Playoff rounds</div><label class="opt' + (locked ? ' locked' : '') + '" for="pr-opt-play"><input id="pr-opt-play" type="checkbox" data-act="pr-toggle"' + (on ? ' checked' : '') + (locked ? ' disabled' : '') + '>' +
@@ -5045,7 +5147,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function maybePrompt() {
     if (!ui.modal && WD.queue.length) maybeShowWd();
     if (ui.modal || S.phase !== 'active') return;
-    /* three players left with auto-throw paused: offer the round robin playoff once (the banner stays after "Not now") */
+    /* the playoff rounds are down to three players: offer the round robin playoff once (the banner stays after "Not now") */
     var po = E.playoffCandidates(S);
     if (po) {
       var pkey = po.slice().sort(function (x, y) { return x - y; }).join(',');
@@ -5059,7 +5161,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (ui.prDismissed !== dkey) openPrDraw();
       return;
     }
-    if (S.mode !== 'AUTO') return;
     var pc = E.pendingConsolidation(S);
     if (!pc) return;
     var key = pc.tables.join(',') + ':' + S.seq;
@@ -5072,6 +5173,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ui.lastUndoAt = now();
     var r = E.undo(S);
     if (r.error) { toast(r.error, { bad: true }); return; }
+    E.ensureAuto(S, now());   /* an Undo step saved by an earlier version may have auto-throw paused */
     ui.flips = {};
     if (commit()) toast('Undid: ' + r.label);
   }
@@ -5165,19 +5267,16 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     undo: function () { doUndo(); },
     'undo-toast': function () { doUndo(); },
-    mode: function () {
-      var r = E.setMode(S, S.mode === 'AUTO' ? 'MANUAL' : 'AUTO', now());
-      if (r.error) { fail(r); return; }
-      afterChange({ toast: S.mode === 'AUTO' ? 'Auto-throw is on' : 'Auto-throw paused. Results still count; throw matches yourself.', undo: false });
-    },
     'play-pause': function () {
       var r = E.pausePlay(S, now());
       if (r.error) { fail(r); return; }
+      if (ui.modal) closeModal();
       afterChange({ toast: 'Tournament paused. Match clocks and wait times are on hold.', undo: true });
     },
     'play-resume': function () {
       var r = E.resumePlay(S, now());
       if (r.error) { fail(r); return; }
+      if (ui.modal) closeModal();
       afterChange({ toast: 'Tournament resumed' + (r.minutes >= 1 ? ' after ' + fmtDur(r.minutes) + ' paused' : '') + '.', undo: true });
     },
     tab: function (el) { ui.tab = el.dataset.tab; render(); },
@@ -5317,7 +5416,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     'copy-text': function () { closeModal(); copyText(E.dashboardText(S), 'Dashboard text'); },
     'csv-results': function () { closeModal(); download(fileStem() + '-results-' + stamp() + '.csv', E.resultsCSV(S), 'text/csv'); },
     'csv-log': function () { closeModal(); download(fileStem() + '-log-' + stamp() + '.csv', E.logCSV(S), 'text/csv'); },
-    'export-json': function () { closeModal(); download(fileStem() + '-backup-' + stamp() + '.json', stateText(), 'application/json'); toast('Backup file downloaded'); },   /* without the Undo history */
+    'export-json': function () { closeModal(); download(fileStem() + '-backup-' + stamp() + '.json', backupText(), 'application/json'); toast('Backup file downloaded, with the colors'); },   /* without the Undo history */
     'import-pick': function () { fileInput.value = ''; fileInput.click(); },
     'newc-open': function (el) { openModal({ type: 'newc', keep: el.dataset.keep === '1' }); },
     'newc-go': function (el) {
@@ -5612,11 +5711,17 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!f) return;
     var rd = new FileReader();
     rd.onload = function () {
-      var s;
+      var s, cols;
       try { s = E.deserialize(String(rd.result)); } catch (err) { toast('That file is not a tournament backup.', { bad: true }); return; }
-      askConfirm({ title: 'Load this backup?', text: 'Replace the current tournament with this backup (' + plural(s.players.length, 'player') + ')?', ok: 'Replace', danger: true }, function () {
+      cols = backupColors(s);
+      delete s.colors;   /* the colors are this device's setting, not part of the tournament */
+      askConfirm({ title: 'Load this backup?', text: 'Replace the current tournament with this backup (' + plural(s.players.length, 'player') + ')?' +
+        (cols ? ' Its colors replace the colors on this device too.' : ''), ok: 'Replace', danger: true }, function () {
         ui.rev = readRev();   /* a backup replaces whatever is saved, even a newer version from another tab */
-        S = s; ui.tablesTouched = true; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null; closeModal(); commit(); toast('Backup loaded');
+        S = s; ui.tablesTouched = true; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
+        if (cols) { colors = cols; saveColors(); applyColors(); }
+        E.ensureAuto(S, now());   /* a backup from an earlier version with auto-throw paused */
+        closeModal(); commit(); toast(cols ? 'Backup loaded, with its colors' : 'Backup loaded');
       });
     };
     rd.readAsText(f);
@@ -5651,6 +5756,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   /* some browsers only keep the screen awake after a tap on the page */
   document.addEventListener('pointerdown', function () { if (prefs.keepAwake && !wake.lock) holdWake(); }, true);
 
+  if (E.ensureAuto(S, now())) save();   /* saved by an earlier version with auto-throw paused */
   render();
   maybePrompt();
   holdWake();
