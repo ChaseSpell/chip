@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA30">
+<meta name="chip-version" content="ALPHA32">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -352,7 +352,7 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-me .nm { min-width: 0; font-weight: 800; font-size: 1.7rem; letter-spacing: .03em; line-height: 1.1; overflow-wrap: anywhere; }
 .vw-me .big { margin-top: 6px; font-weight: 700; font-size: 1.3rem; }
 .vw-me .sub { margin-top: 2px; color: var(--chalk-dim); }
-.vw-me-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }   /* chips and wins, the Withdraw button at the right */
+.vw-me-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; }   /* chips and wins */
 .vw-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 8px; }
 .vw-pick .btn { font-weight: 800; letter-spacing: .03em; overflow-wrap: anywhere; }
 .vw-tbl { margin-bottom: 10px; padding: 10px 12px; border: 3px solid var(--rail); border-radius: 12px; background: var(--cloth); }
@@ -385,13 +385,6 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-wins { margin-top: 14px; padding: 8px 12px; border: 1.5px solid var(--yellow); border-radius: 10px; background: color-mix(in srgb, var(--yellow) 12%, transparent); font-weight: 800; letter-spacing: .02em; }
 .vw-wins .lbl { color: var(--yellow); font-size: .85em; letter-spacing: .05em; text-transform: uppercase; }
 .vw-wins .sep { color: var(--chalk-dim); }
-.vw-wd-btn { flex: none; margin-left: auto; border-width: 1.5px; }
-.vw-wd-btn .fl { margin-right: .3em; }
-.vw-wd { margin-top: 12px; padding: 12px 14px; border: 2px solid var(--red); border-radius: 12px; background: color-mix(in srgb, var(--red) 10%, transparent); }
-.vw-wd p { margin: 6px 0 0; }
-.vw-wd-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 12px; }
-.vw-wd-note { margin: 10px 0 0; color: var(--yellow); font-weight: 700; }
-.vw-wd-err { color: var(--red-text); font-weight: 700; }
 /* the player's match history: a line of text opens it; one row per match, latest first (W or L, the opponent, when it
    started and under that how long it lasted, and a line with the table, a playoff match's name, and the chips left after
    a loss). The line of text is in the Main text color, which the color settings keep readable on every background. */
@@ -416,7 +409,6 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .vw-hist .out { color: var(--red-text); font-weight: 700; }
 .vw-hist-none { margin: 4px 0 0; color: var(--chalk-dim); }
 .vw-paused { color: var(--chalk-dim); font-weight: 700; }   /* a waitlist spot while the tournament is paused */
-.wd-who { font-size: 1.15em; }
 /* the spot shot pop-up: 🎯 or ❌, a word and a line, for under three seconds */
 #fx-root { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
 .shotfx { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, #021014 55%, transparent);
@@ -564,6 +556,20 @@ html.tv { font-size: clamp(12px, .83333vw, 40px); }
 .tv .frame { padding: .1em; border-radius: .26em; }
 .tv .frame::before, .tv .frame::after { display: none; }
 .tv .felt { padding: .06em .2em .1em; gap: 0 .12em; grid-template-columns: 1fr .8em 1fr; align-items: stretch; align-content: stretch; border-radius: .12em; }
+/* The pockets, in proportion to the table (its size is the font size here) and clear of the names and chips. On a small
+   table they'd only be clutter: below 30px (a table about 50px deep) their size works out to 0, so they're left off. */
+.tv .felt {
+  --pk: clamp(0px, (1em - 30px) * 1000, .15em); --pks: clamp(0px, (1em - 30px) * 1000, .13em);
+  background-image:
+    radial-gradient(circle at 0 0, #04171c 0 var(--pk), transparent calc(var(--pk) + min(1px, var(--pk)))),
+    radial-gradient(circle at 100% 0, #04171c 0 var(--pk), transparent calc(var(--pk) + min(1px, var(--pk)))),
+    radial-gradient(circle at 0 100%, #04171c 0 var(--pk), transparent calc(var(--pk) + min(1px, var(--pk)))),
+    radial-gradient(circle at 100% 100%, #04171c 0 var(--pk), transparent calc(var(--pk) + min(1px, var(--pk)))),
+    radial-gradient(circle at 50% 0, #04171c 0 var(--pks), transparent calc(var(--pks) + min(1px, var(--pks)))),
+    radial-gradient(circle at 50% 100%, #04171c 0 var(--pks), transparent calc(var(--pks) + min(1px, var(--pks))));
+}
+/* an empty table's dashed box sits clear of the side pockets (its own font is smaller, so this is in table sizes) */
+.tv .felt > .slot:only-child { margin: calc(var(--ts, 2.6rem) * .08) 0 calc(var(--ts, 2.6rem) * .04); }
 .tv .vs { font-size: .28em; align-self: center; text-align: center; }
 .tv .seat { gap: 0; justify-content: space-between; min-width: 0; }
 .tv .pname { font-size: var(--nf, var(--ts, 2.6rem)); height: calc(var(--ts, 2.6rem) * 1.08); line-height: calc(var(--ts, 2.6rem) * 1.08); white-space: nowrap; overflow: hidden; overflow-wrap: normal; }
@@ -776,9 +782,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   var UNDO_CAP = 150;
   // Parts of the state that Undo rewinds. Settings (default chips, planned tables, table numbers, match minutes, playoff rounds) and mode are not rewound.
   var SNAP_KEYS = ['phase', 'nextId', 'seq', 'players', 'tables', 'queue', 'draw', 'champion', 'startedAt', 'finishedAt', 'rr', 'pr', 'pause', 'pauses'];
+  /* Limits on what can be typed in, far above any real night (about 100 players and 10 tables). They stop a slip of the
+     keyboard (a pasted page of text as one name, 99999999999999999 chips, which can never run out) from freezing the app,
+     filling its storage or sending huge updates to phones. */
+  var MAX_PLAYERS = 500, MAX_NAME = 40, MAX_CHIPS = 99;
 
   /* ---------- small helpers ---------- */
   function clone(o) { return o === undefined ? null : JSON.parse(JSON.stringify(o)); }
+  function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 
   function defaultRng() {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -869,6 +880,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       .sort(function (x, y) { return x.wseq - y.wseq; });
   }
   function label(p) { return p.name + ' (' + p.C + '/' + p.S + ')'; }
+  /* a player's name, or '?' (exports and summaries never stop over a player they can't find) */
+  function nameOf(s, id) { var p = P(s, id); return p ? p.name : '?'; }
 
   function nameTaken(s, name, exceptId) {
     var low = name.toLowerCase();
@@ -899,19 +912,52 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     s.log.push(e);
   }
 
-  /* ---------- undo plumbing ---------- */
+  /* ---------- undo plumbing ----------
+     Each step keeps the state from before it. A result changes only two or three players, so a step keeps just the
+     players that changed ("pd", by id) and leaves out the draw when it didn't change: about a tenth of the size of a
+     full copy, which matters because every step is saved in this browser (150 full copies for 100 players came to about
+     2.4 million characters, close to the iPad's storage limit). Steps saved by earlier versions hold full copies and
+     still undo as before. */
   function snapshot(s, lbl, withMode, withSetting) {
     var o = { label: lbl, logLen: s.log.length };
-    SNAP_KEYS.forEach(function (k) { o[k] = clone(s[k]); });
+    SNAP_KEYS.forEach(function (k) { if (k !== 'players' && k !== 'draw') o[k] = clone(s[k]); });
+    /* the players and the draw as text for now: compact() keeps only what the change touched */
+    o.raw = { pj: s.players.map(function (p) { return JSON.stringify(p); }), ids: s.players.map(function (p) { return p.id; }), dj: JSON.stringify(s.draw === undefined ? null : s.draw) };
     if (withMode) o.mode = s.mode;
     if (withSetting) o.playoffRounds = s.playoffRounds;
     return o;
   }
+  /* once the change is made: the players it touched, as they were before it (all of them if the list itself changed) */
+  function compact(s, snap) {
+    var raw = snap.raw, same = raw.ids.length === s.players.length, i;
+    for (i = 0; same && i < raw.ids.length; i++) if (s.players[i].id !== raw.ids[i]) same = false;
+    if (same) {
+      var pd = {};
+      for (i = 0; i < raw.pj.length; i++) if (JSON.stringify(s.players[i]) !== raw.pj[i]) pd[raw.ids[i]] = JSON.parse(raw.pj[i]);
+      snap.pd = pd;
+    } else snap.players = raw.pj.map(function (x) { return JSON.parse(x); });
+    if (JSON.stringify(s.draw === undefined ? null : s.draw) !== raw.dj) snap.draw = JSON.parse(raw.dj);
+    delete snap.raw;
+    return snap;
+  }
   function restore(s, snap) {
-    SNAP_KEYS.forEach(function (k) { s[k] = clone(snap[k]); });
-    if (Object.prototype.hasOwnProperty.call(snap, 'mode')) s.mode = snap.mode;
-    if (Object.prototype.hasOwnProperty.call(snap, 'playoffRounds')) s.playoffRounds = snap.playoffRounds;
-    s.log.length = snap.logLen;
+    SNAP_KEYS.forEach(function (k) { if (k !== 'players' && k !== 'draw') s[k] = clone(snap[k]); });
+    if (snap.raw) {   /* a change that failed part way: put back exactly what was there */
+      s.players = snap.raw.pj.map(function (x) { return JSON.parse(x); });
+      s.draw = JSON.parse(snap.raw.dj);
+    } else {
+      if (hasOwn(snap, 'players')) s.players = clone(snap.players);   /* a full copy (and every step saved by earlier versions) */
+      else if (snap.pd && typeof snap.pd === 'object') {
+        var at = {};
+        s.players.forEach(function (p, i) { at[p.id] = i; });
+        Object.keys(snap.pd).forEach(function (k) { if (hasOwn(at, k)) s.players[at[k]] = clone(snap.pd[k]); });
+      }
+      if (hasOwn(snap, 'draw')) s.draw = clone(snap.draw);
+    }
+    if (!Array.isArray(s.draw)) s.draw = [];
+    if (hasOwn(snap, 'mode')) s.mode = snap.mode;
+    if (hasOwn(snap, 'playoffRounds')) s.playoffRounds = snap.playoffRounds;
+    s.log.length = Math.min(s.log.length, snap.logLen);
   }
   function act(s, lbl, fn, withMode, withSetting) {
     var snap = snapshot(s, lbl, withMode, withSetting);
@@ -919,24 +965,47 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     try { r = fn(); }
     catch (e) { restore(s, snap); return { error: String(e && e.message ? e.message : e) }; }
     if (r && r.error) { restore(s, snap); return r; }
-    s.undo.push(snap);
+    s.undo.push(compact(s, snap));
     if (s.undo.length > UNDO_CAP) s.undo.shift();
     return r || { ok: true };
   }
+  /* A step from damaged storage could leave the tournament in pieces, so the state it gives back is checked first. A
+     damaged step is not used: it and the steps before it are dropped (Undo never skips a step) and nothing changes. */
   function undo(s) {
     if (!s.undo.length) return { error: 'Nothing to undo' };
-    var snap = s.undo.pop();
-    restore(s, snap);
+    var snap = s.undo[s.undo.length - 1];
+    if (!snap || typeof snap !== 'object' || !(snap.logLen >= 0) || snap.logLen > s.log.length) { s.undo = []; return { error: 'That step can\'t be undone: its saved copy is damaged' }; }
+    var back = snapshot(s, '', true, true), tail = s.log.slice(snap.logLen), bad;
+    try { restore(s, snap); bad = stateProblem(s, true); } catch (e) { bad = 'error'; }
+    if (bad) {
+      restore(s, back);
+      for (var i = 0; i < tail.length; i++) s.log.push(tail[i]);
+      s.undo = [];
+      return { error: 'That step can\'t be undone: its saved copy is damaged' };
+    }
+    s.undo.pop();
     return { ok: true, label: snap.label };
   }
   function undoLabel(s) { return s.undo.length ? s.undo[s.undo.length - 1].label : null; }
 
   /* ---------- registration ---------- */
+  function nameProblem(name) {
+    if (!name) return 'Enter a name';
+    if (name.length > MAX_NAME) return 'Names can be up to ' + MAX_NAME + ' characters';
+    return '';
+  }
+  function chipProblem(c, lo, what) {
+    if (!(c >= lo)) return what + ' must be ' + lo + ' or more';
+    if (c > MAX_CHIPS) return what + ' can be ' + MAX_CHIPS + ' at most';
+    return '';
+  }
   function addPlayer(s, name, chips) {
     name = normName(name);
-    if (!name) return { error: 'Enter a name' };
+    var bad = nameProblem(name);
+    if (bad) return { error: bad };
     chips = parseInt(chips, 10);
-    if (!(chips >= 1)) return { error: 'Starting chips must be 1 or more' };
+    if ((bad = chipProblem(chips, 1, 'Starting chips'))) return { error: bad };
+    if (s.players.length >= MAX_PLAYERS) return { error: 'A tournament can have up to ' + MAX_PLAYERS + ' players' };
     if (nameTaken(s, name)) return { error: '"' + name + '" is already registered. Add a last initial.' };
     var p = { id: s.nextId++, name: name, S: chips, C: chips, W: 0, reg: s.players.length + 1, status: 'active', lastOpp: null, place: null };
     s.players.push(p);
@@ -956,17 +1025,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     if (s.phase !== 'registration') return { error: 'Not in registration' };
     var p = P(s, id);
     if (!p) return { error: 'Player not found' };
+    var nm = null, c = null, bad;
     if (patch.name !== undefined) {
-      var nm = normName(patch.name);
-      if (!nm) return { error: 'Enter a name' };
+      nm = normName(patch.name);
+      if ((bad = nameProblem(nm))) return { error: bad };
       if (nameTaken(s, nm, id)) return { error: '"' + nm + '" is already registered' };
-      p.name = nm;
     }
     if (patch.S !== undefined) {
-      var c = parseInt(patch.S, 10);
-      if (!(c >= 1)) return { error: 'Starting chips must be 1 or more' };
-      p.S = c; p.C = c;
+      c = parseInt(patch.S, 10);
+      if ((bad = chipProblem(c, 1, 'Starting chips'))) return { error: bad };
     }
+    /* nothing changes unless all of it is fine (a bad chip count used to leave the new name in place) */
+    if (nm !== null) p.name = nm;
+    if (c !== null) { p.S = c; p.C = c; }
     return { ok: true };
   }
 
@@ -1367,16 +1438,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   /* ---------- roster changes during play (late entries are not permitted) ---------- */
-  /* how = 'phone' when the player asked to withdraw from their phone and the director agreed */
-  function dropPlayer(s, id, now, how) {
+  function dropPlayer(s, id, now) {
     if (s.phase !== 'active') return { error: 'The tournament is not running' };
     if (s.rr) return blockedByPlayoff(s);
     var p = P(s, id);
     if (!p || p.status !== 'active') return { error: 'Only active players can be dropped' };
     if (activeCount(s) <= 1) return { error: 'Cannot drop the last player' };
-    return act(s, (how === 'phone' ? 'Withdraw ' : 'Drop ') + p.name, function () {
+    return act(s, 'Drop ' + p.name, function () {
       knockOut(s, p, now, 'dropped');
-      addLog(s, now, 'drop', { player: p.id, via: how || null }, p.name + (how === 'phone' ? ' withdrew from their phone' : ' dropped out'));
+      addLog(s, now, 'drop', { player: p.id }, p.name + ' dropped out');
       afterPlay(s, now);
       return { ok: true };
     });
@@ -1387,19 +1457,19 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     if (s.rr) return blockedByPlayoff(s);
     var p = P(s, id);
     if (!p || p.status !== 'active') return { error: 'Only active players can be edited' };
-    var nm = null, S2 = null, C2 = null;
+    var nm = null, S2 = null, C2 = null, bad;
     if (patch.name !== undefined) {
       nm = normName(patch.name);
-      if (!nm) return { error: 'Enter a name' };
+      if ((bad = nameProblem(nm))) return { error: bad };
       if (nameTaken(s, nm, id)) return { error: '"' + nm + '" is already registered' };
     }
     if (patch.S !== undefined) {
       S2 = parseInt(patch.S, 10);
-      if (!(S2 >= 1)) return { error: 'Starting chips must be 1 or more' };
+      if ((bad = chipProblem(S2, 1, 'Starting chips'))) return { error: bad };
     }
     if (patch.C !== undefined) {
       C2 = parseInt(patch.C, 10);
-      if (!(C2 >= 0)) return { error: 'Chips remaining must be 0 or more' };
+      if ((bad = chipProblem(C2, 0, 'Chips remaining'))) return { error: bad };
       if (C2 === 0 && activeCount(s) <= 1) return { error: 'Cannot eliminate the last player' };
     }
     return act(s, 'Edit ' + p.name, function () {
@@ -1425,7 +1495,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     var p = P(s, id);
     if (!p || p.status !== 'eliminated') return { error: 'Only eliminated players can be reinstated' };
     chips = parseInt(chips, 10);
-    if (!(chips >= 1)) return { error: 'Chips must be 1 or more' };
+    var bad = chipProblem(chips, 1, 'Chips');
+    if (bad) return { error: bad };
     return act(s, 'Reinstate ' + p.name, function () {
       /* everyone who went out after this player moves down one place: this player now finishes ahead of them */
       var was = p.place;
@@ -1607,7 +1678,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   /* The draw the players need to make now, or null. */
   function prDrawInfo(s) {
     if (!s.pr || s.pr.stage !== 'draw' || s.rr || s.phase !== 'active') return null;
-    var n = activeCount(s), k = PR_KINDS[n];
+    var n = activeCount(s), k = hasOwn(PR_KINDS, n) ? PR_KINDS[n] : null;
     if (!k) return null;
     return { n: n, round: s.pr.round + 1, kind: k.kind, matches: k.matches, picks: k.picks, name: k.name, pool: s.queue.slice() };
   }
@@ -1955,7 +2026,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       first = left.reduce(function (a, b) { return a + b; }, 0) / left.length;
     }
     if (s.rr) {   /* the round robin playoff: a few more matches on one table */
-      var rr = s.rr, more = { rr: Math.max(1, 3 - rr.matches.length) + 1, tie: 2, shootout: 1, decider: 1 }[rr.stage] || 0;
+      var rr = s.rr, more = rr.stage === 'rr' ? Math.max(1, 3 - rr.matches.length) + 1 : rr.stage === 'tie' ? 2 : (rr.stage === 'shootout' || rr.stage === 'decider') ? 1 : 0;
       return more ? { min: first + (more - 1) * m, avgMin: m, source: am.source } : null;
     }
     var chips = liveChips(s);
@@ -1998,8 +2069,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     });
     return { cur: cur, best: best, top: top, ids: top ? s.players.filter(function (p) { return best[p.id] === top; }).map(function (p) { return p.id; }) : [] };
   }
-  var MEDALS = { 1: '🥇', 2: '🥈', 3: '🥉' };
-  function medal(place) { return MEDALS[place] || ''; }
+  /* compared, never looked up by key: on the phone page a lookup like MEDALS[place] could pick up something hostile data
+     planted on Object.prototype, and medals go into the page as markup */
+  function medal(place) { return place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : ''; }
 
   /* ---------- read-only views ---------- */
   function where(s, id) {
@@ -2124,14 +2196,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   function ordinal(n) {
-    var v = n % 100;
-    var sfx = (v >= 11 && v <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+    var v = n % 100, d = n % 10;
+    var sfx = (v >= 11 && v <= 13) ? 'th' : d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th';   /* compared, not looked up (see medal) */
     return n + sfx;
   }
 
   function csvCell(v) {
+    var text = typeof v === 'string';
     v = (v === null || v === undefined) ? '' : String(v);
-    if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
+    /* text starting with = + - @ (or a tab or return) runs as a formula when the file is opened in Excel, Numbers or
+       Google Sheets: a name like =HYPERLINK(...) would become a live link. A leading ' keeps it plain text. */
+    if (text && /^[=+\-@\t\r]/.test(v)) v = "'" + v;
+    if (/[",\n\r]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
     return v;
   }
   function csvRows(rows) { return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n'; }
@@ -2162,7 +2238,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         e.i, timeFn(e.t), e.type, e.table || '',
         any && e.start ? timeFn(e.start) : '',
         any && e.start ? (Math.round(playMs(s, e.start, e.t) / 600) / 100).toFixed(2) : '',
-        any ? P(s, e.winner).name : '', any ? P(s, e.loser).name : '',
+        any ? nameOf(s, e.winner) : '', any ? nameOf(s, e.loser) : '',
         isRes ? e.loserC : '', isRes ? (e.elim ? 'yes' : '') : '', e.text
       ]);
     });
@@ -2183,7 +2259,114 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k) && !plainData(v[k], k, depth + 1)) return false;
     return true;
   }
+  /* ---------- checking a tournament before it is used ----------
+     A backup file damaged on the way, or changed by hand, could name a player who isn't in the tournament, or put a word
+     where a number belongs. The screens would then fail part way, and because a loaded tournament is saved before it is
+     shown, the app would stay broken after every reload. So a tournament read from a file or from storage, and the state
+     an Undo step gives back, is checked first: values of the right kind, and every player it mentions present. Fields
+     that earlier versions didn't have may be missing. The answer is '' when all is well, otherwise the part that is
+     damaged. The limits are far above any real night; they stop a hostile file from freezing the app. */
+  var LIMIT = { file: 20e6, players: 2000, tables: 2000, log: 300000, text: 2000, chips: 100000 };
+  var RR_STAGES = { rr: 1, tie: 1, shootout: 1, decider: 1, done: 1 }, PR_STAGES = { finishing: 1, draw: 1, playing: 1, final: 1 },
+    PR_KIND_NAMES = { three: 1, playin: 1, semis: 1 }, MATCH_STATES = { pending: 1, on: 1, done: 1, void: 1 };
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function nil(v) { return v === null || v === undefined; }
+  function numOrNil(v) { return nil(v) || isNum(v); }
+  function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+  function every(a, ok) { if (!Array.isArray(a)) return false; for (var i = 0; i < a.length; i++) if (!ok(a[i], i)) return false; return true; }
+  function stateProblem(o, skipLog) {
+    if (!isObj(o)) return 'the tournament';
+    if (o.phase !== 'registration' && o.phase !== 'active' && o.phase !== 'finished') return 'the stage of play';
+    if (!Array.isArray(o.players) || o.players.length > LIMIT.players) return 'the list of players';
+    var ids = {}, i;
+    for (i = 0; i < o.players.length; i++) {
+      var p = o.players[i];
+      if (!isObj(p) || !isNum(p.id) || p.id < 1 || hasOwn(ids, p.id)) return 'a player';
+      if (typeof p.name !== 'string' || !p.name || p.name.length > LIMIT.text) return 'a player\'s name';
+      if (!isNum(p.S) || !isNum(p.C) || !isNum(p.W) || p.S < 0 || p.C < 0 || p.W < 0 || p.S > LIMIT.chips || p.C > LIMIT.chips) return 'a player\'s chip count';
+      if (p.status !== 'active' && p.status !== 'eliminated' && p.status !== 'dropped') return 'a player';
+      if (!numOrNil(p.reg) || !numOrNil(p.place) || !numOrNil(p.placeTo) || !numOrNil(p.lastOpp) || !numOrNil(p.prRound) || !numOrNil(p.elimAt)) return 'a player';
+      ids[p.id] = true;
+    }
+    var has = function (id) { return isNum(id) && hasOwn(ids, id); };
+    var seat = function (id) { return nil(id) || id === 0 || has(id); };
+    if (!Array.isArray(o.tables) || o.tables.length > LIMIT.tables) return 'the tables';
+    var nums = {};
+    for (i = 0; i < o.tables.length; i++) {
+      var t = o.tables[i];
+      if (!isObj(t) || !isNum(t.n) || t.n < 1 || hasOwn(nums, t.n)) return 'a table';
+      nums[t.n] = true;
+      if (!seat(t.a) || !seat(t.b) || (t.b && !t.a) || !numOrNil(t.since) || !numOrNil(t.wseq) || !(nil(t.note) || typeof t.note === 'string')) return 'a table';
+    }
+    if (!every(o.queue, has)) return 'the waitlist';
+    if (!nil(o.draw) && !every(o.draw, has)) return 'the draw';
+    if ((!nil(o.champion) || o.phase === 'finished') && !has(o.champion)) return 'the champion';
+    if (!numOrNil(o.startedAt) || !numOrNil(o.finishedAt) || !isNum(o.nextId) || !numOrNil(o.seq)) return 'a time or a count';
+    if (!nil(o.pause) && !(isObj(o.pause) && numOrNil(o.pause.at))) return 'the pause';
+    if (!nil(o.pauses) && !every(o.pauses, function (x) { return Array.isArray(x) && isNum(x[0]) && isNum(x[1]); })) return 'the pauses';
+    var rr = o.rr;
+    if (!nil(rr)) {
+      if (!isObj(rr) || !hasOwn(RR_STAGES, rr.stage) || !isNum(rr.table)) return 'the playoff';
+      if (!every(rr.order, has) || rr.order.length !== 3 || rr.order[0] === rr.order[1] || rr.order[0] === rr.order[2] || rr.order[1] === rr.order[2]) return 'the playoff';
+      var rec = function (m) { return isObj(m) && rr.order.every(function (id) { return hasOwn(m, id) && isNum(m[id]); }); };
+      if (!rec(rr.wins) || !rec(rr.losses)) return 'the playoff';
+      if (!every(rr.matches, function (m) { return isObj(m) && has(m.winner) && has(m.loser); })) return 'the playoff';
+      if (!nil(rr.current) && !(isObj(rr.current) && has(rr.current.a) && has(rr.current.b) && numOrNil(rr.current.since))) return 'the playoff';
+      if ((!nil(rr.champion) || rr.stage === 'decider' || rr.stage === 'done') && !has(rr.champion)) return 'the playoff';
+      if (rr.stage === 'tie' && !(isObj(rr.tie) && has(rr.tie.winner) && has(rr.tie.sitter))) return 'the playoff';
+      var so = rr.shootout;
+      if (!nil(so) || rr.stage === 'shootout') {
+        if (!isObj(so) || !rec(so.allowed) || !rec(so.strikes) || !every(so.out, has) || !every(so.attempts, function (x) { return isObj(x) && has(x.id); })) return 'the shootout';
+        if (!(so.turn === 0 || so.turn === 1 || so.turn === 2)) return 'the shootout';
+      }
+    }
+    var pr = o.pr;
+    if (!nil(pr)) {
+      var roundOK = function (r) {
+        return nil(r) || (isObj(r) && hasOwn(PR_KIND_NAMES, r.kind) && numOrNil(r.round) && every(r.matches, function (m) {
+          return isObj(m) && has(m.a) && has(m.b) && hasOwn(MATCH_STATES, m.state) && numOrNil(m.table) && (nil(m.winner) || has(m.winner)) && (nil(m.loser) || has(m.loser));
+        }));
+      };
+      if (!isObj(pr) || !hasOwn(PR_STAGES, pr.stage) || !numOrNil(pr.round) || !roundOK(pr.cur) || !roundOK(pr.last)) return 'the playoff rounds';
+    }
+    if (!Array.isArray(o.log) || o.log.length > LIMIT.log) return 'the match log';
+    if (!skipLog) {
+      for (i = 0; i < o.log.length; i++) {
+        var e = o.log[i];
+        if (!isObj(e) || !isNum(e.t) || typeof e.type !== 'string' || !(nil(e.text) || typeof e.text === 'string')) return 'the match log';
+        if (!numOrNil(e.start) || !(nil(e.winner) || has(e.winner)) || !(nil(e.loser) || has(e.loser))) return 'the match log';
+      }
+    }
+    return '';
+  }
+  /* fills in what earlier versions didn't keep, and puts settings back in range (they are only typed-in preferences) */
+  function repairState(o) {
+    var maxId = 0;
+    o.players.forEach(function (p, i) {
+      if (!isObj(p)) return;
+      if (p.W === undefined) p.W = 0;
+      if (p.reg === undefined) p.reg = i + 1;
+      if (isNum(p.id) && p.id > maxId) maxId = p.id;
+    });
+    o.tables.forEach(function (t) { if (isObj(t) && typeof t.open !== 'boolean') t.open = !!t.open; });
+    if (!isNum(o.nextId) || o.nextId <= maxId) o.nextId = maxId + 1;   /* a new player must never get an id already in use */
+    if (o.seq === undefined) o.seq = 0;
+    if (!Array.isArray(o.draw)) o.draw = [];
+    if (o.title.length > 60) o.title = o.title.slice(0, 60);
+    o.tableNums = o.tableNums.slice(0, 100).map(function (v) { return nil(v) ? null : String(v).slice(0, 6); });
+    if (typeof o.matchMinutes === 'string') o.matchMinutes = o.matchMinutes.slice(0, 12);
+    else if (!isNum(o.matchMinutes)) o.matchMinutes = 10;
+    if (!isNum(o.defaultChips) || o.defaultChips < 1 || o.defaultChips > MAX_CHIPS) o.defaultChips = 3;
+    o.defaultChips = Math.round(o.defaultChips);
+    if (!isNum(o.plannedTables) || o.plannedTables < 1) o.plannedTables = 4;
+    o.plannedTables = Math.min(40, Math.round(o.plannedTables));   /* the setup screen's + button stops at 40 too */
+    /* Undo steps kept inside the tournament (versions before ALPHA20): the newest ones that look like steps */
+    var u = o.undo, k = u.length;
+    while (k > 0 && isObj(u[k - 1]) && typeof u[k - 1].label === 'string' && isNum(u[k - 1].logLen)) k--;
+    o.undo = u.slice(Math.max(k, u.length - UNDO_CAP));
+  }
   function deserialize(str) {
+    if (typeof str !== 'string' || str.length > LIMIT.file) throw new Error('Not a valid tournament file');
     var o = JSON.parse(str);
     if (!o || o.v !== VERSION || !Array.isArray(o.players) || !Array.isArray(o.tables) || !Array.isArray(o.queue) || !Array.isArray(o.log)) throw new Error('Not a valid tournament file');
     if (!plainData(o, '', 0)) throw new Error('Not a valid tournament file');
@@ -2196,6 +2379,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     if (typeof o.title !== 'string') o.title = '';
     /* playoff rounds are new: on for a tournament not started yet, off for one already running so its rules don't change */
     if (typeof o.playoffRounds !== 'boolean') o.playoffRounds = o.phase === 'registration';
+    repairState(o);
+    var bad = stateProblem(o);
+    if (bad) { var err = new Error('This tournament is damaged: ' + bad + ' is not right'); err.damaged = true; throw err; }
     return o;
   }
 
@@ -2220,7 +2406,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     where: where, heldFrom: heldFrom, stats: stats, estimateMinutes: estimateMinutes,
     P: P, T: T, label: label, fmtTime: fmtTime, ordinal: ordinal, normName: normName,
     dashboardText: dashboardText, resultsCSV: resultsCSV, logCSV: logCSV,
-    serialize: serialize, deserialize: deserialize
+    serialize: serialize, deserialize: deserialize, stateProblem: stateProblem,
+    MAX_PLAYERS: MAX_PLAYERS, MAX_NAME: MAX_NAME, MAX_CHIPS: MAX_CHIPS, MAX_FILE: LIMIT.file
   };
 });
 
@@ -2243,7 +2430,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   var code = (q.get('v') || '').replace(/[^0-9A-Za-z]/g, '').slice(0, 32);
   var db = (q.get('db') || '').toLowerCase().replace(/[^0-9a-z.\-]/g, '');
   var VERSION = (document.querySelector('meta[name="chip-version"]') || {}).content || '';
-  if (!code || !/\.(firebaseio\.com|firebasedatabase\.app)$/.test(db)) {
+  if (!code || !/^[0-9a-z][0-9a-z\-]*(\.[0-9a-z][0-9a-z\-]*)*\.(firebaseio\.com|firebasedatabase\.app)$/.test(db)) {   /* a real database name: no empty or dash-led parts */
     if (!q.has('v') && !q.has('db')) return;   /* a plain address: the director app */
     /* a phone link that lost part of its code: say so, rather than showing players the director's setup screen */
     window.CHIP_VIEWER = true;
@@ -2257,10 +2444,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   var SRC = 'https://' + db + '/live/' + code + '.json';
   var ME_KEY = 'chipTourney.me';
   var app = document.getElementById('app');
-  var VM = null, got = false, conn = 'connecting', es = null, errs = 0, pollT = null, picking = false, rq = 0, pmap = {}, moreOpen = false, histOpen = false;
+  var VM = null, got = false, conn = 'connecting', es = null, errs = 0, pollT = null, picking = false, rq = 0, pmap = Object.create(null), moreOpen = false, histOpen = false;
   var retryT = null, polling = false, pollBusy = false, lastMsg = 0;   /* the stream's retry timer, checking every 5 s instead, the last word from Firebase */
   var me = '';
   try { me = localStorage.getItem(ME_KEY) || ''; } catch (e) { /* this visit only */ }
+  try { localStorage.removeItem('chipTourney.wd'); } catch (e) { /* a withdrawal request saved by an earlier version: no longer used */ }
   /* the director's colors arrive with the tournament, so phones match the TV */
   var COLOR_VARS = { bg: 'deep', panel: 'felt', cloth: 'cloth', rail: 'rail', railsh: 'rail-dk', trim: 'sight', text: 'chalk', text2: 'chalk-dim',
     line: 'line', hi: 'blue', hiink: 'blue-ink', att: 'yellow', attink: 'yellow-ink', danger: 'red', err: 'red-text', chip: 'chip-face', chiprim: 'chip-rim' };
@@ -2272,13 +2460,22 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function num(v) { v = Number(v); return isFinite(v) ? v : 0; }
   function str(v) { return v === undefined || v === null ? '' : String(v); }
   function cleanPlayer(p) {
-    return { id: num(p.id), n: str(p.n), c: num(p.c), s: num(p.s), w: num(p.w), st: p.st === 'a' || p.st === 'd' ? p.st : 'e',
-      pl: num(p.pl), pt: num(p.pt), r: num(p.r), wh: str(p.wh) };
+    return { id: num(p.id), n: str(p.n).slice(0, 100), c: num(p.c), s: num(p.s), w: num(p.w), st: p.st === 'a' || p.st === 'd' ? p.st : 'e',
+      pl: num(p.pl), pt: num(p.pt), r: num(p.r), wh: str(p.wh).slice(0, 200) };
   }
   function now() { return Date.now(); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
-  function list(x) { if (!x) return []; if (Array.isArray(x)) return x.filter(function (v) { return v !== null && v !== undefined; }); return Object.keys(x).map(function (k) { return x[k]; }); }
-  function P(id) { return pmap[id] || null; }
+  /* a list from the database, at most LIST_MAX long: a real night has a few hundred of anything, and a hostile database
+     sending millions of entries must not freeze the phone */
+  var LIST_MAX = 5000;
+  function list(x) {
+    if (!x || typeof x !== 'object') return [];
+    if (Array.isArray(x)) return x.slice(0, LIST_MAX).filter(function (v) { return v !== null && v !== undefined; });
+    return Object.keys(x).slice(0, LIST_MAX).map(function (k) { return x[k]; });
+  }
+  function P(id) { return Object.prototype.hasOwnProperty.call(pmap, id) ? pmap[id] : null; }
+  /* path parts and keys that would reach into Object.prototype (or stretch an array) instead of the tournament's data */
+  function badKey(k) { return k === '__proto__' || k === 'constructor' || k === 'prototype' || k === 'length'; }
   function placeText(p) {
     if (!p || !p.pl) return '';
     if (!p.pt || p.pt === p.pl) return E.ordinal(p.pl);
@@ -2294,16 +2491,23 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   /* ---------- live data: Firebase streams each change; if the stream can't get through, the page checks every 5 seconds ---------- */
   function apply(kind, path, data) {
     var parts = String(path || '/').split('/').filter(Boolean);
+    /* A link can name any database, so what arrives may be hostile: a path through "__proto__" would write onto every
+       object on the page (and from there into the page's markup), so such paths and keys are ignored. */
+    if (parts.some(badKey)) return;
+    var own = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
     if (!parts.length) {
       if (kind === 'put') VM = data;
-      else { VM = VM || {}; for (var k in data) { if (data[k] === null) delete VM[k]; else VM[k] = data[k]; } }
+      else { if (!VM || typeof VM !== 'object') VM = {}; if (data && typeof data === 'object') for (var k in data) { if (!own(data, k) || badKey(k)) continue; if (data[k] === null) delete VM[k]; else VM[k] = data[k]; } }
     } else {
-      VM = VM || {};
+      if (!VM || typeof VM !== 'object') VM = {};
       var o = VM;
-      for (var i = 0; i < parts.length - 1; i++) { if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {}; o = o[parts[i]]; }
+      for (var i = 0; i < parts.length - 1; i++) { if (!own(o, parts[i]) || !o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {}; o = o[parts[i]]; }
       var last = parts[parts.length - 1];
       if (kind === 'put') { if (data === null) delete o[last]; else o[last] = data; }
-      else { if (!o[last] || typeof o[last] !== 'object') o[last] = {}; for (var k2 in data) { if (data[k2] === null) delete o[last][k2]; else o[last][k2] = data[k2]; } }
+      else {
+        if (!own(o, last) || !o[last] || typeof o[last] !== 'object') o[last] = {};
+        if (data && typeof data === 'object') for (var k2 in data) { if (!own(data, k2) || badKey(k2)) continue; if (data[k2] === null) delete o[last][k2]; else o[last][k2] = data[k2]; }
+      }
     }
     got = true; conn = 'live';
     schedule();
@@ -2313,7 +2517,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!window.EventSource) { polling = true; poll(); return; }
     try { if (es) es.close(); } catch (e) { /* ignore */ }
     lastMsg = now();
-    es = new EventSource(SRC);
+    try { es = new EventSource(SRC); } catch (e) { es = null; polling = true; poll(); return; }   /* an address the browser won't stream from */
     es.addEventListener('put', function (e) { lastMsg = now(); try { var m = JSON.parse(e.data); apply('put', m.path, m.data); } catch (x) { /* ignore */ } });
     es.addEventListener('patch', function (e) { lastMsg = now(); try { var m = JSON.parse(e.data); apply('patch', m.path, m.data); } catch (x) { /* ignore */ } });
     es.addEventListener('keep-alive', function () { lastMsg = now(); if (got && conn !== 'live') { conn = 'live'; schedule(); } });
@@ -2433,61 +2637,13 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         '</div><button class="btn ghost" data-vw="unpick" style="margin-top:10px">Cancel</button></section>';
     }
     if (!mine) return '<section class="vw-sec"><button class="btn primary big" data-vw="pick" style="width:100%">Find me: tap to pick your name</button></section>';
-    var s = statusOf(mine), wd = wdHTML(mine);
+    var s = statusOf(mine);
     return '<section class="vw-me"><div class="vw-me-top"><div class="nm">' + esc(up(mine.n)) + '</div><button class="btn small ghost" data-vw="pick">Not you?</button></div>' +
       '<div class="big">' + esc(s.big) + '</div>' + (s.sub ? '<div class="sub">' + esc(s.sub) + '</div>' : '') +
-      '<div class="vw-me-row"><div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div>' + wd.btn + '</div>' +
-      wd.box + histHTML(mine) + '</section>';
+      '<div class="vw-me-row"><div class="pchips">' + chips(mine) + '<span class="frac">(' + mine.c + '/' + mine.s + ')</span>' + run(mine) + '<span class="frac">· ' + plural(mine.w || 0, 'win') + '</span></div></div>' +
+      histHTML(mine) + '</section>';
   }
 
-  /* ---------- withdrawing from this phone ----------
-     A player who picked their name can ask to withdraw: the small Withdraw button beside their chips, one confirmation,
-     then a request goes to the director, who confirms it or keeps them in. The request is remembered on this phone so the
-     card can say what happened. Gives the button (beside the chips) and what shows under them. */
-  var WDK = 'chipTourney.wd', wdStep = 0, wdBusy = false, wdErr = '';
-  function wdMine(mine) {
-    try {
-      var o = JSON.parse(localStorage.getItem(WDK) || 'null');
-      if (!o || o.code !== code || String(o.pid) !== String(mine.id)) return null;
-      /* sent in an earlier tournament on the same link (player numbers start again at 1 in each one): not this tournament's */
-      var sa = num(VM && VM.sa);
-      if (sa && (o.sa ? o.sa !== sa : num(o.at) < sa - 600000)) return null;
-      return o;
-    } catch (e) { return null; }
-  }
-  function wdHTML(mine) {
-    var req = wdMine(mine), ans = req && VM.wd ? VM.wd[req.rid] : null, none = { btn: '', box: '' };
-    var kept = !!(VM.wdNo && VM.wdNo[mine.id]);   /* the director kept this player in: no asking again, from any phone */
-    function note(t) { return { btn: '', box: '<p class="vw-wd-note">' + t + '</p>' }; }
-    if (mine.st === 'd' && req) return note('You withdrew from the tournament.');
-    if (mine.st !== 'a') return none;
-    if (kept) return note('The director kept you in. If you need to leave, talk to the director in person.');
-    if (req && !ans) return note('Withdrawal sent. Waiting for the director to confirm\u2026');
-    if (!VM.wdOn || VM.phase !== 'active' || VM.rr) return none;
-    if (wdStep === 1) return { btn: '', box: '<div class="vw-wd"><b>Withdraw from the tournament?</b>' +
-      '<p>You\'d leave the tournament and give up your chips. Your request goes to the director, who confirms it.</p>' +
-      (wdErr ? '<p class="vw-wd-err">' + esc(wdErr) + '</p>' : '') +
-      '<div class="vw-wd-row"><button class="btn" data-vw="wd-cancel">Cancel</button><button class="btn danger" data-vw="wd-go"' + (wdBusy ? ' disabled' : '') + '>' +
-      (wdBusy ? 'Sending\u2026' : 'Yes, withdraw') + '</button></div></div>' };
-    return { btn: '<button class="btn small vw-wd-btn" data-vw="wd1"><span class="fl" aria-hidden="true">\uD83C\uDFF3\uFE0F</span>Withdraw</button>', box: '' };
-  }
-  function sendWithdraw(mine) {
-    wdBusy = true; wdErr = ''; render();
-    fetch('https://' + db + '/requests/' + code + '.json', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p: String(mine.id), n: String(mine.n).slice(0, 60) })
-    }).then(function (r) {
-      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'off' : 'http');
-      return r.json();
-    }).then(function (j) {
-      if (!j || !j.name) throw new Error('http');
-      try { localStorage.setItem(WDK, JSON.stringify({ code: code, pid: mine.id, rid: j.name, at: Date.now(), sa: num(VM && VM.sa) })); } catch (e) { /* the card can't follow it after a reload */ }
-      wdStep = 0; wdBusy = false; render();
-    }).catch(function (e) {
-      wdBusy = false;
-      wdErr = e && e.message === 'off' ? 'Withdrawing from phones is off right now. Tell the director in person.' : 'Couldn\'t send it. Check your connection and try again.';
-      render();
-    });
-  }
   /* ---------- this player's match history, latest first ----------
      The director sends every finished match, oldest first (VM.mh: winner, loser, table, when it started in seconds after
      the tournament started, its length in seconds of play or -1, the loser's chips after it or -1 where chips don't count,
@@ -2650,8 +2806,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
   function render() {
     applyColors();
-    document.title = (VM && VM.title) ? VM.title : 'Chip tournament';
-    pmap = {};
+    document.title = (VM && VM.title) ? String(VM.title).slice(0, 100) : 'Chip tournament';
+    pmap = Object.create(null);   /* no prototype: a lookup for an id that isn't there finds nothing */
     if (VM) list(VM.players).forEach(function (p) { var cp = p && typeof p === 'object' ? cleanPlayer(p) : null; if (cp && cp.id) pmap[cp.id] = cp; });
     var mine = findMe(), body = '';
     if (!got) body = '<p class="vw-wait">Connecting…</p>';
@@ -2682,11 +2838,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var el = e.target.closest('[data-vw]');
     if (!el) return;
     var a = el.getAttribute('data-vw');
-    if (a === 'pick') { picking = true; wdStep = 0; histOpen = false; render(); window.scrollTo(0, 0); }
-    else if (a === 'wd1') { wdStep = 1; wdErr = ''; render(); }
+    if (a === 'pick') { picking = true; histOpen = false; render(); window.scrollTo(0, 0); }
     else if (a === 'hist') { histOpen = !histOpen; render(); }
-    else if (a === 'wd-cancel') { wdStep = 0; wdErr = ''; render(); }
-    else if (a === 'wd-go') { var wm = findMe(); if (wm && !wdBusy) sendWithdraw(wm); }
     else if (a === 'unpick') { picking = false; render(); }
     else if (a === 'me') {
       me = el.getAttribute('data-n') || '';
@@ -2734,10 +2887,21 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
 
   /* ---------- storage ---------- */
   var undoSlots = [];   /* the Undo slots saved right now, oldest first */
+  /* A saved tournament that can't be opened (damaged storage) is kept here, once, before anything is saved over it, and
+     the setup screen offers it as a download: nothing is ever lost without a word. */
+  var DAMAGED_KEY = KEY + '.damaged';
   function readRev() { try { return localStorage.getItem(REV_KEY); } catch (e) { return null; } }
   function load() {
-    var s = null, list = [];
-    try { var raw = localStorage.getItem(KEY); s = raw ? E.deserialize(raw) : null; } catch (e) { s = null; }
+    var s = null, list = [], raw = null;
+    try { raw = localStorage.getItem(KEY); s = raw ? E.deserialize(raw) : null; }
+    catch (e) {
+      s = null;
+      if (raw) {
+        ui.damaged = true;
+        try { if (!localStorage.getItem(DAMAGED_KEY)) localStorage.setItem(DAMAGED_KEY, raw); }
+        catch (e2) { ui.damagedRaw = raw; }   /* no room to keep it: it can still be downloaded during this visit */
+      }
+    }
     ui.rev = readRev();
     try { list = JSON.parse(localStorage.getItem(UNDO_LIST) || '[]'); } catch (e) { list = []; }
     undoSlots = Array.isArray(list) ? list.filter(function (x) { return typeof x === 'number' && x > 0; }) : [];
@@ -2745,6 +2909,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     undoSlots.forEach(function (x) { if (x >= ui.nextSlot) ui.nextSlot = x + 1; });
     /* versions before ALPHA20 kept Undo inside the tournament: it moves into its own slots at the next save */
     if (s && !s.undo.length) s.undo = loadUndo(undoSlots);
+    if (s) { delete s.wd; delete s.wdNo; }   /* answers to players' withdrawal requests, from versions that had them */
     return s;
   }
   /* the saved Undo steps, oldest first. If a step can't be read, only the steps after it are kept, so Undo never skips one */
@@ -2803,8 +2968,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     for (var tries = 0; tries < 8; tries++) {
       try { writeAll(); ui.saveOK = true; if (S.phase !== 'registration') schedulePublish(); return true; }
       catch (e) {
-        /* storage is full: drop the oldest half of the Undo steps and try again */
-        if (!S.undo.length) break;
+        /* storage is full: drop the oldest half of the Undo steps and try again. Storage that is switched off (or a private
+           window that refuses every save) is not full: dropping steps there would only lose Undo history for nothing. */
+        if (!quotaFull(e) || !S.undo.length) break;
         S.undo.splice(0, Math.ceil(S.undo.length / 2));
         var keep = {};
         S.undo.forEach(function (sp) { if (sp.slot) keep[sp.slot] = true; });
@@ -2818,6 +2984,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ui.saveOK = false;
     return true;
   }
+  function quotaFull(e) { return !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014); }
   /* Another tab or window saved a newer version of the tournament: show that one.
      conflict = this tab had just made a change of its own, which is not saved. */
   function adoptStored(conflict) {
@@ -2826,7 +2993,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (S.phase !== 'registration') ui.tablesTouched = true;
     if (ui.modal && ui.modal.type !== 'colors') { ui.modal = null; ui.shownType = null; modalRoot.innerHTML = ''; }
     render();
-    setTimeout(maybeShowWd, 0);
     if (conflict) toast('This tournament was changed in another tab or window, so your last change was not saved. This is the latest version.', { bad: true });
   }
   /* catch up when this tab comes back into view */
@@ -2837,16 +3003,17 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
   var S = load() || E.newState();
   if (S.phase !== 'registration') ui.tablesTouched = true;
+  try { if (localStorage.getItem(DAMAGED_KEY)) ui.damaged = true; } catch (e) { /* storage off */ }   /* still kept from an earlier visit */
 
   /* ---------- colors: 15 named colors, saved in this browser (not in the tournament or its backups) ----------
      [key, CSS variable, label, what it paints]. The two chip colors (CHIP_ROWS) are part of each scheme, so the Default,
      Light and Dark buttons set the chips too; CHIP_PRESETS change only the chips. */
   var COLOR_KEY = 'chipTourney.colors', PREF_KEY = 'chipTourney.prefs';
-  var prefs = { showEnd: false, keepAwake: false, withdraw: true };
+  var prefs = { showEnd: false, keepAwake: false };
   function loadPrefs() {
     try {
       var po0 = JSON.parse(localStorage.getItem(PREF_KEY) || 'null');
-      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; prefs.withdraw = po0.withdraw !== false; }
+      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; }
     } catch (e) { /* defaults */ }
   }
   loadPrefs();
@@ -3048,8 +3215,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     phone = { on: false, apiKey: '', db: '', email: '', uid: '', refresh: '', page: '', code: '', project: '' };
     try {
       var o = JSON.parse(localStorage.getItem(PHONE_KEY) || 'null');
-      if (o && typeof o === 'object') Object.keys(phone).forEach(function (k) { if (o[k] !== undefined && o[k] !== null) phone[k] = o[k]; });
+      if (o && typeof o === 'object') Object.keys(phone).forEach(function (k) { if (o[k] !== undefined && o[k] !== null) phone[k] = k === 'on' ? !!o[k] : String(o[k]); });
     } catch (e) { /* not set up */ }
+    /* the parts that go into the QR link and the database address must look right, whatever is in storage */
+    if (!/^[0-9A-Za-z]{1,32}$/.test(phone.code)) phone.code = '';
+    if (phone.db && !/^[0-9a-z\-.]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(phone.db)) phone.db = '';
+    if (phone.page && !/^https?:\/\/[^\s"'<>]+$/i.test(phone.page)) phone.page = '';
     var fixed = normalizePage(phone.page);   /* an address saved by ALPHA21 may be missing its final slash */
     if (fixed !== phone.page) { phone.page = fixed; savePhone(); }
   }
@@ -3227,31 +3398,15 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (/^fail:/.test(res)) return res.slice(5);
     return '';
   }
-  /* a sign-in or Check again that worked, then (with withdrawals on) a look at whether the rules let players send requests */
-  function connectAndCheck(m) {
-    return phoneConnect(m).then(function (res) {
-      if (res !== 'ok' || prefs.withdraw === false) return res;
-      return checkWdRules().then(function (w) { return w === 'old' ? 'wdrules' : 'ok'; });
-    });
-  }
-  /* what happens after a sign-in or Check again: on success phone view turns on; otherwise the pop-up says what's missing.
-     'wdrules': phone view works, but the rules are from before phone withdrawals, so the pop-up stays open with the new ones */
+  /* what happens after a sign-in or Check again: on success phone view turns on; otherwise the pop-up says what's missing */
   function afterConnect(m, res) {
-    if (res === 'ok' || res === 'wdrules') {
+    if (res === 'ok') {
       var first = !phone.on;
       phone.on = true; savePhone(); PUB.state = 'idle';
       if (S.phase !== 'registration') schedulePublish(0);
-      pollRequests();
-      if (res === 'wdrules') {
-        render();
-        if (ui.modal === m) { m.issue = 'wdrules'; renderModal(); }
-        toast(first ? 'Phone view is on. One more step lets players withdraw from their phones.' : 'Players still can\'t withdraw from their phones: the rules haven\'t changed yet.', first ? null : { bad: true });
-        return;
-      }
-      var wasWd = !!(m && (m.issue === 'wdrules' || m.wdShown));
       if (ui.modal === m) closeModal();
       render();
-      var said = wasWd ? 'Done: players can withdraw from their phones now.' : (first ? 'Phone view is on. ' : 'Saved. ') + (S.phase === 'registration' ? 'Phones start updating when the tournament starts.' : 'Sending an update now.');
+      var said = (first ? 'Phone view is on. ' : 'Saved. ') + (S.phase === 'registration' ? 'Phones start updating when the tournament starts.' : 'Sending an update now.');
       toast(said);
       /* then check the page players will open, and speak up if they'd get the setup screen */
       checkPhonePage(true).then(function (r) {
@@ -3266,172 +3421,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     m.issue = res; m.issueText = connectIssueText(res);
     renderModal();
   }
-  /* The database rules: anyone with the link reads the tournament (live/…), only this login changes it. Players' phones may
-     add a withdrawal request (requests/…) while the tournament says withdrawals are on, and can't read, change or remove
-     any request; only this login reads and removes them. */
+  /* The database rules: anyone with the link reads the tournament (live/…), and only this login changes it. */
   function rulesText() {
     var me = "auth != null && auth.uid === '" + phone.uid + "'";
     return JSON.stringify({ rules: {
-      live: { $code: { '.read': true, '.write': me } },
-      requests: { $code: { '.read': me, '.write': me,
-        $req: {
-          '.write': "!data.exists() && root.child('live').child($code).child('wdOn').val() === true",
-          '.validate': "newData.hasChildren(['p', 'n'])",
-          p: { '.validate': 'newData.isString() && newData.val().length <= 12' },
-          n: { '.validate': 'newData.isString() && newData.val().length <= 60' },
-          $other: { '.validate': false }
-        } } }
+      live: { $code: { '.read': true, '.write': me } }
     } }, null, 2);
-  }
-
-  /* ---------- withdrawals from phones ----------
-     A player's phone can ask to withdraw: it adds a request under requests/<link code> (the rules allow it only while the
-     tournament says withdrawals are on). This device looks for requests every 10 seconds, chimes, and shows each one in a
-     pop-up that stays until the director answers: Withdraw (the same as Drop) or Keep in. Answers are kept with the
-     tournament (S.wd: request -> 'done', 'kept' or 'out') and go to phones in the summary; the request is then removed.
-     A player kept in can't ask again (S.wdNo: player -> 1): their phone loses the button, and any later request for them
-     is answered 'kept' at once, with no pop-up or chime. */
-  var WD = { rules: '', timer: null, busy: false, queue: [], warned: false };
-  function wdWanted() { return phoneLive() && prefs.withdraw !== false; }
-  function wdOn() { return wdWanted() && WD.rules === 'ok' && S.phase === 'active' && !S.rr; }
-  function reqURL(rid) { return 'https://' + phone.db + '/requests/' + phone.code + (rid ? '/' + rid : '') + '.json'; }
-  /* do the rules let this login read requests? Only the new rules do: that's how old rules are spotted */
-  function checkWdRules() {
-    return idToken().then(function (t) {
-      return fetch(reqURL() + '?shallow=true&auth=' + encodeURIComponent(t), { cache: 'no-store' });
-    }).then(function (r) {
-      var w = (r.status === 401 || r.status === 403) ? 'old' : (r.ok ? 'ok' : 'unknown');
-      if (w !== 'unknown') setWdRules(w);
-      return w;
-    }, function () { return 'unknown'; });
-  }
-  function setWdRules(w) {
-    if (WD.rules === w) return;
-    WD.rules = w;
-    schedulePublish(0);   /* phones show the Withdraw button only while this is 'ok' */
-    showPhoneStatus();
-    if (w === 'old' && !WD.warned && prefs.withdraw !== false) {
-      WD.warned = true;
-      toast('Players can\'t withdraw from their phones until you update the database rules: Menu › Phone view setup.');
-    }
-  }
-  function pollRequests() {
-    clearTimeout(WD.timer); WD.timer = null;
-    if (!wdWanted() || S.phase !== 'active' || WD.busy) return;   /* the next save or switch starts it again */
-    if (document.hidden) { WD.timer = setTimeout(pollRequests, 10000); return; }
-    WD.busy = true;
-    idToken().then(function (t) {
-      return fetch(reqURL() + '?auth=' + encodeURIComponent(t), { cache: 'no-store' });
-    }).then(function (r) {
-      if (r.status === 401 || r.status === 403) { setWdRules('old'); return; }
-      if (!r.ok) return;
-      return r.json().then(function (d) { setWdRules('ok'); takeRequests(d); });
-    }).catch(function () { /* offline: the next check catches up */ }).then(function () {
-      WD.busy = false;
-      if (wdWanted() && S.phase === 'active') WD.timer = setTimeout(pollRequests, WD.rules === 'old' ? 60000 : 10000);
-    });
-  }
-  /* A request belongs to this tournament only if it was sent after this tournament started (Firebase puts the time in each
-     request's id; 2 minutes' grace for clocks) by the player who has that number now. The link stays the same from one
-     tournament to the next while player numbers start again at 1, so an old request would otherwise pop up for someone else.
-     An old request is answered "out" with no pop-up. */
-  var PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
-  function pushTime(rid) {
-    var t = 0;
-    if (typeof rid !== 'string' || rid.length < 8) return 0;
-    for (var i = 0; i < 8; i++) { var k = PUSH_CHARS.indexOf(rid.charAt(i)); if (k < 0) return 0; t = t * 64 + k; }
-    return t;
-  }
-  function wdName(x) { return String(x === undefined || x === null ? '' : x).replace(/\s+/g, ' ').trim().toUpperCase(); }
-  function wdFresh(rid, q, p) {
-    var t = pushTime(rid);
-    if (t && S.startedAt && t < S.startedAt - 120000) return false;
-    var sent = wdName(q.n);
-    return !sent || sent === wdName(p.name.slice(0, 60));
-  }
-  function takeRequests(data) {
-    if (!data || typeof data !== 'object') return;
-    var fresh = false, changed = false;
-    if (!S.wd) S.wd = {};
-    Object.keys(data).forEach(function (rid) {
-      var q = data[rid] || {}, pid = parseInt(q.p, 10);
-      if (S.wd[rid]) { removeRequest(rid); return; }   /* answered already: just tidy up */
-      if (S.wdNo && S.wdNo[pid]) { S.wd[rid] = 'kept'; removeRequest(rid); changed = true; return; }   /* kept in before: no asking again */
-      if (WD.queue.some(function (x) { return x.rids.indexOf(rid) >= 0; })) return;
-      var p = P(pid);
-      if (!p || p.status !== 'active' || S.phase !== 'active' || !wdFresh(rid, q, p)) { S.wd[rid] = 'out'; removeRequest(rid); changed = true; return; }
-      var same = WD.queue.filter(function (x) { return x.pid === pid; })[0];
-      if (same) { same.rids.push(rid); return; }   /* a second tap from the same player joins the first */
-      WD.queue.push({ pid: pid, rids: [rid], at: now() });
-      fresh = true;
-    });
-    if (changed && save()) render();
-    if (fresh) chime();
-    maybeShowWd();
-  }
-  function removeRequest(rid) {
-    idToken().then(function (t) {
-      return fetch(reqURL(rid) + '?auth=' + encodeURIComponent(t), { method: 'DELETE' });
-    }).catch(function () { /* removed on a later check */ });
-  }
-  /* the answer, for every request in the item (the same player may have asked twice) */
-  function settleWd(item, outcome) {
-    if (!S.wd) S.wd = {};
-    item.rids.forEach(function (rid) { S.wd[rid] = outcome; removeRequest(rid); });
-    WD.queue = WD.queue.filter(function (x) { return x !== item; });
-  }
-  /* shows the oldest unanswered request when nothing else is on screen; it waits behind any pop-up already open */
-  function maybeShowWd() {
-    if (ui.modal) return;
-    while (WD.queue.length) {
-      var item = WD.queue[0], p = P(item.pid);
-      if (S.wd && item.rids.every(function (rid) { return S.wd[rid]; })) { WD.queue.shift(); continue; }   /* answered in another tab */
-      if (!p || p.status !== 'active' || S.phase !== 'active') { settleWd(item, 'out'); if (save()) render(); continue; }
-      openModal({ type: 'wd-req', item: item });
-      return;
-    }
-  }
-  function wdStatusText() {
-    if (prefs.withdraw === false) return 'Off: players tell you in person.';
-    if (!phoneLive()) return 'Works while phone view is on.';
-    if (WD.rules === 'old') return 'Needs the updated database rules: tap Phone view setup.';
-    return 'On: a request pops up here for you to confirm.';
-  }
-
-  /* ---------- the chime for a withdrawal request (it plays when this device's sound is on) ----------
-     Made here, with no sound file. Browsers play sound only after a tap on the page, so the first tap gets it ready. */
-  var AC = null;
-  function audioCtx() {
-    if (AC) return AC;
-    var C = window.AudioContext || window.webkitAudioContext;
-    if (!C) return null;
-    try { AC = new C(); } catch (e) { AC = null; }
-    return AC;
-  }
-  function unlockChime() {
-    if (!wdWanted()) return;   /* no sound set up on a device that never gets phone requests */
-    if (AC && AC.state === 'running') return;
-    var c = audioCtx();
-    if (!c) return;
-    try { if (c.state === 'suspended') c.resume(); } catch (e) { /* ignore */ }
-    try { var s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) { /* ignore */ }
-  }
-  function chime() {
-    var c = audioCtx();
-    if (!c) return;
-    try {
-      if (c.state === 'suspended') c.resume();
-      var t = c.currentTime + 0.03;
-      [[880, 0], [1318.5, 0.18], [1760, 0.36]].forEach(function (n) {   /* three rising notes */
-        var o = c.createOscillator(), g = c.createGain();
-        o.type = 'sine'; o.frequency.value = n[0];
-        g.gain.setValueAtTime(0.0001, t + n[1]);
-        g.gain.exponentialRampToValueAtTime(0.35, t + n[1] + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + n[1] + 0.6);
-        o.connect(g); g.connect(c.destination);
-        o.start(t + n[1]); o.stop(t + n[1] + 0.65);
-      });
-    } catch (e) { /* no sound here */ }
   }
 
   /* ---------- signing in (Firebase's sign-in service, called directly: no extra code to load) ---------- */
@@ -3500,7 +3495,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var body;
     try { body = JSON.stringify(viewModel()); } catch (e) { PUB.busy = false; return; }
     sendToDB('PUT', body).then(function (r) {
-      if (r.ok) { PUB.state = 'ok'; PUB.err = ''; PUB.lastOk = now(); if (wdWanted() && !WD.timer && !WD.busy) pollRequests(); }
+      if (r.ok) { PUB.state = 'ok'; PUB.err = ''; PUB.lastOk = now(); }
       else if (r.status === 401 || r.status === 403) { PUB.state = 'refused'; PUB.err = ''; }
       else if (r.status === 404) { PUB.state = 'failed'; PUB.err = 'Firebase can\'t find that database. Check the database address in setup.'; }
       else { PUB.state = 'failed'; PUB.err = 'Firebase answered with error ' + r.status + '.'; }
@@ -3521,7 +3516,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!phoneLive() || S.phase !== 'active' || PUB.busy || document.hidden) return;
     if (PUB.state !== 'ok') { publishNow(); return; }
     sendToDB('PATCH', JSON.stringify({ hb: now(), end: phoneEnd() })).then(function (r) { if (r.ok) { PUB.lastOk = now(); showPhoneStatus(); } }, function () { /* the next save or heartbeat tries again */ });
-    if (wdWanted() && !WD.timer && !WD.busy) pollRequests();
   }
   function phoneStatus() {
     if (!phoneReady()) return { cls: '', txt: 'Not set up yet.' };
@@ -3539,10 +3533,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var st = phoneStatus(), dot = document.getElementById('qr-dot');
     if (dot) dot.className = 'pdot ' + st.cls;
     ['phone-status', 'qr-status'].forEach(function (id) { var el = document.getElementById(id); if (el) el.textContent = st.txt; });
-    var ws = document.getElementById('wd-status');
-    if (ws) ws.textContent = wdStatusText();
-    var wq = document.getElementById('qr-wd');
-    if (wq) wq.hidden = !(wdWanted() && WD.rules === 'old');
   }
 
   /* ---------- what phones get: everything the phone page shows, worked out here ---------- */
@@ -3625,8 +3615,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       rr: null, rounds: null, colors: colors,
       tiers: E.winTiers(S, 2).map(function (t) { return { ids: t.ids, w: t.wins }; }),   /* the most wins and 2nd most, as on the TV */
       end: phoneEnd(),                                                                    /* the finish time, when it shows on the TV */
-      wdOn: wdOn(), wd: S.wd || {}, wdNo: S.wdNo || {},                                   /* phone withdrawals: allowed now, the answers, who can't ask again */
-      sa: S.startedAt || 0,                                                               /* which tournament this is (phones forget requests from earlier ones) */
+      sa: S.startedAt || 0,                                                               /* when this tournament started: match history times count from it */
       mh: histVM(), sh: shootVM(),                                                        /* every finished match, and a finished shootout: players' match history */
       pz: E.isPaused(S) ? S.pause.at : 0, pzs: (S.pauses || []).slice()                  /* paused since (0 when playing), and the pauses that ended: match clocks count play only */
     };
@@ -3665,8 +3654,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       '<p class="muted" style="margin:6px 0 0;font-size:.9em">Lets players follow the tournament live on their phones. Needs internet on this device and a free Firebase project.</p>';
     return '<div class="grp">Phone view</div><label class="opt" for="phone-opt"><input id="phone-opt" type="checkbox" data-act="phone-toggle"' + (phone.on ? ' checked' : '') + '>' +
       '<span><b>Send updates to phones</b><small id="phone-status">' + esc(phoneStatus().txt) + '</small></span></label>' +
-      '<label class="opt" for="wd-opt"><input id="wd-opt" type="checkbox" data-act="wd-toggle"' + (prefs.withdraw !== false ? ' checked' : '') + '>' +
-      '<span><b>Let players withdraw from their phones</b><small id="wd-status">' + esc(wdStatusText()) + '</small></span></label>' +
       '<div class="stack"><button class="btn" data-act="qr-open">Show the QR code</button><button class="btn" data-act="phone-open-page">Open the phone page</button><button class="btn" data-act="phone-setup">Phone view setup</button></div>';
   }
 
@@ -3676,8 +3663,11 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function dn(s) { return String(s).toUpperCase(); }
   var capKey = null, capRe = null;
   function capNames(text) {
+    try { return capNames1(text); } catch (e) { return String(text); }   /* a message must always get through */
+  }
+  function capNames1(text) {
     /* capitalise any player name that appears inside a sentence the engine wrote (log lines, undo labels, notes) */
-    var names = S.players.map(function (p) { return p.name; }).filter(function (n) { return n && n.toUpperCase() !== n; });
+    var names = S.players.map(function (p) { return String(p.name); }).filter(function (n) { return n && n.toUpperCase() !== n; });
     var key = names.join('\u0001');
     if (key !== capKey) {
       capKey = key;
@@ -3767,10 +3757,25 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function commit() { if (!save()) return false; render(); return true; }
 
   function render() {
+    try { renderScreen(); }
+    catch (e) {
+      /* Something on this screen failed. Rather than a blank page with no way out, a plain screen with the ways out:
+         Undo, a backup file, starting over. */
+      try { if (window.console) console.error(e); } catch (e2) { /* ignore */ }
+      app.innerHTML = '<main class="wrap"><div class="banner info" role="alert"><span>This screen couldn\'t be drawn' + (S && S.undo && S.undo.length ? '. Undo usually fixes it.' : '.') +
+        ' <small class="muted">(' + esc(String(e && e.message || e).slice(0, 160)) + ')</small></span></div><div class="row-actions" style="justify-content:flex-start">' +
+        (S && S.undo && S.undo.length ? '<button class="btn primary" data-act="undo">Undo</button>' : '') +
+        '<button class="btn" data-act="export-json">Export backup file</button><button class="btn danger" data-act="newc-open" data-keep="0">Clear everything</button></div>' +
+        '<p class="muted app-ver">Chip tournament ' + esc(APP_VERSION) + '</p></main>';
+    }
+  }
+  function renderScreen() {
     RUNS = E.runs(S);
     var active = document.activeElement, keepId = active && active.id, selStart = null, selEnd = null;
     try { if (active && active.selectionStart !== undefined) { selStart = active.selectionStart; selEnd = active.selectionEnd; } } catch (e) { /* number inputs */ }
     var html = headerHTML() + '<main class="wrap">' + (ui.saveOK ? '' : '<div class="banner info">This browser is not saving automatically. Use Menu, then Export backup, so you do not lose the tournament.</div>');
+    if (ui.damaged) html += '<div class="banner info" role="alert"><span>The tournament saved in this browser couldn\'t be opened (its saved copy is damaged), so this is a new one. The damaged copy was kept: download it to keep it safe.</span>' +
+      '<span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary small" data-act="damaged-download">Download it</button><button class="btn small" data-act="damaged-discard">Discard it</button></span></div>';
     if (S.phase === 'registration') html += regHTML(); else html += activeHTML();
     html += '</main>';
     app.innerHTML = html;
@@ -3779,7 +3784,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var el = document.getElementById(keepId);
       if (el && !ui.modal) { el.focus(); try { if (selStart !== null) el.setSelectionRange(selStart, selEnd); } catch (e) { /* ignore */ } }
     }
-    layout();
+    try { layout(); } catch (e) { try { if (window.console) console.error(e); } catch (e2) { /* ignore */ } }   /* sizes are a nicety: the screen works without them */
   }
 
   /* ---------- wide-screen (TV) layout ----------
@@ -4036,9 +4041,22 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     /* one absurdly long name must not shrink the whole list: sizes are chosen for ordinary names, long ones are shrunk on their own below */
     for (var j = 0; j < all.length; j++) if (all[j].firstChild.textContent.length <= LONG_NAME) names.push(all[j]);
     var etas = [].slice.call(ol.querySelectorAll('.eta')), rows = [].slice.call(ol.querySelectorAll('.who')), wide = names.concat(rows);
-    var avail = window.innerHeight - TV_PAD - (ol.getBoundingClientRect().top + window.pageYOffset);
-    var cols = 0, seen = {}, pre = {}, whole = {}, widthFirst = false;
+    var olTop = ol.getBoundingClientRect().top + window.pageYOffset, avail = window.innerHeight - TV_PAD - olTop;   /* nothing below changes where the list starts */
+    var cols = 0, seen = {}, pre = {}, widthFirst = false, rh = {};
     function setCols(c) { cols = c; ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c)); }
+    /* The height of one player's row when every row is the same height (the usual case: nobody has a "Just lost to" line),
+       or 0. Rows stretch to the tallest one beside them, so it is each row's two parts (the number and the name block) that
+       are compared. With one height, the list is simply that many rows of it: see the cut-down list below. */
+    function rowHeight() {
+      var li = ol.children, ph = 0, wh = 0;
+      for (var y = 0; y < n; y++) {
+        var a = li[y].firstElementChild, b = li[y].lastElementChild;
+        if (!a || !b || a === b) return 0;
+        var ah = a.getBoundingClientRect().height, bh = b.getBoundingClientRect().height;
+        if (!y) { ph = ah; wh = bh; } else if (ah !== ph || bh !== wh) return 0;
+      }
+      return n ? li[0].getBoundingClientRect().height : 0;
+    }
     /* a size works when the list fits the screen's height, every wait line fits at full size,
        and every name (with its chips beside it) fits across its column at 72% or more of that size.
        Each column count and size is measured once; the check most likely to fail goes first, and while the list is laid out at a size
@@ -4046,6 +4064,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     function tall() {
       var v = ol.style.getPropertyValue('--wl'), ok = !(ol.scrollHeight > avail || overflowX(etas));
       if (ok || v === WL_MIN + 'rem') pre[cols + '|' + v] = widths(all);
+      if (v === WL_MIN + 'rem' && rh[cols] === undefined) rh[cols] = rowHeight();   /* already laid out: kept for the cut-down list */
       return ok;
     }
     function narrow() { ol.classList.add('probe'); var ok = !overflowX(wide); ol.classList.remove('probe'); return ok; }
@@ -4105,12 +4124,34 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         }
         return a;
       };
-      var cut = null;
-      for (var c = 4; c >= 1; c--) {
-        ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c)); show(n); cols = c;
-        if (c > 1 && !narrow()) continue;   /* names too squeezed at this many columns */
-        var rf = rowsThatFit(c);
-        if (!cut || rf * c > cut.rows * cut.cols) cut = { cols: c, rows: rf };
+      /* the same count when every row has one height h: rows of h that fit between the list's top and the "+N more" line */
+      var rowsOf = function (c, h) {
+        var b = Math.ceil(n / c), r = Math.max(0, Math.min(b, Math.floor((room - olTop) / h)));
+        while (r < b && olTop + (r + 1) * h <= room) r++;
+        while (r > 0 && olTop + r * h > room) r--;
+        return r;
+      };
+      var cut = null, c;
+      /* The usual case, rows of one height (measured above while the sizes were tried, so no extra layout): the rows that fit
+         are worked out for every column count at once, and the names are checked only for the column counts that could still
+         show the most players. The answer is the one the search below gives (it ran for every column count, five to seven
+         layouts each); with rows of different heights the search runs as before. */
+      for (c = 4; c >= 1; c--) if (rh[c] === undefined) { setCols(c); show(n); rh[c] = rowHeight(); }
+      if (rh[1] > 0 && rh[2] > 0 && rh[3] > 0 && rh[4] > 0) {
+        var cand = [4, 3, 2, 1].map(function (k) { return { c: k, rf: rowsOf(k, rh[k]) }; });
+        cand.sort(function (x, y) { return y.rf * y.c - x.rf * x.c || y.c - x.c; });   /* most shown first; on a tie, more columns (as the search did) */
+        for (var q = 0; q < cand.length && !cut; q++) {
+          setCols(cand[q].c); show(n);
+          if (cand[q].c > 1 && !narrow()) continue;   /* names too squeezed at this many columns */
+          cut = { cols: cand[q].c, rows: cand[q].rf };
+        }
+      } else {
+        for (c = 4; c >= 1; c--) {
+          ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c)); show(n); cols = c;
+          if (c > 1 && !narrow()) continue;   /* names too squeezed at this many columns */
+          var rf = rowsThatFit(c);
+          if (!cut || rf * c > cut.rows * cut.cols) cut = { cols: c, rows: rf };
+        }
       }
       best = { cols: cut.cols, rows: Math.max(1, cut.rows), s: WL_MIN };
       var shown = Math.min(n, cut.rows * cut.cols);
@@ -4200,7 +4241,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var h = '<div class="reg"><section><h1 class="hero">Who is playing?</h1>';
     h += '<p class="muted">Add everyone, set their starting chips, then draw and start. Matches are thrown at random.</p>';
     h += '<form class="addrow" data-form="add" autocomplete="off">' +
-      '<div class="field grow"><label for="name-in">Player name</label><input id="name-in" name="name" class="input" value="' + esc(ui.draftName) + '" data-input="name" autocapitalize="words" enterkeyhint="done"></div>' +
+      '<div class="field grow"><label for="name-in">Player name</label><input id="name-in" name="name" class="input" maxlength="' + E.MAX_NAME + '" value="' + esc(ui.draftName) + '" data-input="name" autocapitalize="words" enterkeyhint="done"></div>' +
       '<div class="field"><span class="lbl">Starting chips</span><div class="stepper"><button type="button" data-act="def-dec" aria-label="One fewer chip">&minus;</button><output>' + S.defaultChips + '</output><button type="button" data-act="def-inc" aria-label="One more chip">+</button></div></div>' +
       '<button class="btn primary big" type="submit">Add player</button></form>';
     h += '<button class="btn small" data-act="batch-open">Paste a list of names</button>';
@@ -4723,7 +4764,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ui.modal = null; ui.shownType = null; modalRoot.innerHTML = '';
     if (ui.lastFocus && document.body.contains(ui.lastFocus)) { try { ui.lastFocus.focus(); } catch (e) { /* ignore */ } }
     ui.lastFocus = null;
-    setTimeout(maybeShowWd, 0);   /* a withdrawal request that came in meanwhile */
   }
   function modalErr(msg) { var el = modalRoot.querySelector('.err'); if (el) el.textContent = msg; }
 
@@ -4850,9 +4890,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       case 'edit': {
         var p = P(m.id);
         h = shell('Edit ' + esc(dn(p.name)),
-          '<form data-form="edit" data-id="' + p.id + '"><div class="field"><label for="e-name">Name</label><input id="e-name" name="name" class="input" value="' + esc(p.name) + '" data-autofocus></div>' +
-          '<div style="display:flex;gap:12px;margin-top:10px"><div class="field" style="flex:1"><label for="e-c">Chips remaining</label><input id="e-c" name="C" class="input" type="number" min="0" inputmode="numeric" value="' + p.C + '"></div>' +
-          '<div class="field" style="flex:1"><label for="e-s">Starting chips</label><input id="e-s" name="S" class="input" type="number" min="1" inputmode="numeric" value="' + p.S + '"></div></div>' +
+          '<form data-form="edit" data-id="' + p.id + '"><div class="field"><label for="e-name">Name</label><input id="e-name" name="name" class="input" maxlength="' + Math.max(E.MAX_NAME, p.name.length) + '" value="' + esc(p.name) + '" data-autofocus></div>' +
+          '<div style="display:flex;gap:12px;margin-top:10px"><div class="field" style="flex:1"><label for="e-c">Chips remaining</label><input id="e-c" name="C" class="input" type="number" min="0" max="' + E.MAX_CHIPS + '" inputmode="numeric" value="' + p.C + '"></div>' +
+          '<div class="field" style="flex:1"><label for="e-s">Starting chips</label><input id="e-s" name="S" class="input" type="number" min="1" max="' + E.MAX_CHIPS + '" inputmode="numeric" value="' + p.S + '"></div></div>' +
           '<p class="muted">Setting chips remaining to 0 eliminates the player.</p><p class="err" role="alert"></p>' +
           '<div class="actions"><button type="button" class="btn danger" data-act="drop-open" data-id="' + p.id + '" style="margin-right:auto">Drop from tournament</button>' + CANCEL + '<button class="btn primary" type="submit">Save</button></div></form>');
         break;
@@ -4868,7 +4908,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       case 'reinstate': {
         var rp = P(m.id);
         h = shell('Reinstate ' + esc(dn(rp.name)),
-          '<form data-form="reinstate" data-id="' + rp.id + '"><div class="field"><label for="r-chips">Chips to give back</label><input id="r-chips" name="chips" class="input" type="number" min="1" inputmode="numeric" value="1" data-autofocus></div>' +
+          '<form data-form="reinstate" data-id="' + rp.id + '"><div class="field"><label for="r-chips">Chips to give back</label><input id="r-chips" name="chips" class="input" type="number" min="1" max="' + E.MAX_CHIPS + '" inputmode="numeric" value="1" data-autofocus></div>' +
           '<p class="muted">They go to the bottom of the waitlist.</p><p class="err" role="alert"></p><div class="actions">' + CANCEL + '<button class="btn primary" type="submit">Reinstate</button></div></form>');
         break;
       }
@@ -4908,28 +4948,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         h = shell(esc(m.title), '<p>' + esc(m.text) + '</p><p class="err" role="alert"></p>',
           '<button type="button" class="btn" data-act="m-close">Cancel</button><button type="button" class="btn ' + (m.danger ? 'danger' : 'primary') + '" data-act="cf-yes" data-autofocus>' + esc(m.ok) + '</button>');
         break;
-      case 'wd-req': {
-        /* a player asked to withdraw from their phone: it stays until the director answers (no Cancel, Escape or tap outside) */
-        var it = m.item, wp = P(it.pid), wn = esc(dn(wp.name)), canDrop = S.phase === 'active' && !S.rr && wp.status === 'active' && E.activeCount(S) > 1;
-        var wt = S.tables.filter(function (t) { return t.a === wp.id || t.b === wp.id; })[0];
-        var opp = wt && wt.a && wt.b ? P(wt.a === wp.id ? wt.b : wt.a) : null;
-        h = shell('Withdrawal request',
-          '<p class="wd-who"><b>' + wn + '</b> asked to withdraw from their phone at ' + E.fmtTime(it.at) + '.</p>' +
-          '<p>Right now: ' + esc(whereText(wp.id) || 'still in') + (opp ? ', playing ' + esc(dn(opp.name)) + '. ' + esc(dn(opp.name)) + ' would wait for a new challenger.' : '.') + '</p>' +
-          (canDrop ? '<p>If they withdraw, they finish ' + E.ordinal(E.activeCount(S)) + ', marked dropped.</p>'
-            : '<p>' + (S.rr ? 'Players can\'t be dropped during the round robin playoff, so talk to them in person.' : 'They can\'t be dropped right now.') + '</p>') +
-          '<p>If you keep them in, they can\'t ask again from their phone.</p>' +
-          '<p class="muted">Anyone with the phone link can send a request, so check with them if you can.</p><p class="err" role="alert"></p>',
-          '<button type="button" class="btn" data-act="wd-keep">Keep ' + wn + ' in</button>' + (canDrop ? '<button type="button" class="btn danger" data-act="wd-drop" data-autofocus>Withdraw ' + wn + '</button>' : ''));
-        break;
-      }
       case 'qr': {
         if (!phone.page || !phone.code) { ui.modal = null; modalRoot.innerHTML = ''; return; }
         var plink = phoneLink();
         h = shell('Follow on your phone', '<div class="qr-wrap"><div class="qr-box">' + qrSVG(plink) + '</div>' +
           '<p class="qr-say">Point your phone camera here to see the tables, the waitlist and your wait, live.</p>' +
           '<p class="qr-url">' + esc(plink) + '</p><p class="muted" id="qr-status">' + esc(phoneStatus().txt) + '</p>' +
-          '<p class="qr-check warn" id="qr-wd"' + (wdWanted() && WD.rules === 'old' ? '' : ' hidden') + '>Players can\'t withdraw from their phones until the database rules are updated: Menu › Phone view setup.</p>' +
           '<p id="qr-pagecheck" class="qr-check ' + pageCheckText(PAGECHECK.busy ? null : PAGECHECK.res).cls + '">' + esc(pageCheckText(PAGECHECK.busy ? null : PAGECHECK.res).txt) + '</p></div>',
           '<button class="btn" data-act="phone-open-page">Open it here</button><button class="btn primary" data-act="m-close" data-autofocus>Done</button>');
         break;
@@ -4939,17 +4963,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
            database is found from the login, and the phone page is this app's own address.
            Signed in: status, link code, and what's missing if the last check found something (the rules, mostly). */
         var signed = !!(phone.refresh && phone.apiKey), autoP = autoPage(), issue = m.issue || '';
-        if (!issue && signed && phone.on && wdWanted() && WD.rules === 'old') { issue = 'wdrules'; m.wdShown = true; }   /* rules from before phone withdrawals */
         var pageVal = m.page !== undefined ? m.page : (autoP || phone.page);
         var dbVal = m.db !== undefined ? m.db : (phone.db ? 'https://' + phone.db : '');
         var issueHTML = '';
         if (issue === 'refused') issueHTML = '<div class="ph-issue"><b>One more step: Firebase refused the test update.</b>' +
           '<p>In Firebase, open Databases &amp; Storage › Realtime Database › Rules. Replace everything there with these rules, tap Publish, then tap Check again here.</p>' +
           '<textarea class="input mono" rows="8" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
-          '<div class="stack"><button type="button" class="btn" data-act="ph-copy-rules">Copy the rules</button></div></div>';
-        else if (issue === 'wdrules') issueHTML = '<div class="ph-issue"><b>One more step lets players withdraw from their phones.</b>' +
-          '<p>In Firebase, open Databases &amp; Storage › Realtime Database › Rules. Replace everything there with these rules, tap Publish, then tap Check again here. Phone view keeps working in the meantime.</p>' +
-          '<textarea class="input mono" rows="10" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
           '<div class="stack"><button type="button" class="btn" data-act="ph-copy-rules">Copy the rules</button></div></div>';
         else if (issue === 'nodb') issueHTML = '<div class="ph-issue"><b>Couldn\'t find your database by itself.</b>' +
           '<p>Copy its address from the top of Firebase › Realtime Database (like https://name-default-rtdb.firebaseio.com) into Database address below, then tap Check again.</p></div>';
@@ -4960,7 +4979,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
           '<div class="field"><label for="ph-db">Database address</label><input id="ph-db" class="input mono" type="url" autocapitalize="off" spellcheck="false" placeholder="Found by itself when you sign in" value="' + esc(dbVal) + '" data-input="ph-db"></div>' +
           '<div class="field" style="margin-top:8px"><label for="ph-page">Phone page address</label><input id="ph-page" class="input" type="url" autocapitalize="off" spellcheck="false" placeholder="https://yourname.github.io/chip/" value="' + esc(pageVal) + '" data-input="ph-page"></div>' +
           '<p class="muted"><small>' + (autoP ? 'This app is running from ' + esc(autoP) + ', so players open that address.' : 'This copy is running from this device, so enter the address where players open the phone page.') + '</small></p>' +
-          (signed && issue !== 'refused' && issue !== 'wdrules' ? '<p class="muted" style="margin:12px 0 4px"><small>Database rules, needed once per Firebase project:</small></p>' +
+          (signed && issue !== 'refused' ? '<p class="muted" style="margin:12px 0 4px"><small>Database rules, needed once per Firebase project:</small></p>' +
             '<textarea class="input mono" rows="6" readonly id="ph-rules">' + esc(rulesText()) + '</textarea>' +
             '<div class="stack"><button type="button" class="btn small" data-act="ph-copy-rules">Copy the rules</button></div>' : '') +
           '</details>';
@@ -4979,7 +4998,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
           h = shell('Phone view setup',
             '<p>Signed in as <b>' + esc(phone.email) + '</b>. <button type="button" class="btn small" data-act="ph-signout">Sign out</button></p>' +
             issueHTML +
-            (!issue || issue === 'wdrules' ? '<p class="muted" id="phone-status">' + esc(phoneStatus().txt) + '</p>' : '') +
+            (!issue ? '<p class="muted" id="phone-status">' + esc(phoneStatus().txt) + '</p>' : '') +
             (phone.code ? '<p class="muted">Link code <b class="mono">' + esc(phone.code) + '</b> <button type="button" class="btn small" data-act="ph-newcode">New link</button><br><small>A new link makes old QR codes and saved links show nothing.</small></p>' : '') +
             '<p class="err" role="alert"></p>' + adv +
             '<div class="stack"><button type="button" class="btn danger" data-act="ph-forget">Turn off and forget this setup</button></div>',
@@ -5095,22 +5114,30 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
 
   /* ---------- batch parsing ---------- */
+  /* One player per line. A line is cut at BATCH_LINE before it is read: no name is anywhere near that long, and the
+     patterns below slow down sharply on a very long line (a whole page pasted as one line used to freeze the screen on
+     every keystroke). Reading stops past the most players a tournament can hold. */
+  var BATCH_LINE = 200;
   function parseBatch(text) {
     var out = [];
-    String(text).split(/\r?\n/).forEach(function (raw) {
+    String(text).split(/\r?\n/).some(function (raw) {
       var line = raw.trim();
-      if (!line) return;
+      if (!line) return false;
+      if (line.length > BATCH_LINE) line = line.slice(0, BATCH_LINE);
       var mt = line.match(/^(.*?)\s*[,;:\t]\s*(\d+)\s*(?:chips?)?$/i) || line.match(/^(.*?)\s*\(\s*(\d+)\s*(?:chips?)?\s*\)$/i) || line.match(/^(.*\D)\s+(\d+)\s*(?:chips?)?$/i);
       if (mt && mt[1].trim()) out.push({ name: mt[1].trim(), chips: parseInt(mt[2], 10) });
       else out.push({ name: line.replace(/[,;:]+$/, '').trim(), chips: S.defaultChips });
+      return out.length > E.MAX_PLAYERS;
     });
     return out;
   }
   function batchPreview(text) {
     var list = parseBatch(text);
     if (!list.length) return 'No names yet.';
-    return plural(list.length, 'player') + ': ' + list.slice(0, 6).map(function (p) { return esc(dn(p.name)) + ' (' + p.chips + ')'; }).join(', ') + (list.length > 6 ? ', and ' + (list.length - 6) + ' more' : '');
+    return (list.length > E.MAX_PLAYERS ? 'More than ' + E.MAX_PLAYERS + ' players (the most a tournament can have)' : plural(list.length, 'player')) + ': ' +
+      list.slice(0, 6).map(function (p) { return esc(dn(shortName(p.name))) + ' (' + p.chips + ')'; }).join(', ') + (list.length > 6 ? ', and ' + (list.length - 6) + ' more' : '');
   }
+  function shortName(n) { n = String(n); return n.length > E.MAX_NAME ? n.slice(0, E.MAX_NAME) + '…' : n; }
 
   /* ---------- files ---------- */
   function download(name, text, mime) {
@@ -5145,7 +5172,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     maybePrompt();
   }
   function maybePrompt() {
-    if (!ui.modal && WD.queue.length) maybeShowWd();
     if (ui.modal || S.phase !== 'active') return;
     /* the playoff rounds are down to three players: offer the round robin playoff once (the banner stays after "Not now") */
     var po = E.playoffCandidates(S);
@@ -5239,7 +5265,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       list.forEach(function (p) { var r = E.addPlayer(S, p.name, p.chips); if (r.ok) added++; else skipped.push(p.name); });
       if (!list.length) { modalErr('Type or paste at least one name.'); return; }
       ui.batchText = ''; closeModal();
-      if (commit()) toast('Added ' + plural(added, 'player') + (skipped.length ? '. Skipped ' + skipped.length + ' that could not be added: ' + skipped.slice(0, 3).map(dn).join(', ') : ''));
+      var full = S.players.length >= E.MAX_PLAYERS;
+      if (commit()) toast('Added ' + plural(added, 'player') + (skipped.length ? '. Skipped ' + skipped.length + (full ? ' or more' : '') + ' that could not be added: ' + skipped.slice(0, 3).map(function (n) { return dn(shortName(n)); }).join(', ') : '') +
+        (full && skipped.length ? '. A tournament can have up to ' + E.MAX_PLAYERS + ' players.' : ''), skipped.length ? { bad: true } : null);
     },
     'start-open': function () { openModal({ type: 'start' }); },
     'start-go': function () {
@@ -5418,6 +5446,20 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     'csv-log': function () { closeModal(); download(fileStem() + '-log-' + stamp() + '.csv', E.logCSV(S), 'text/csv'); },
     'export-json': function () { closeModal(); download(fileStem() + '-backup-' + stamp() + '.json', backupText(), 'application/json'); toast('Backup file downloaded, with the colors'); },   /* without the Undo history */
     'import-pick': function () { fileInput.value = ''; fileInput.click(); },
+    /* the saved tournament that couldn't be opened (see load) */
+    'damaged-download': function () {
+      var raw = ui.damagedRaw;
+      try { raw = raw || localStorage.getItem(DAMAGED_KEY); } catch (e) { /* only the copy in memory */ }
+      if (!raw) { toast('The damaged copy is no longer here.', { bad: true }); ui.damaged = false; render(); return; }
+      download('chip-tournament-damaged-' + stamp() + '.json', raw, 'application/json');
+      toast('Downloaded. Keep the file: it may be possible to repair it.');
+    },
+    'damaged-discard': function () {
+      askConfirm({ title: 'Discard the damaged copy?', text: 'The tournament that couldn\'t be opened will be gone for good. Download it first if you might need it.', ok: 'Discard it', danger: true }, function () {
+        try { localStorage.removeItem(DAMAGED_KEY); } catch (e) { /* ignore */ }
+        ui.damaged = false; ui.damagedRaw = null; render();
+      });
+    },
     'newc-open': function (el) { openModal({ type: 'newc', keep: el.dataset.keep === '1' }); },
     'newc-go': function (el) {
       var keep = el.dataset.keep === '1', old = S, s = E.newState();
@@ -5436,36 +5478,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       toast(prefs.showEnd ? (endText() ? 'Showing the estimated finish time.' : 'The estimated finish time shows once the tournament is running.') : 'Estimated finish time hidden.');
     },
     /* phone view */
-    'phone-setup': function () {
-      openModal({ type: 'phone-setup' });
-      if (phone.refresh && wdWanted()) checkWdRules().then(function () { if (ui.modal && ui.modal.type === 'phone-setup' && !ui.modal.issue) renderModal(); });
-    },
-    /* the answer to a withdrawal request from a phone */
-    'wd-drop': function () {
-      var m = ui.modal;
-      if (!m || m.type !== 'wd-req') return;
-      var it = m.item, p = P(it.pid), hadPr = !!S.pr, before = tableKeys();
-      var r = E.dropPlayer(S, it.pid, now(), 'phone');
-      if (r.error) { modalErr(r.error); return; }
-      settleWd(it, 'done');
-      var msg = p.name + ' withdrew and finishes ' + (E.isTied(p) ? 'tied for ' : '') + E.placeText(p) + '.' + (!hadPr && S.pr ? ' Playoff rounds: ' + E.activeCount(S) + ' players left, so auto-throw has stopped.' : '') + seatedNote(before);
-      if (S.phase === 'finished') msg = p.name + ' withdrew. ' + P(S.champion).name + ' wins the tournament';
-      closeModal(); afterChange({ toast: msg, undo: true });
-    },
-    'wd-keep': function () {
-      var m = ui.modal;
-      if (!m || m.type !== 'wd-req') return;
-      var p = P(m.item.pid);
-      if (!S.wdNo) S.wdNo = {};
-      S.wdNo[m.item.pid] = 1;   /* no asking again from a phone */
-      settleWd(m.item, 'kept');
-      closeModal(); afterChange({ toast: (p ? p.name : 'They') + ' stays in and can\'t ask again from their phone.' });
-    },
-    'wd-toggle': function (el) {
-      prefs.withdraw = !!el.checked; savePrefs();
-      schedulePublish(0); pollRequests(); renderModal();
-      toast(prefs.withdraw ? (WD.rules === 'old' ? 'Turned on. Players can withdraw once the database rules are updated (Phone view setup).' : 'Players can ask to withdraw from their phones. You confirm each one.') : 'Players can\'t withdraw from their phones now.');
-    },
+    'phone-setup': function () { openModal({ type: 'phone-setup' }); },
     'ph-signin': function (el) {
       var m = ui.modal;
       if (!m) return;
@@ -5480,7 +5493,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       m.email = email; el.disabled = true; el.textContent = 'Signing in…'; modalErr('');
       signIn(apiKey, email, pw).then(function () {
         el.textContent = 'Connecting…';
-        return connectAndCheck(m);
+        return phoneConnect(m);
       }).then(function (res) { afterConnect(m, res); }, function (e) {
         el.disabled = false; el.textContent = 'Sign in and turn on';
         modalErr(e instanceof TypeError ? 'Couldn\'t reach Firebase. Check this device is online.' : ((e && e.message) || 'Sign-in didn\'t work.'));
@@ -5513,12 +5526,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var m = ui.modal;
       if (!m) return;
       el.disabled = true; el.textContent = 'Checking…'; modalErr('');
-      connectAndCheck(m).then(function (res) { afterConnect(m, res); });
+      phoneConnect(m).then(function (res) { afterConnect(m, res); });
     },
     'phone-toggle': function (el) {
       phone.on = !!el.checked; savePhone(); PUB.state = 'idle';
       render(); renderModal();
-      if (phone.on) { schedulePublish(0); pollRequests(); }
+      if (phone.on) schedulePublish(0);
       toast(phone.on ? 'Phone view is on.' : 'Phone view is off. Phones keep showing the last update they got.');
     },
     'qr-open': function () {
@@ -5530,6 +5543,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var link = phoneLink(), w = null;
       try { w = window.open(link, '_blank'); } catch (e) { w = null; }
       if (!w) copyText(link, 'Phone page link');
+      else { try { w.opener = null; } catch (e) { /* ignore */ } }   /* the new tab gets no handle back to this one */
     },
     'wake-toggle': function (el) {
       prefs.keepAwake = !!el.checked; savePrefs();
@@ -5569,7 +5583,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     },
     'toast-close': function () { clearTimeout(ui.toastTimer); toastRoot.innerHTML = ''; },
     'm-close': function () { closeModal(); },
-    scrim: function (el, e) { if (e.target === el && !(ui.modal && ui.modal.type === 'wd-req')) closeModal(); }
+    scrim: function (el, e) { if (e.target === el) closeModal(); }
   };
 
   var forms = {
@@ -5699,7 +5713,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (k === 'pr-opt' && S.playoffRounds !== !!e.target.checked) { S.playoffRounds = !!e.target.checked; commit(); }
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && ui.modal && ui.modal.type !== 'wd-req') closeModal();
+    if (e.key === 'Escape' && ui.modal) closeModal();
     if ((e.key === 'Enter' || e.key === ' ') && e.target.getAttribute && e.target.getAttribute('role') === 'button' && e.target.hasAttribute('data-act')) {
       e.preventDefault();
       var fn = actions[e.target.getAttribute('data-act')];
@@ -5709,12 +5723,21 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   fileInput.addEventListener('change', function () {
     var f = fileInput.files && fileInput.files[0];
     if (!f) return;
+    /* a backup for a whole night is well under a megabyte: anything this big isn't one, and reading it could freeze the app */
+    if (f.size > E.MAX_FILE) { toast('That file is too big to be a tournament backup.', { bad: true }); return; }
     var rd = new FileReader();
+    rd.onerror = function () { toast('That file couldn\'t be read.', { bad: true }); };
     rd.onload = function () {
       var s, cols;
-      try { s = E.deserialize(String(rd.result)); } catch (err) { toast('That file is not a tournament backup.', { bad: true }); return; }
+      try { s = E.deserialize(String(rd.result)); }
+      catch (err) {
+        toast(err && err.damaged ? 'That backup is damaged (' + String(err.message).replace(/^This tournament is damaged: /, '') + '), so it wasn\'t loaded.' : 'That file is not a tournament backup.', { bad: true });
+        return;
+      }
+      s.undo = [];   /* backups never carry Undo steps; a file that does was made elsewhere, and its steps can't be trusted */
       cols = backupColors(s);
       delete s.colors;   /* the colors are this device's setting, not part of the tournament */
+      delete s.wd; delete s.wdNo;   /* answers to players' withdrawal requests, from versions that had them */
       askConfirm({ title: 'Load this backup?', text: 'Replace the current tournament with this backup (' + plural(s.players.length, 'player') + ')?' +
         (cols ? ' Its colors replace the colors on this device too.' : ''), ok: 'Replace', danger: true }, function () {
         ui.rev = readRev();   /* a backup replaces whatever is saved, even a newer version from another tab */
@@ -5762,9 +5785,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   holdWake();
   /* phone view: catch phones up after a reload, keep them posted while playing, and retry as soon as the internet is back */
   if (phoneLive() && S.phase !== 'registration') schedulePublish(1500);
-  if (wdWanted()) setTimeout(function () { checkWdRules(); pollRequests(); }, 2500);   /* the rules are checked even before a tournament starts */
-  document.addEventListener('pointerdown', unlockChime, true);
-  document.addEventListener('keydown', unlockChime, true);
   setInterval(heartbeat, 60000);
   window.addEventListener('online', function () { if (phoneLive()) schedulePublish(500); });
 })();
