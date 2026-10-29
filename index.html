@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA32">
+<meta name="chip-version" content="ALPHA33">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -323,6 +323,14 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 .qr-check.ok { color: var(--chalk); background: color-mix(in srgb, #3fcf7f 16%, transparent); }
 .qr-check.warn { color: var(--yellow-ink); background: var(--yellow); }
 .qr-check.bad { color: #fff; background: var(--red); font-weight: 700; }
+/* the QR code in the bottom-right corner of the big-screen Tables tab, shown only while the screen is held sideways (landscape).
+   The script sets its size (--qr) and fits the tables and the waitlist around it; it lines up with the waitlist's right edge.
+   Tapping it opens the big QR pop-up. Pop-ups and messages cover it. */
+.qr-corner { position: fixed; z-index: 30; right: max(1.75rem, env(safe-area-inset-right)); bottom: max(.75rem, env(safe-area-inset-bottom));
+  width: var(--qr, 120px); height: var(--qr, 120px); padding: 0; border: 0; border-radius: 4px; background: #fff; overflow: hidden; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.qr-corner svg { display: block; width: 100%; height: 100%; }
+.qr-corner:active { opacity: .8; }
 .app-ver { margin: 18px 0 0; text-align: center; font-size: .85em; }
 /* Phone view setup: what's missing after a check, the folded address fields, the hint under the key */
 .ph-issue { margin: 12px 0; padding: 12px 14px; border: 2px solid var(--yellow); border-radius: 12px; background: color-mix(in srgb, var(--yellow) 12%, transparent); }
@@ -612,7 +620,7 @@ html.tv { font-size: clamp(12px, .83333vw, 40px); }
 .tv .scrim, .tv .toast { font-size: max(16px, 1.15rem); }   /* pop-ups and result messages read from further away on a big screen */
 /* when the whole waitlist can't fit beside the tables: the top of the list, and how many more are waiting */
 .wl-more { display: none; }
-.tv .wl-more:not(:empty) { display: block; margin: .35rem 0 0; font-size: 1.4rem; font-weight: 700; color: var(--chalk-dim); }
+.tv .wl-more:not(:empty) { display: block; width: -webkit-fit-content; width: fit-content; max-width: 100%; margin: .35rem 0 0; font-size: 1.4rem; font-weight: 700; color: var(--chalk-dim); }
 .tv .waitlist li.wl-cut { display: none; }
 /* while the size is being chosen: names at 72%, the smallest a too-wide name may shrink to */
 .tv .waitlist ol.probe .who b { font-size: .72em; }
@@ -2878,7 +2886,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   var toastRoot = document.getElementById('toast-root');
   var fileInput = document.getElementById('file-input');
 
-  var ui = { tab: 'tables', modal: null, lastFocus: null, tablesTouched: false, draftName: '', consDismissed: null, flips: {}, saveOK: true, toastTimer: null, batchText: '',
+  var ui = { tab: 'tables', modal: null, lastFocus: null, tablesTouched: false, draftName: '', consDismissed: null, saveOK: true, toastTimer: null, batchText: '',
     rev: null, nextSlot: 1, lastUndoAt: 0 };
   /* phone view: the setup saved in this browser, the current sign-in token, and the state of sending updates */
   var PHONE_KEY = 'chipTourney.phone', phone = null, tok = { id: null, exp: 0 };
@@ -2989,7 +2997,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      conflict = this tab had just made a change of its own, which is not saved. */
   function adoptStored(conflict) {
     S = load() || E.newState();
-    ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
+    ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
     if (S.phase !== 'registration') ui.tablesTouched = true;
     if (ui.modal && ui.modal.type !== 'colors') { ui.modal = null; ui.shownType = null; modalRoot.innerHTML = ''; }
     render();
@@ -3009,11 +3017,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
      [key, CSS variable, label, what it paints]. The two chip colors (CHIP_ROWS) are part of each scheme, so the Default,
      Light and Dark buttons set the chips too; CHIP_PRESETS change only the chips. */
   var COLOR_KEY = 'chipTourney.colors', PREF_KEY = 'chipTourney.prefs';
-  var prefs = { showEnd: false, keepAwake: false };
+  /* dashQR: the phone view QR code in a corner of the Tables tab whenever the screen is held sideways (on unless switched off) */
+  var prefs = { showEnd: false, keepAwake: false, dashQR: true };
   function loadPrefs() {
     try {
       var po0 = JSON.parse(localStorage.getItem(PREF_KEY) || 'null');
-      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; }
+      if (po0 && typeof po0 === 'object') { prefs.showEnd = !!po0.showEnd; prefs.keepAwake = !!po0.keepAwake; prefs.dashQR = po0.dashQR !== false; }
     } catch (e) { /* defaults */ }
   }
   loadPrefs();
@@ -3265,7 +3274,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     }).catch(function () { return { page: page, state: 'unreachable' }; }).then(function (res) {
       PAGECHECK.busy = null; PAGECHECK.at = now(); PAGECHECK.res = res;
       /* GitHub sent the page from a slightly different address: use that one, so the QR link needs no redirect */
-      if (res.moved && res.state === 'ok' && phone.page === page) { phone.page = normalizePage(res.moved); savePhone(); res.movedTo = phone.page; }
+      if (res.moved && res.state === 'ok' && phone.page === page) { phone.page = normalizePage(res.moved); savePhone(); res.movedTo = phone.page; render(); }   /* the corner QR code too */
       showPageCheck();
       return res;
     });
@@ -3639,21 +3648,94 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   }
 
   /* ---------- the QR code (drawn here, so it works with no internet) ---------- */
+  /* a made QR code as an SVG with a white margin of qz squares; size is the whole width in squares */
+  function qrDraw(qr, qz) {
+    var n = qr.getModuleCount(), size = n + 2 * qz, d = '';
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) d += 'M' + (c + qz) + ' ' + (r + qz) + 'h1v1h-1z';
+    return { size: size, svg: '<svg viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges" role="img" aria-label="QR code for the phone page">' +
+      '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>' };
+  }
+  function qrMade(text, level) { var qr = qrcode(0, level); qr.addData(text); qr.make(); return qr; }
   function qrSVG(text) {
     if (typeof qrcode !== 'function') return '<p>The QR code can\'t be drawn here. Use the link below.</p>';
-    var qr = qrcode(0, 'M');
-    qr.addData(text);
-    qr.make();
-    var n = qr.getModuleCount(), qz = 4, size = n + 2 * qz, d = '';
-    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) d += 'M' + (c + qz) + ' ' + (r + qz) + 'h1v1h-1z';
-    return '<svg viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges" role="img" aria-label="QR code for the phone page">' +
-      '<rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
+    return qrDraw(qrMade(text, 'M'), 4).svg;
+  }
+
+  /* ---------- the QR code in the corner of the big screen ----------
+     On the Tables tab in the big-screen layout, whenever the screen is wider than it is tall (a TV, or an iPad or a phone
+     held sideways), while phone view is sending updates and the Menu switch is on; never while the screen is upright.
+     Its size is a share of the screen's height, so it keeps the same proportion on any TV: about a sixth of the height,
+     which a phone camera reads from a step or so back (about 1.2 m from a 55-inch TV), and never under 96 px (a phone held
+     sideways). It is as dense as the link needs and no denser: the lowest error correction sets the number of squares,
+     then the strongest correction that fits in that many squares is used. Every square is a whole number of screen pixels,
+     and the white margin is 2 squares (on any phone camera, plenty on a screen). The tables and the waitlist are fitted
+     around it (fitTables, fitWaitlist), so it never covers a table or a name. */
+  var DASH_QR_SHARE = 0.16, DASH_QR_MIN = 96, DASH_QR_QZ = 2, DASH_QR_GAP = 8;
+  var dashQR = { el: null, link: '', size: 0 };
+  function dashQRCode(text) {
+    var low = qrMade(text, 'L'), n = low.getModuleCount(), lv = ['H', 'Q', 'M'];
+    for (var i = 0; i < lv.length; i++) {
+      try { var q = qrMade(text, lv[i]); if (q.getModuleCount() === n) return q; } catch (e) { /* too long at this level */ }
+    }
+    return low;
+  }
+  function dashQRWanted(tv) {
+    return !!(tv && prefs.dashQR && phoneLive() && window.innerWidth > window.innerHeight && typeof qrcode === 'function');
+  }
+  /* shows, sizes or hides the corner QR code: called by layout() before anything is measured */
+  function placeDashQR(tv) {
+    var on = dashQRWanted(tv), el = dashQR.el;
+    if (on && !el) {
+      el = dashQR.el = document.createElement('button');
+      el.type = 'button'; el.className = 'qr-corner'; el.hidden = true;
+      el.setAttribute('data-act', 'qr-open');
+      el.setAttribute('aria-label', 'QR code for the phone page. Tap to show it bigger.');
+      el.title = 'Players scan this to follow on their phones. Tap to show it bigger.';
+      document.body.appendChild(el);
+    }
+    if (on) {
+      var link = phoneLink();
+      if (dashQR.link !== link) {
+        try { var d = qrDraw(dashQRCode(link), DASH_QR_QZ); el.innerHTML = d.svg; dashQR.size = d.size; }
+        catch (e) { el.innerHTML = ''; dashQR.size = 0; }
+        dashQR.link = link;
+      }
+      on = dashQR.size > 0;
+    }
+    if (on) {
+      var dpr = window.devicePixelRatio || 1, u = dashQR.size;
+      var per = Math.max(1, Math.round(Math.max(DASH_QR_MIN, DASH_QR_SHARE * window.innerHeight) * dpr / u));   /* screen pixels per square */
+      if (per * u / dpr < DASH_QR_MIN) per = Math.ceil(DASH_QR_MIN * dpr / u);
+      el.style.setProperty('--qr', (per * u / dpr) + 'px');
+    }
+    if (el) el.hidden = !on;
+    rootEl.classList.toggle('qr-on', on);
+  }
+  /* the corner QR code's place with a little room around it, in page positions with the page scrolled to the top, or null */
+  function qrZone() {
+    var el = dashQR.el;
+    if (!el || el.hidden) return null;
+    var r = el.getBoundingClientRect(), g = DASH_QR_GAP;
+    return r.width ? { l: r.left - g, t: r.top - g, r: r.right + g, b: r.bottom + g } : null;
+  }
+  /* does any of these elements, as laid out, reach into the QR code's corner? (elements not showing don't count) */
+  function hitsQR(z, list) {
+    if (!z) return false;
+    var sx = window.pageXOffset, sy = window.pageYOffset;
+    for (var i = list.length - 1; i >= 0; i--) {
+      var b = list[i].getBoundingClientRect();
+      if (b.width && b.height && b.right + sx > z.l && b.left + sx < z.r && b.bottom + sy > z.t && b.top + sy < z.b) return true;
+    }
+    return false;
   }
   function phoneMenuHTML() {
     if (!phoneReady()) return '<div class="grp">Phone view</div><div class="stack"><button class="btn" data-act="phone-setup">Set up phone view</button></div>' +
       '<p class="muted" style="margin:6px 0 0;font-size:.9em">Lets players follow the tournament live on their phones. Needs internet on this device and a free Firebase project.</p>';
     return '<div class="grp">Phone view</div><label class="opt" for="phone-opt"><input id="phone-opt" type="checkbox" data-act="phone-toggle"' + (phone.on ? ' checked' : '') + '>' +
       '<span><b>Send updates to phones</b><small id="phone-status">' + esc(phoneStatus().txt) + '</small></span></label>' +
+      '<label class="opt" for="dashqr-opt"><input id="dashqr-opt" type="checkbox" data-act="dashqr-toggle"' + (prefs.dashQR ? ' checked' : '') + '>' +
+      '<span><b>QR code on the dashboard when sideways</b><small>A small QR code in the bottom-right corner of the Tables tab whenever this screen is held sideways (landscape), so players can scan it any time. ' +
+      'Not shown upright. Tap it to show it bigger.' + (phone.on ? '' : ' Shows while updates are being sent to phones.') + '</small></span></label>' +
       '<div class="stack"><button class="btn" data-act="qr-open">Show the QR code</button><button class="btn" data-act="phone-open-page">Open the phone page</button><button class="btn" data-act="phone-setup">Phone view setup</button></div>';
   }
 
@@ -3682,10 +3764,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   function now() { return Date.now(); }
   function P(id) { return E.P(S, id); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
-  function rand() {
-    if (window.crypto && crypto.getRandomValues) { var a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
-    return Math.random();
-  }
   function fmtDur(min) {
     min = Math.round(min);
     if (min < 60) return min + ' min';
@@ -3870,6 +3948,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (!tables || !tables.children.length) return;
     var section = tables.parentNode, chipBoxes = tables.querySelectorAll('.pchips'), avail = window.innerHeight - TV_PAD;
     var names = tables.querySelectorAll('.pname'), seen = {}, chips46 = {}, pre = {}, fresh = true, area = -1;
+    /* the corner QR code: a size doesn't fit if a table (or the Closed row) would sit under it (only possible when the
+       tables take most of the width) */
+    var qz = qrZone(), qrBlocks = [].slice.call(tables.children).concat([].slice.call(section.querySelectorAll('.closed-tables')));
     for (var c = 0; c < names.length && fresh; c++) fresh = !names[c].style.getPropertyValue('--nf') && !names[c].classList.contains('cut') && !names[c].classList.contains('pwrap');
     function setArea(i) {
       if (area === i) return;
@@ -3895,7 +3976,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (tooTall(ts)) return (seen[key] = false);
       tables.style.setProperty('--ts', ts + 'rem');
       tables.style.setProperty('--chip', 'calc(var(--ts) * .46)');
-      var ok = !(section.getBoundingClientRect().bottom + window.pageYOffset > avail);
+      var sr = section.getBoundingClientRect(), ok = !(sr.bottom + window.pageYOffset > avail);
+      if (ok && qz && sr.right + window.pageXOffset > qz.l && hitsQR(qz, qrBlocks)) ok = false;
       if (!est) {
         var fr = tables.querySelectorAll('.frame'), h = Infinity;
         for (var q = 0; q < fr.length; q++) h = Math.min(h, fr[q].getBoundingClientRect().height);
@@ -3921,7 +4003,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
        then still the answer, so it is checked with one measurement instead of searched for. */
     var sig = [window.innerWidth, window.innerHeight, getComputedStyle(rootEl).fontSize, lo,
       [].map.call(tables.children, function (a) { return a.querySelectorAll('.pname').length + '.' + a.querySelectorAll('.chip').length + '.' + a.querySelectorAll('.run, .tnote, .slot').length; }).join(','),
-      section.querySelectorAll('.closed-tables .btn').length].join('|');
+      section.querySelectorAll('.closed-tables .btn').length, qz ? Math.round(qz.l) + ',' + Math.round(qz.t) : ''].join('|');
     if (fitMemo.sig === sig && fitMemo.area !== null && tsA[fitMemo.area] != null) {
       setArea(fitMemo.area);
       if (fits(tsA[fitMemo.area])) { pick = fitMemo.area; ts = tsA[pick]; }
@@ -4043,6 +4125,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var etas = [].slice.call(ol.querySelectorAll('.eta')), rows = [].slice.call(ol.querySelectorAll('.who')), wide = names.concat(rows);
     var olTop = ol.getBoundingClientRect().top + window.pageYOffset, avail = window.innerHeight - TV_PAD - olTop;   /* nothing below changes where the list starts */
     var cols = 0, seen = {}, pre = {}, widthFirst = false, rh = {};
+    var qz = qrZone(), rowsAt = {};   /* the corner QR code, and the rows each size needed to keep the list clear of it */
     function setCols(c) { cols = c; ol.style.setProperty('--cols', c); ol.style.setProperty('--rows', Math.ceil(n / c)); }
     /* The height of one player's row when every row is the same height (the usual case: nobody has a "Just lost to" line),
        or 0. Rows stretch to the tallest one beside them, so it is each row's two parts (the number and the name block) that
@@ -4068,18 +4151,33 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       return ok;
     }
     function narrow() { ol.classList.add('probe'); var ok = !overflowX(wide); ol.classList.remove('probe'); return ok; }
+    /* With the QR code in the corner, the last column has to end above it. The list fills top to bottom, so each extra row
+       moves the bottom player of the last column up into each of the other columns; one column, or no room for another row,
+       means this size doesn't fit. */
+    function clearOfQR() {
+      var rows = Math.ceil(n / cols);
+      while (hitsQR(qz, ol.children)) {
+        if (cols < 2 || rows >= n) return false;
+        ol.style.setProperty('--rows', ++rows);
+        if (ol.scrollHeight > avail) return false;
+      }
+      return true;
+    }
     var lastFail = fitMemo.wlFail;
     function works(v) {
       var key = cols + '|' + v;
       if (key in seen) return seen[key];
       ol.style.setProperty('--wl', v + 'rem');
+      ol.style.setProperty('--rows', Math.ceil(n / cols));   /* a QR check before this one may have added rows */
       /* above last time's size for this column count, check first whatever stopped it last time */
       var prev = fitMemo.wl[cols], above = prev != null && v > prev + 1e-9;
       var first = above && lastFail[cols] ? lastFail[cols] : widthFirst ? 'narrow' : 'tall';
       var ok, failed = null;
       if (first === 'narrow') { ok = narrow(); if (!ok) failed = 'narrow'; else if (!(ok = tall())) failed = 'tall'; }
       else { ok = tall(); if (!ok) failed = 'tall'; else if (!(ok = narrow())) failed = 'narrow'; }
+      if (ok && qz && !(ok = clearOfQR())) failed = 'tall';
       if (failed && above) lastFail[cols] = failed;
+      if (ok) rowsAt[key] = +ol.style.getPropertyValue('--rows') || Math.ceil(n / cols);
       return (seen[key] = ok);
     }
     /* try 2, 3 and 4 columns (filled top to bottom), and 1 when the waitlist's part of the screen is narrow; keep the one that
@@ -4090,7 +4188,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var seed = fitMemo.wlCols && order.indexOf(fitMemo.wlCols) >= 0 ? fitMemo.wlCols : order[order.length - 2];
     setCols(seed);
     var s0 = largestNear(WL_MIN, 5.2, 0.1, works, fitMemo.wl[seed]);
-    if (s0 !== null) best = { cols: seed, rows: Math.ceil(n / seed), s: s0 };
+    if (s0 !== null) best = { cols: seed, rows: rowsAt[seed + '|' + s0] || Math.ceil(n / seed), s: s0 };
     fitMemo.wl[seed] = s0 !== null ? s0 : WL_MIN;   /* if nothing fits, next time one measurement at the smallest size confirms it */
     order.forEach(function (c) {
       if (c === seed) return;
@@ -4103,7 +4201,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (!ok) return;
       var sz = largestNear(need, 5.2, 0.1, works, Math.max(need, fitMemo.wl[c] || need));
       fitMemo.wl[c] = sz;
-      best = { cols: c, rows: Math.ceil(n / c), s: sz };
+      best = { cols: c, rows: rowsAt[c + '|' + sz] || Math.ceil(n / c), s: sz };
     });
     fitMemo.wlCols = best ? best.cols : seed;
     var measured = null;
@@ -4113,7 +4211,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
          stay readable across their column. */
       ol.style.setProperty('--wl', WL_MIN + 'rem');
       if (more) more.textContent = '+' + n + ' more waiting';
-      var room = window.innerHeight - TV_PAD - (more ? more.getBoundingClientRect().height + parseFloat(getComputedStyle(more).marginTop || 0) : 0);
+      var moreH = more ? more.getBoundingClientRect().height + parseFloat(getComputedStyle(more).marginTop || 0) : 0, room = window.innerHeight - TV_PAD - moreH;
+      if (qz && more && hitsQR({ l: qz.l, r: qz.r, t: -Infinity, b: Infinity }, [more])) room = Math.min(room, qz.t - moreH);   /* the "+N more" line goes above the QR code */
       var show = function (cap) { for (var y = 0; y < n; y++) ol.children[y].classList.toggle('wl-cut', y >= cap); };
       var rowsThatFit = function (c) {   /* the most rows (players top to bottom in each column) that fit above the "+N more" line */
         var a = 0, b = Math.ceil(n / c);
@@ -4156,6 +4255,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       best = { cols: cut.cols, rows: Math.max(1, cut.rows), s: WL_MIN };
       var shown = Math.min(n, cut.rows * cut.cols);
       show(shown);
+      if (qz) {   /* the bottom of the last column makes way for the QR code (laid out as it will show) */
+        ol.style.setProperty('--cols', best.cols); ol.style.setProperty('--rows', best.rows);
+        while (shown > 0 && hitsQR(qz, ol.children)) show(--shown);
+      }
       if (more) more.textContent = shown < n ? '+' + (n - shown) + ' more waiting' : '';
     } else measured = pre[best.cols + '|' + best.s + 'rem'] || null;
     ol.style.setProperty('--cols', best.cols); ol.style.setProperty('--rows', best.rows); ol.style.setProperty('--wl', best.s + 'rem');
@@ -4202,6 +4305,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var tv = wantTV();
     rootEl.classList.toggle('tv', tv);
     rootEl.classList.toggle('tv-short', tv && window.innerHeight < TV_SHORT_H);
+    placeDashQR(tv);        /* first: the tables and the waitlist are fitted around it */
     if (tv) prefillFit();   /* before anything is measured, so the first layout is already at the likely sizes */
     fitTitle();
     fitChamp();
@@ -4455,10 +4559,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (st === 'match') {
       meta = prTableLabel(t) + '<span class="time">' + E.fmtTime(t.since) + '</span> ' + clockIcon() + ' ' + clockHTML(t.since);
       felt = seat(P(t.a), true) + '<div class="vs">vs.</div>' + seat(P(t.b), true);
-      if (t.note) {
-        var fl = ui.flips[t.n];
-        felt += '<div class="tnote"><span>' + esc(capNames(t.note)) + '</span>' + (fl ? '<span>Break: ' + esc(dn(fl)) + '</span>' : '') + '<button class="btn small" data-act="flip" data-n="' + t.n + '" style="color:var(--yellow);border-color:var(--yellow)">Flip a coin</button></div>';
-      }
+      if (t.note) felt += '<div class="tnote"><span>' + esc(capNames(t.note)) + '</span></div>';
     } else if (st === 'waiting') {
       meta = 'Waiting';
       var canPick = S.queue.length || E.waitingTables(S).length > 1;
@@ -5200,7 +5301,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var r = E.undo(S);
     if (r.error) { toast(r.error, { bad: true }); return; }
     E.ensureAuto(S, now());   /* an Undo step saved by an earlier version may have auto-throw paused */
-    ui.flips = {};
     if (commit()) toast('Undid: ' + r.label);
   }
   function tooSoon(t) { var d = now() - t; return !!t && d >= 0 && d < TAP_GUARD_MS; }   /* a start time ahead of this clock (a backup from another device) never blocks taps */
@@ -5273,7 +5373,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     'start-go': function () {
       var r = E.startTournament(S, plannedTables(), now(), undefined, plannedNums());
       if (r.error) { modalErr(r.error); return; }
-      ui.tab = 'tables'; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
+      ui.tab = 'tables'; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
       closeModal(); commit();   /* straight to the tables; the draw order is listed on the Log tab */
       maybePrompt();            /* with playoff rounds from the start: the round 1 draw (or the round robin offer) */
     },
@@ -5283,10 +5383,9 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var id = +el.dataset.id, w = P(id), t = E.tableOf(S, id);
       if (!t || !t.a || !t.b) { toast('That match is already finished.', { bad: true }); return; }
       if (tooSoon(t.since)) return;   /* the match was thrown a moment ago: this is the second tap of a double-tap */
-      var l = P(t.a === id ? t.b : t.a), n = t.n, hadPr = !!S.pr, before = tableKeys();
+      var l = P(t.a === id ? t.b : t.a), hadPr = !!S.pr, before = tableKeys();
       var r = E.reportResult(S, id, now());
       if (r.error) { fail(r); return; }
-      delete ui.flips[n];
       var msg = w.name + ' def. ' + l.name + (r.eliminated ? '. ' + l.name + ' is eliminated.' : '. ' + l.name + ' has ' + l.C + ' left.');
       if (!hadPr && S.pr) msg += ' Playoff rounds: ' + E.activeCount(S) + ' players left, so auto-throw has stopped.';
       msg += seatedNote(before);
@@ -5308,10 +5407,6 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       afterChange({ toast: 'Tournament resumed' + (r.minutes >= 1 ? ' after ' + fmtDur(r.minutes) + ' paused' : '') + '.', undo: true });
     },
     tab: function (el) { ui.tab = el.dataset.tab; render(); },
-    flip: function (el) {
-      var t = E.T(S, +el.dataset.n); if (!t) return;
-      ui.flips[t.n] = P(rand() < 0.5 ? t.a : t.b).name; render();
-    },
     'consol-open': function () { ui.consKey = null; openModal({ type: 'consol' }); },
     'consol-go': function (el) {
       var keep = +el.dataset.keep, close = +el.dataset.close;
@@ -5468,7 +5563,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       s.playoffRounds = old.playoffRounds !== false;
       s.title = old.title || '';
       if (keep) old.players.forEach(function (p) { E.addPlayer(s, p.name, p.S); });
-      S = s; ui.tab = 'tables'; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.tablesTouched = false;
+      S = s; ui.tab = 'tables'; ui.consDismissed = null; ui.poDismissed = null; ui.tablesTouched = false;
       closeModal(); commit();
     },
     'title-open': function () { openModal({ type: 'title' }); },
@@ -5511,7 +5606,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         var old = phone.code;
         phone.code = newLinkCode(); savePhone();
         if (phone.apiKey && phone.db && phone.refresh && old) sendToDB('DELETE', null, old).catch(function () { /* the old summary just stays behind */ });
-        renderModal(); schedulePublish(0);
+        render(); renderModal(); schedulePublish(0);   /* render: the corner QR code shows the new link too */
         toast('New link made. Show players the new QR code.');
       });
     },
@@ -5533,6 +5628,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       render(); renderModal();
       if (phone.on) schedulePublish(0);
       toast(phone.on ? 'Phone view is on.' : 'Phone view is off. Phones keep showing the last update they got.');
+    },
+    'dashqr-toggle': function (el) {
+      prefs.dashQR = !!el.checked; savePrefs(); render();
+      toast(prefs.dashQR ? 'The QR code shows in the corner of the Tables tab while the screen is held sideways.' : 'QR code taken off the dashboard. The QR button in the top bar still shows it.');
     },
     'qr-open': function () {
       if (!phoneReady()) { actions['phone-setup'](); return; }
@@ -5741,7 +5840,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       askConfirm({ title: 'Load this backup?', text: 'Replace the current tournament with this backup (' + plural(s.players.length, 'player') + ')?' +
         (cols ? ' Its colors replace the colors on this device too.' : ''), ok: 'Replace', danger: true }, function () {
         ui.rev = readRev();   /* a backup replaces whatever is saved, even a newer version from another tab */
-        S = s; ui.tablesTouched = true; ui.flips = {}; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
+        S = s; ui.tablesTouched = true; ui.consDismissed = null; ui.poDismissed = null; ui.prDismissed = null;
         if (cols) { colors = cols; saveColors(); applyColors(); }
         E.ensureAuto(S, now());   /* a backup from an earlier version with auto-throw paused */
         closeModal(); commit(); toast(cols ? 'Backup loaded, with its colors' : 'Backup loaded');
@@ -5765,7 +5864,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
   window.addEventListener('storage', function (e) {
     if (e.key === REV_KEY) { if (e.newValue !== ui.rev) adoptStored(false); }
     else if (e.key === COLOR_KEY) { colors = loadColors(); applyColors(); if (ui.modal && ui.modal.type === 'colors') renderModal(); }
-    else if (e.key === PREF_KEY) { loadPrefs(); if (prefs.keepAwake) holdWake(); else releaseWake(); showTitle(); }
+    else if (e.key === PREF_KEY) { loadPrefs(); if (prefs.keepAwake) holdWake(); else releaseWake(); showTitle(); layout(); }
     else if (e.key === PHONE_KEY) { loadPhone(); tok = { id: null, exp: 0 }; render(); }
   });
   document.addEventListener('visibilitychange', function () {
