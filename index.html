@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#4a3223">
-<meta name="chip-version" content="ALPHA33">
+<meta name="chip-version" content="ALPHA36">
 <title>Chip tournament</title>
 <style>
 /* Atkinson Hyperlegible Next, designed by the Braille Institute for maximum legibility. Embedded so the app works offline and looks the same on every screen.
@@ -333,7 +333,7 @@ button.pname.won:focus-visible { outline: 3px solid var(--chalk); outline-offset
 .qr-corner:active { opacity: .8; }
 .app-ver { margin: 18px 0 0; text-align: center; font-size: .85em; }
 /* Phone view setup: what's missing after a check, the folded address fields, the hint under the key */
-.ph-issue { margin: 12px 0; padding: 12px 14px; border: 2px solid var(--yellow); border-radius: 12px; background: color-mix(in srgb, var(--yellow) 12%, transparent); }
+.ph-issue, .pr-off-note { margin: 12px 0; padding: 12px 14px; border: 2px solid var(--yellow); border-radius: 12px; background: color-mix(in srgb, var(--yellow) 12%, transparent); }
 .ph-issue p { margin: 6px 0 0; }
 .ph-issue textarea { margin-top: 10px; }
 .ph-adv { margin-top: 16px; }
@@ -471,6 +471,10 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .opt b { display: block; font-weight: 600; }
 .opt small { display: block; color: var(--chalk-dim); font-size: .9rem; margin-top: 2px; }
 .opt.locked { cursor: default; }
+.opt.opt-tight { cursor: default; }
+.opt-tight label { cursor: pointer; }
+.opt-tight b { display: inline; }
+.pr-off-tag { color: var(--yellow); font-weight: 700; }
 .opt.locked input { opacity: .5; }
 .modal .opt { margin-top: 8px; }
 .tnums { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0; }
@@ -513,6 +517,7 @@ textarea.mono { font-size: .82em; line-height: 1.35; }
 .modal .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; justify-content: flex-end; }
 .modal .stack { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .modal .stack .btn { text-align: left; }
+.undo-item small { display: block; margin-top: 2px; font-weight: 400; font-size: .85em; color: var(--chalk-dim); overflow-wrap: anywhere; }
 .modal .btn.small, .toast .btn.small { font-size: .92em; }
 .modal .btn.big { font-size: 1.1em; }
 .modal .field label, .modal .lbl { font-size: .92em; }
@@ -1124,7 +1129,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       s.log = [];
       s.pause = null;
       s.pauses = [];
-      addLog(s, now, 'start', { tables: nTables }, 'Tournament started: ' + n + ' players, ' + nTables + ' table' + (nTables === 1 ? '' : 's') + ' (' + (nTables === 1 ? 'Table ' : 'Tables ') + nums.join(', ') + ')');
+      addLog(s, now, 'start', { tables: nTables }, 'Tournament started: ' + n + ' players, ' + nTables + ' table' + (nTables === 1 ? '' : 's') + ' (' + (nTables === 1 ? 'Table ' : 'Tables ') + nums.join(', ') + '). Playoff rounds at ' + PR_MAX + ' players or fewer: ' + (s.playoffRounds ? 'on' : 'off'));
       s.tables.forEach(function (t) {
         addLog(s, now, 'throw', { table: t.n }, 'Table ' + t.n + ': ' + P(s, t.a).name + ' vs ' + P(s, t.b).name);
       });
@@ -1225,9 +1230,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   }
 
   /* While the three-player playoff runs, the chip-play controls are switched off (Undo still works). */
-  function blockedByPlayoff(s) { return s.rr ? { error: 'Not available during the playoff. Use Undo to step back.' } : null; }
+  function blockedByPlayoff(s) { return s.rr ? { error: 'Not available during the playoff. Use Undo in the Menu to step back.' } : null; }
   /* During the playoff rounds the draws are in person, so nothing is thrown by the app and the field can't grow. */
-  function blockedByRounds(s) { return s.pr ? { error: 'Not available during the playoff rounds. Use Undo to step back.' } : null; }
+  function blockedByRounds(s) { return s.pr ? { error: 'Not available during the playoff rounds. Use Undo in the Menu to step back.' } : null; }
 
   function consolidate(s, keepN, closeN, now) {
     if (s.rr) return blockedByPlayoff(s);
@@ -4331,10 +4336,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       h += '<span class="po-badge">Playoff rounds</span>';
     }
     if (phoneLive()) h += '<button class="btn small on-rail qr-btn" data-act="qr-open" title="Show the QR code for the phone page"><i id="qr-dot" class="pdot ' + phoneStatus().cls + '"></i>QR</button>';
-    if (S.phase !== 'registration') {
-      var ul = E.undoLabel(S);
-      h += '<button class="btn small on-rail" data-act="undo"' + (ul ? '' : ' disabled') + ' title="' + esc(ul ? 'Undo: ' + capNames(ul) : 'Nothing to undo') + '">Undo</button>';
-    }
+    /* Undo is in the Menu, and on the message after each change: off the top bar, where it was rarely needed */
     h += '<button class="btn small on-rail" data-act="menu">Menu</button></div></header>';
     return h;
   }
@@ -4370,9 +4372,13 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         return '<input id="tn-' + i + '" class="input tnum" type="text" inputmode="numeric" maxlength="3" autocomplete="off" value="' + esc(v) + '" data-input="tnum" data-i="' + i + '" aria-label="Number for table ' + (i + 1) + ' of ' + nums.length + '">';
       }).join('') + '</div>' +
       '<span class="muted" style="font-size:.9rem">Type the number on each table. No repeats.</span></div>' +
-      '<label class="opt" for="pr-opt"><input id="pr-opt" type="checkbox" data-input="pr-opt"' + (S.playoffRounds ? ' checked' : '') + '>' +
-      '<span><b>Playoff rounds at ' + E.PR_MAX + ' players or fewer</b><small>Auto-throw stops when a result leaves ' + E.PR_MAX + ' players or fewer. After each round the players draw in person for the next one.' +
-      (S.playoffRounds && n >= 2 && n <= E.PR_MAX ? ' With ' + n + ' players registered, round 1 is an in-person draw too.' : '') + '</small></span></label>' +
+      /* only the box and its title switch it: it sits between the table numbers and the match length, where a stray tap on
+         its description used to switch it off unnoticed (Halloween 2026). It says plainly when it's off. */
+      '<div class="opt opt-tight"><input id="pr-opt" type="checkbox" data-input="pr-opt"' + (S.playoffRounds ? ' checked' : '') + '>' +
+      '<span><label for="pr-opt"><b>Playoff rounds at ' + E.PR_MAX + ' players or fewer</b></label><small>' +
+      (S.playoffRounds ? 'Auto-throw stops when a result leaves ' + E.PR_MAX + ' players or fewer. After each round the players draw in person for the next one.' +
+        (n >= 2 && n <= E.PR_MAX ? ' With ' + n + ' players registered, round 1 is an in-person draw too.' : '')
+        : '<span class="pr-off-tag">Off:</span> chip play goes all the way to the end, with no playoff rounds and no round robin for the final three.') + '</small></span></div>' +
       '<div class="field" style="margin-top:12px"><label for="mm">Average match length (minutes)</label><input id="mm" class="input" type="number" min="1" step="0.5" inputmode="decimal" value="' + esc(S.matchMinutes) + '" data-input="mm"></div>' +
       '<p class="est" id="est">' + estHTML(tables) + '</p>' +
       '<p class="problem" id="problem">' + problem + '</p>' +
@@ -4405,6 +4411,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var di = E.prDrawInfo(S), run = E.runningCount(S);
       if (di) h += '<div class="banner"><span>Playoff rounds. ' + di.n + ' players left: draw for round ' + di.round + ', ' + di.name + '.</span><button class="btn" data-act="pr-draw-open" style="border-color:var(--yellow-ink)">Enter the draw</button></div>';
       else if (S.pr.stage === 'finishing') h += '<div class="banner"><span>Playoff rounds. ' + E.activeCount(S) + ' players left. The draw for round 1 comes after ' + (run === 1 ? 'the match in progress finishes.' : 'the ' + run + ' matches in progress finish.') + '</span></div>';
+    }
+    var pl = prOffReminder();
+    if (pl) {
+      h += '<div class="banner"><span>' + pl + ' players left, and playoff rounds are off.</span><span style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button class="btn" data-act="pr-remind-open" style="border-color:var(--yellow-ink)">Start playoff rounds</button>' +
+        '<button class="btn" data-act="pr-keep-off" style="border-color:var(--yellow-ink)">Keep playing chips</button></span></div>';
     }
     var pc = E.pendingConsolidation(S);
     if (pc && S.phase === 'active') {
@@ -4607,7 +4619,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     ranked.forEach(function (p) {
       h += '<li style="grid-template-columns:96px 1fr"><span class="place">' + placeLabel(p) + '</span><span><span style="font-family:var(--display);font-weight:700;font-size:1.2rem">' + esc(dn(p.name)) + '</span>' + droppedTag(p) + (isMostWins(p.id) ? ' <span title="Most wins">🦁</span>' : '') + (isLongestRun(p.id) ? ' <span title="Longest run">🔥</span>' : '') + ' <span class="frac">(' + p.C + '/' + p.S + ' chips, ' + plural(p.W, 'win') + (E.isTied(p) ? ', tied for ' + E.placeText(p) : '') + (p.po ? ', placed in the playoff' : '') + ')</span></span></li>';
     });
-    h += '</ul><p class="muted" style="margin-top:12px">Use Undo if the last result was a mistake.</p></section>';
+    h += '</ul><p class="muted" style="margin-top:12px">Use Undo in the Menu if the last result was a mistake.</p></section>';
     return h;
   }
 
@@ -4616,7 +4628,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     var closed = S.tables.filter(function (t) { return !t.open; });
     var h = '<div class="board"><section aria-label="Tables"><h2 class="section-title">Tables <span class="count">' + open.length + ' open</span></h2>';
     if (S.phase === 'active' && open.some(function (t) { return E.tableState(t) === 'match'; })) h += '<p class="hint">Tap a player\'s name when they win the match.</p>';
-    if (S.phase === 'finished') h += '<p class="muted">The tournament is over. Use Undo if the last result was a mistake.</p>';
+    if (S.phase === 'finished') h += '<p class="muted">The tournament is over. Use Undo in the Menu if the last result was a mistake.</p>';
     else h += '<div class="tables">' + open.map(tableCard).join('') + '</div>';
     if (closed.length && S.phase === 'active') {
       h += '<div class="closed-tables"><span>Closed:</span>' + closed.map(function (t) {
@@ -4839,7 +4851,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     o = o || {};
     clearTimeout(ui.toastTimer);
     toastRoot.innerHTML = '<div class="toast' + (o.bad ? ' bad' : '') + '" role="status" data-act="toast-close" title="Tap to dismiss"><span>' + esc(capNames(msg)) + '</span>' + (o.undo ? '<button class="btn small" data-act="undo-toast">Undo</button>' : '') + '</div>';
-    ui.toastTimer = setTimeout(function () { toastRoot.innerHTML = ''; }, o.undo ? 7000 : 5000);
+    ui.toastTimer = setTimeout(function () { toastRoot.innerHTML = ''; }, 5000);
   }
 
   /* ---------- modals ---------- */
@@ -4893,7 +4905,10 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
           break;
         }
         h = shell('Draw and start?',
-          '<p>' + where + ' ' + (2 * t) + ' will be seated at random and ' + (n - 2 * t) + ' will go on the waitlist in draw order.</p><p class="muted">Chips and the draw cannot be changed after the draw, but Undo will bring this screen back.</p><p class="err" role="alert"></p>',
+          '<p>' + where + ' ' + (2 * t) + ' will be seated at random and ' + (n - 2 * t) + ' will go on the waitlist in draw order.</p>' +
+          (S.playoffRounds ? '' : '<div class="pr-off-note"><b>Playoff rounds are off.</b><p>Chip play goes all the way to the end: no playoff rounds at ' + E.PR_MAX + ' players or fewer, and no round robin for the final three.</p>' +
+            '<div class="stack"><button type="button" class="btn" data-act="start-pr-on">Turn playoff rounds on</button></div></div>') +
+          '<p class="muted">Chips and the draw cannot be changed after the draw, but Undo will bring this screen back.</p><p class="err" role="alert"></p>',
           CANCEL + '<button class="btn primary" data-act="start-go" data-autofocus>Draw and start</button>');
         break;
       }
@@ -5109,6 +5124,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       }
       case 'menu':
         h = shell('Menu',
+          undoMenuHTML() +
           pauseMenuHTML() +
           (S.phase === 'active' && !S.rr ? '<div class="grp">During play</div><div class="stack"><button class="btn" data-act="add-table">Add a table</button></div>' +
             (S.pr ? '<p class="muted" style="margin:6px 0 0">Reinstating players is off during the playoff rounds.</p>' : '') : '') +
@@ -5127,11 +5143,13 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
         break;
       case 'pr-confirm': {
         var left = E.activeCount(S), run = E.runningCount(S);
-        h = shell('Start the playoff rounds now?',
+        if (m.remind && !prOffReminder()) { ui.modal = null; modalRoot.innerHTML = ''; return; }   /* already answered (another tab, Undo) */
+        h = shell(m.remind ? left + ' players left. Start the playoff rounds?' : 'Start the playoff rounds now?',
+          (m.remind ? '<p>Playoff rounds are off for this tournament, so auto-throw is still seating matches, and without them there is no round robin for the final three.</p>' : '') +
           '<p>' + left + ' players are left, so turning on playoff rounds starts them now. Auto-throw stops' +
           (run ? ', the ' + (run === 1 ? 'match in progress finishes' : run + ' matches in progress finish') + ', and then the players draw in person for round 1.' : ' and the players draw in person for round 1.') +
           '</p><p class="muted">Undo turns it back off.</p><p class="err" role="alert"></p>',
-          CANCEL + '<button class="btn primary" data-act="pr-confirm-go" data-autofocus>Turn on and start</button>');
+          (m.remind ? '<button class="btn" data-act="pr-keep-off">Keep playing chips</button>' : CANCEL) + '<button class="btn primary" data-act="pr-confirm-go" data-autofocus>Turn on and start</button>');
         break;
       }
       case 'title':
@@ -5195,6 +5213,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
 
   /* The playoff-rounds option in the Menu: the same checkbox as setup, locked once the playoffs have begun. */
   /* the top of the Menu while a tournament is running: Pause tournament, or Resume while paused */
+  /* Undo, at the top of the Menu once the tournament has started: it names the step it takes back */
+  function undoMenuHTML() {
+    if (S.phase === 'registration') return '';
+    var ul = E.undoLabel(S);
+    return '<div class="stack"><button class="btn undo-item" data-act="menu-undo"' + (ul ? '' : ' disabled') + '>Undo<small>' + esc(ul ? capNames(ul) : 'Nothing to undo') + '</small></button></div>';
+  }
   function pauseMenuHTML() {
     if (S.phase !== 'active') return '';
     if (E.isPaused(S)) {
@@ -5203,6 +5227,14 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     }
     return '<div class="stack"><button class="btn pause-item" data-act="play-pause"><span class="pi pi-pause" aria-hidden="true"></span>Pause tournament</button></div>' +
       '<p class="muted pause-note">For a break: match clocks stop, and wait times and the finish time are put on hold, on the TV and on phones.</p>';
+  }
+  /* Playoff rounds are off, the playoffs haven't begun, and 3 to 6 players are left: the number left, else 0. With them
+     off the night is played out on chips to the end, which is easy to miss, so the app asks once and shows a banner,
+     until the director turns them on or chooses "Keep playing chips" (for this tournament, on this device). */
+  function prOffReminder() {
+    if (S.phase !== 'active' || S.playoffRounds || S.pr || S.rr || ui.prOffDismissed === String(S.startedAt)) return 0;
+    var n = E.activeCount(S);
+    return n >= 3 && n <= E.PR_MAX ? n : 0;
   }
   function prSettingHTML() {
     var locked = E.playoffRoundsLocked(S), on = !!S.playoffRounds;
@@ -5286,6 +5318,12 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
     if (di) {
       var dkey = di.round + ':' + di.n;
       if (ui.prDismissed !== dkey) openPrDraw();
+      return;
+    }
+    /* playoff rounds are off and 3 to 6 players are left: ask once (the banner stays until "Keep playing chips") */
+    if (prOffReminder() && ui.prOffAsked !== String(S.startedAt)) {
+      ui.prOffAsked = String(S.startedAt);
+      openModal({ type: 'pr-confirm', remind: true });
       return;
     }
     var pc = E.pendingConsolidation(S);
@@ -5393,6 +5431,7 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       afterChange({ toast: msg, undo: true });
     },
     undo: function () { doUndo(); },
+    'menu-undo': function () { closeModal(); doUndo(); },
     'undo-toast': function () { doUndo(); },
     'play-pause': function () {
       var r = E.pausePlay(S, now());
@@ -5560,7 +5599,8 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       var keep = el.dataset.keep === '1', old = S, s = E.newState();
       s.defaultChips = old.defaultChips; s.matchMinutes = old.matchMinutes; s.plannedTables = old.plannedTables;
       s.tableNums = Array.isArray(old.tableNums) ? old.tableNums.slice() : [];
-      s.playoffRounds = old.playoffRounds !== false;
+      /* playoff rounds are not carried over: every new tournament starts with them on (the default), so a tournament that
+         had them switched off (or a backup made before they existed) doesn't quietly start the next night without them */
       s.title = old.title || '';
       if (keep) old.players.forEach(function (p) { E.addPlayer(s, p.name, p.S); });
       S = s; ui.tab = 'tables'; ui.consDismissed = null; ui.poDismissed = null; ui.tablesTouched = false;
@@ -5660,6 +5700,19 @@ var qrcode=(function(){var P=function(x,w){var g=236,l=17,n=x,s=O[w],t=null,r=0,
       if (!save()) return;
       render(); renderModal();
       toast(on ? 'Playoff rounds on. They start when ' + E.PR_MAX + ' players or fewer are left.' : 'Playoff rounds off.', { undo: true });
+    },
+    'pr-remind-open': function () { openModal({ type: 'pr-confirm', remind: true }); },
+    'pr-keep-off': function () {
+      ui.prOffDismissed = String(S.startedAt);
+      if (ui.modal) closeModal();
+      render();
+      toast('Playoff rounds stay off: chip play to the end. You can still turn them on in the Menu.');
+    },
+    'start-pr-on': function () {
+      S.playoffRounds = true;
+      if (!save()) return;
+      render(); renderModal();
+      toast('Playoff rounds on.');
     },
     'pr-confirm-go': function () {
       var r = E.setPlayoffRounds(S, true, now());
