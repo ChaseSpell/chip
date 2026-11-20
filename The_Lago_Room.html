@@ -3698,7 +3698,12 @@ window.TD = window.TD || {};
           }
           return act('bet', lab + ' and I made ' + mk(hn.short) + '. Notes: value bet hands as bad as a jack — he will call with as little as a king.', 'value');
         }
-        if (hn.cat === 1 && pairRank >= 4 && R() < bluffFreqVs(game, opp, c.pot, c.unit) * (pairRank >= 9 ? 1 : 0.6)) return act('bet', lab + ': bluff with ' + mk(hn.long) + ' — no showdown value. Notes/SS2: only bluff when you make a big pair (fours and higher), and only every now and then; it works when he makes a smaller pair.', 'bluff');
+        // Mastering Mixed Games (Badugi chapter, betting flow): a river bet from the player without the betting lead
+        // reads as a made hand and gets more folds, while one from the player with the lead can look like a thin
+        // value bet and gets looked up. The effect is smaller here than in Badugi (the last card can make a 2-7
+        // hand worse, so players call more), so the adjustment is modest.
+        const lead = lastAgg(game, 2), hasLead = !!lead && lead.seat === p.seat;
+        if (hn.cat === 1 && pairRank >= 4 && R() < bluffFreqVs(game, opp, c.pot, c.unit) * (pairRank >= 9 ? 1 : 0.6) * (hasLead ? 0.8 : 1.3)) return act('bet', lab + ': bluff with ' + mk(hn.long) + ' — no showdown value. Notes/SS2: only bluff when you make a big pair (fours and higher), and only every now and then; it works when he makes a smaller pair.' + (hasLead ? '' : ' Mastering Mixed Games: without the betting lead, a river bet reads as a made hand, so this spot gets a few more bluffs.'), 'bluff');
         if (high && top >= 12) return act('check', lab + ': check ' + mk(hn.long) + '. Notes: bluffing with an ace, king or queen is just silly — it has showdown value.');
         return act('check', lab + ': give up with ' + mk(hn.long) + '. Notes: the river is no time to get fancy.');
       }
@@ -4268,9 +4273,10 @@ window.TD = window.TD || {};
 
  /* =====================================================================
     Badugi computer opponents
-    1. Predraw: Barry Greenstein's ranges (notes/badugi-greenstein-notes.md) by position, with the
-       borderline hands just outside each range mixed in some of the time (experts play a little
-       wider than Barry because of "reduction").
+    1. Predraw: the opening ranges of Mastering Mixed Games (notes/badugi-mastering-mixed-games.md),
+       checked against Barry Greenstein's (notes/badugi-greenstein-notes.md), with the borderline hands
+       just outside each range mixed in some of the time. Pat badugis never cold-call (3-bet or fold)
+       and are all played the same way predraw.
     2. Draws: draw values from the dynamic programme ("build from the bottom up"), Barry's rules
        (throw the king from a smooth king badugi; A-2-7: draw two from the blinds, but keep the
        seven against a pat hand), Monte-Carlo equity for the close calls (pat or break), snows.
@@ -4298,6 +4304,9 @@ window.TD = window.TD || {};
      kind: 'pat' (a badugi kept pat), 'three' (a three-card hand: draw one), 'two', 'one';
      t = top level of the playing cards, s2 = the next one. A smooth king or queen badugi that the
      draw values say to break is described as the three-card hand under it (Barry: throw the king). */
+  // the three cards under a badugi's top card are low (a seven or better): breaking it can make sense
+  // (Greenstein: throw the king from a king and three low cards; MMG Quiz 3: break K-5-3-2 to 5-3-2)
+  const lowUnder = (pat) => lvDesc(pat.keep)[1] <= lv('7');
   function infoOf(hand) {
     const opts = TD.keepOptions(hand, 3);
     const best = opts[0];
@@ -4305,7 +4314,7 @@ window.TD = window.TD || {};
     const three = opts.find((o) => o.n === 1);
     const two = opts.find((o) => o.n === 2);
     let kind, keep;
-    if (pat && best === pat) { kind = 'pat'; keep = pat.keep; }
+    if (pat && (best === pat || !lowUnder(pat))) { kind = 'pat'; keep = pat.keep; } // break only to a low three-card draw
     else if (three) { kind = 'three'; keep = three.keep; }
     else if (two) { kind = 'two'; keep = two.keep; }
     else { kind = 'one'; keep = (opts.find((o) => o.n === 3) || best).keep; }
@@ -4320,38 +4329,39 @@ window.TD = window.TD || {};
   }
   const smooth = (i) => (i.kind === 'pat' ? i.t <= lv('8') && i.s2 <= lv('5') : i.kind === 'three' ? i.t <= lv('6') && i.s2 <= lv('4') : false);
 
-  /* ---------------- predraw ranges (Greenstein) ---------------- */
-  // first raise in, by position. Barry's ranges are for a full ring; at this six-handed table each seat
-  // plays like the full-ring seat one step later (the LJ here is a full-ring middle position, and so on).
+  /* ---------------- predraw ranges (Mastering Mixed Games; Greenstein) ---------------- */
+  // first raise in, by position. MMG's ranges are for six or seven players, so its under-the-gun range is the
+  // LJ here. UTG: queen badugis or better, three-card sixes or better, the smooth sevens (7-3-A, 7-2-A).
+  // Hijack: add king badugis, all three-card sevens, smooth three-card eights. Cutoff: add 2-A and 3-A.
+  // Button: add 4-A, 3-2 and 4-3. Small blind: the button range. ('WIDE' is the mixed-in edge beyond the
+  // button: Barry's weakest button hands, 8-6-5 and 5-4.)
   function rfi(i, pos) {
-    if (i.kind === 'pat') return pos === 'LJ' ? (i.t <= lv('Q') || i.s2 <= lv('7')) : true; // no bad king badugis up front
+    if (i.kind === 'pat') return pos === 'LJ' ? i.t <= lv('Q') : true; // no king badugis up front
     if (i.kind === 'three') {
-      if (pos === 'LJ') return i.t <= lv('6') || (i.t === lv('7') && i.s2 <= lv('4')); // three-card sixes or better, the smoothest sevens
-      if (pos === 'HJ') return i.t <= lv('6') || (i.t === lv('7') && i.s2 <= lv('5'));
-      if (pos === 'CO') return i.t <= lv('7') || (i.t === lv('8') && i.s2 <= lv('6')); // Barry's button range: weakest 8-6-5
-      if (pos === 'BTN') return i.t <= lv('8') || (i.t === lv('9') && i.s2 <= lv('5'));
-      if (pos === 'SB') return i.t <= lv('8');
-      return false;
+      if (pos === 'LJ') return i.t <= lv('6') || (i.t === lv('7') && i.s2 <= lv('3'));
+      if (pos === 'WIDE') return i.t <= lv('8') || (i.t === lv('9') && i.s2 <= lv('4'));
+      return i.t <= lv('7') || (i.t === lv('8') && i.s2 <= lv('5')); // all sevens, smooth eights
     }
     if (i.kind === 'two') {
-      if (pos === 'HJ') return i.t <= lv('3'); // A-2, A-3, 2-3
-      if (pos === 'CO' || pos === 'SB') return i.t <= lv('5'); // weakest: 5-4
-      if (pos === 'BTN') return i.t <= lv('6');
-      return false; // no two-card hands from the first seat
+      if (pos === 'CO') return i.t <= lv('3') && i.s2 === lv('A'); // 2-A, 3-A
+      if (pos === 'BTN' || pos === 'SB') return i.t <= lv('4'); // adds 4-A, 3-2, 4-3 (and 4-2)
+      if (pos === 'WIDE') return i.t <= lv('5');
+      return false; // no two-card hands before the cutoff
     }
     return false;
   }
-  const LOOSER = { LJ: 'HJ', HJ: 'CO', CO: 'BTN', BTN: 'BTN', SB: 'BTN' }; // the next seat's range: mixed in some of the time
+  const LOOSER = { LJ: 'HJ', HJ: 'CO', CO: 'BTN', BTN: 'WIDE', SB: 'WIDE' }; // the next seat's range: mixed in some of the time
   // facing a single raise
+  // MMG: pat badugis never cold-call a raise (3-bet them); two-card draws never 3-bet; one-card draws are
+  // often 3-bet (Chase's lowball notes: 3-bet rather than flat a one-card draw against an open)
   function threeBetRange(i, opPos) {
     const late = LATE.includes(opPos);
-    if (i.kind === 'pat') return i.t <= (late ? lv('Q') : lv('J'));
-    if (i.kind === 'three') return (i.t <= lv('5') && i.s2 <= lv('3')) || (late && i.t <= lv('6') && i.s2 <= lv('4'));
+    if (i.kind === 'pat') return i.t <= (late ? lv('K') : lv('Q'));
+    if (i.kind === 'three') return i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('4')) || (late && i.t === lv('6'));
     return false;
   }
-  function coldCallRange(i, opPos) { // in position, not in the blinds: no two-card hands
+  function coldCallRange(i, opPos) { // in position, not in the blinds: no two-card hands, no pat hands
     const late = LATE.includes(opPos);
-    if (i.kind === 'pat') return true;
     if (i.kind === 'three') return i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'));
     return false;
   }
@@ -4362,8 +4372,11 @@ window.TD = window.TD || {};
     if (i.kind === 'two') return i.t <= (multi ? lv('4') : late ? lv('6') : lv('3'));
     return false;
   }
+  // MMG: facing 3-bets and 4-bets, with three wheel cards or a jack-or-better badugi, cap with all the badugis
+  // and cap or call with the one-card draws. Quiz 1: play every badugi the same way predraw (a cutoff queen
+  // badugi 4-bets the button's 3-bet), so the opponent can't read strength from the raising.
   function fourBetRange(i) {
-    if (i.kind === 'pat') return i.t <= lv('8');
+    if (i.kind === 'pat') return i.t <= lv('Q');
     if (i.kind === 'three') return i.t <= lv('4');
     return false;
   }
@@ -4374,7 +4387,7 @@ window.TD = window.TD || {};
     return false;
   }
   function capRange(i) {
-    if (i.kind === 'pat') return i.t <= lv('7');
+    if (i.kind === 'pat') return i.t <= lv('J');
     if (i.kind === 'three') return i.t <= lv('4') && i.s2 <= lv('3');
     return false;
   }
@@ -4654,6 +4667,8 @@ window.TD = window.TD || {};
     const s = opp.stats;
     return s.hands >= 15 && shrunk(s.vpip, s.hands, 0.3, 20) > 0.38;
   }
+  // a user who folds to river bets far more often than expected: thin value bets only get called by better
+  function userFoldsLight(game, opp) { return !!opp && opp.isHuman && userPosterior(game).riverFold > 0.55; }
   // river bluffs: MoP alpha = 1/(P+1) of the value bets, so fewer in bigger pots; more against a user who folds a lot
   function bluffFreqVs(game, opp, pot, unit) {
     const P = pot && unit ? pot / unit : 8;
@@ -4703,20 +4718,21 @@ window.TD = window.TD || {};
         return fold('Fold ' + d + ' — not good enough to come in behind a limper from the ' + pos + '.');
       }
       if (inR) {
-        const why = pos === 'LJ' ? (i.kind === 'three' ? 'Greenstein: up front, three-card sixes or better (plus the smoothest sevens at a six-handed table).' : 'Greenstein: no bad king badugis up front.')
-          : pos === 'CO' ? 'Greenstein\'s button range moved up a seat for six-handed: the weakest are a three-card 8-6-5 or a two-card 5-4.' : 'In the ' + pos + ' opening range (Greenstein\'s ranges, one seat later for six-handed).';
+        const why = pos === 'LJ' ? (i.kind === 'three' ? 'Mastering Mixed Games: from the first seat, three-card sixes or better plus the smooth sevens (7-3-A, 7-2-A).' : 'Mastering Mixed Games: queen badugis or better from the first seat.')
+          : i.kind === 'two' ? 'Mastering Mixed Games: the cutoff adds 2-A and 3-A, the button and small blind add 4-A, 3-2 and 4-3.'
+            : 'In the ' + pos + ' opening range (Mastering Mixed Games: from the hijack on, king badugis, all three-card sevens and smooth eights).';
         return act('raise', 'Open-raise from the ' + pos + ' with ' + d + '. ' + why, LATE.includes(pos) ? 'steal' : '');
       }
-      if (border && R() < 0.3 + steal) return act('raise', 'Open-raise from the ' + pos + ' with ' + d + ' — just outside Greenstein\'s range, mixed in some of the time: experts play a little wider than Barry because of "reduction", improving the incomplete along the way.' + (steal > 0.1 ? ' He folds his blind often, so I steal more.' : ''), 'steal');
-      return fold('Fold ' + d + ' from the ' + pos + ' — outside the opening range (Greenstein: ' + (i.kind === 'two' ? 'no two-card hands except late' : 'draw to a three-card hand that can win as the best incomplete') + ').');
+      if (border && R() < 0.3 + steal) return act('raise', 'Open-raise from the ' + pos + ' with ' + d + ' — just outside the book range, mixed in some of the time: experts play a little wider because of "reduction", improving the incomplete along the way.' + (steal > 0.1 ? ' He folds his blind often, so I steal more.' : ''), 'steal');
+      return fold('Fold ' + d + ' from the ' + pos + ' — outside the opening range (' + (i.kind === 'two' ? 'Mastering Mixed Games: two-card hands only from the cutoff on' : i.kind === 'pat' ? 'Mastering Mixed Games: no king badugis from the first seat' : 'Greenstein: draw to a three-card hand that can win as the best incomplete') + ').');
     }
     // facing a single raise
     if (c.level === 2) {
       const op = c.openerPos || 'CO';
       const multi = c.callers > 0;
-      if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('Q'))) {
-        if (pos !== 'SB' && pos !== 'BB' && smooth(i) && R() < 0.12) return act('call', 'Flat the ' + op + ' raise with ' + d + ' in position — a strong hand in the calling range keeps it from being easy to play against.');
-        return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — a good pat hand against an opening range of draws.' : ' — a premium smooth three-card hand (Greenstein: a tight player who raises and draws one often has A-2-3 or A-2-4).'), 'value');
+      if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('K'))) {
+        if (pos !== 'SB' && pos !== 'BB' && i.kind !== 'pat' && smooth(i) && R() < 0.12) return act('call', 'Flat the ' + op + ' raise with ' + d + ' in position — a strong hand in the calling range keeps it from being easy to play against (Mastering Mixed Games: one-card draws are 3-bet or sometimes cold-called).');
+        return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Chase\'s notes: 3-bet rather than flat a one-card draw).'), 'value');
       }
       if (pos === 'BB') {
         if (bbDefendRange(i, op, multi)) return act('call', 'Defend the big blind against the ' + op + ' raise with ' + d + '. Greenstein: in the blinds, draw one to a seven and sometimes an eight; the weakest are 8-6-5 or a two-card 5-4.');
@@ -4732,13 +4748,14 @@ window.TD = window.TD || {};
     // facing a 3-bet
     if (c.level === 3) {
       const late = LATE.includes(c.openerPos);
-      if (opts.canRaise && fourBetRange(i)) return act('raise', '4-bet with ' + d + '.', 'value');
+      if (opts.canRaise && fourBetRange(i)) return act('raise', '4-bet with ' + d + (i.kind === 'pat' ? '. Mastering Mixed Games: play every badugi the same way predraw, so raising doesn\'t give away which ones are strong.' : '.'), 'value');
+      if (opts.canRaise && i.kind === 'three' && i.t <= lv('5') && R() < 0.5) return act('raise', '4-bet with ' + d + '. Mastering Mixed Games: with three wheel cards, cap or call at your discretion (mixed).', 'value');
       const inv = c.invested;
-      if (callThreeBetRange(i, inv, late) || (inv >= 1 && i.kind === 'pat' && i.t <= lv('K') && opts.headsUp)) return act('call', 'Call the 3-bet with ' + d + '.');
+      if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
     // four bets and more
-    if (opts.canRaise && capRange(i)) return act('raise', (c.level >= 4 ? 'Cap it' : 'Raise') + ' with ' + d + '.', 'value');
+    if (opts.canRaise && (capRange(i) || (i.kind === 'three' && i.t <= lv('5') && R() < 0.5))) return act('raise', (c.level >= 4 ? 'Cap it' : 'Raise') + ' with ' + d + '. Mastering Mixed Games: with three wheel cards or a jack-or-better badugi, cap with all the badugis; cap or call with the one-card draws.', 'value');
     if (callThreeBetRange(i, Math.max(1, c.invested), true) || (c.invested >= 2 && opts.headsUp && (i.kind !== 'two' || i.t <= lv('4')))) return act('call', 'Call with ' + d + ' — already ' + plural(c.invested, 'bet') + ' in.');
     return act('fold', 'Fold ' + d + ' to four bets.');
   }
@@ -4746,7 +4763,8 @@ window.TD = window.TD || {};
   /* ---------------- draws ---------------- */
   function keepIdx(hand, keep) { const out = []; hand.forEach((c, i) => { if (!keep.includes(c)) out.push(i); }); return out; }
   function lastAgg(game, st) { let last = null; for (const a of game.actions) if (a.street === st && (a.type === 'bet' || a.type === 'raise')) last = a; return last; }
-  function lowCards(hand) { return hand.filter((c) => TD.rankOf(c) <= lv('4')).length; }
+  function lowCards(hand, top) { const m = top || lv('4'); return hand.filter((c) => TD.rankOf(c) <= m).length; }
+  const nameOf = (o) => (o.isHuman ? 'you' : o.name);
 
   const keyOf = (cs) => cs.slice().sort((x, y) => x - y).join(',');
   // which of the draw-value candidates to take: the best one, or when the top ones are close (or it is pat vs
@@ -4758,6 +4776,8 @@ window.TD = window.TD || {};
     if (!(sec && opps.length && (top.val - sec.val < gap || (involvesPat && k >= 1 && top.val - sec.val < 0.3)))) return { choice: top, alt: null };
     const pool = [top, sec];
     if (cands[2] && top.val - cands[2].val < gap * 0.6) pool.push(cands[2]);
+    const patC = cands.find((x) => x.n === 0);
+    if (patC && !pool.includes(patC) && k >= 1 && top.val - patC.val < 0.15) pool.push(patC);
     let best = null;
     // chips, not just showdowns: the bets still to come are counted (so implied odds and paying off are in it)
     const evs = mcEquity(game, p, { mode: 'draw', keeps: pool.map((cd) => cd.keep), ev: true, budget: 140 * pool.length, iters: opps.length === 1 ? 1600 : 700 });
@@ -4768,6 +4788,30 @@ window.TD = window.TD || {};
       if (!best || cd.adj > best.adj) best = cd;
     }
     return { choice: best, alt: pool.find((x) => x !== best) };
+  }
+  // Mastering Mixed Games' draw rules, ahead of the draw values: never keep an eight-or-worse three-card on the
+  // second draw when the two under it are A-2, A-3 or 2-3 (throw the eight and draw two again: a very common
+  // mistake), and never draw two at the third draw
+  function bookKeep(k, cands, oppPat) {
+    const top = cands[0];
+    // keep a badugi with nothing low under it on the first two draws (MMG Quiz 1: a queen badugi stands pat
+    // and keeps betting); against a pat hand on the second draw the simulations decide
+    const pat = cands.find((x) => x.n === 0);
+    if (pat && top !== pat && k <= 1 && !lowUnder(pat) && !(k === 1 && oppPat)) {
+      return { choice: pat, why: ' Mastering Mixed Games: keep the ' + hstr(pat.keep) + ' badugi — breaking is only worth it to a strong, low three-card draw.' };
+    }
+    if (k === 1 && top.n === 1 && top.keep.length === 3 && lvDesc(top.keep)[0] >= lv('8')) {
+      const two = cands.find((x) => x.n === 2 && x.keep.every((cc) => top.keep.includes(cc)) && lvDesc(x.keep)[0] <= lv('3'));
+      if (two) {
+        const hi = top.keep.find((cc) => !two.keep.includes(cc));
+        return { choice: two, why: ' Mastering Mixed Games: never draw to an eight-or-worse badugi early — throw the ' + TD.RANK_WORD[TD.rankOf(hi)].toLowerCase() + ' and draw two again to ' + hstr(two.keep) + '; keeping it is a very common mistake.' };
+      }
+    }
+    if (k === 2 && top.n >= 2) {
+      const one = cands.find((x) => x.n <= 1);
+      if (one) return { choice: one, why: ' Mastering Mixed Games: never draw two at the third draw.' };
+    }
+    return null;
   }
   function newsSince(opps, plan, k) {
     const o = opps.find((q) => q.draws.length !== (plan.oppDraws[q.seat] || 0));
@@ -4780,7 +4824,8 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
     const cands = TD.keepOptions(p.hand, 3 - st);
-    const cc = closeKeep(game, p, st, cands, opps, ip);
+    const bk = bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    const cc = bk ? { choice: bk.choice, alt: null } : closeKeep(game, p, st, cands, opps, ip);
     const oppDraws = {};
     for (const o of opps) oppDraws[o.seat] = o.draws.length;
     return { k: st, key: keyOf(cc.choice.keep), altKey: cc.alt ? keyOf(cc.alt.keep) : null, keep: cc.choice.keep, alt: cc.alt, n: cc.choice.n, oppDraws };
@@ -4803,18 +4848,19 @@ window.TD = window.TD || {};
         const best = cands.find((x) => x.n > 0) || cands[0];
         return { discard: keepIdx(hand, best.keep), reason: 'Snow given up — ' + (opps.some((o) => o.allIn) ? 'an opponent is all-in and can\'t be bluffed' : 'an opponent stood pat too') + '; ' + desc(best) + '.', tag: 'snow' };
       }
+      if (mem.snowSince === k + 1 && mem.snowWhy) { const w = mem.snowWhy; mem.snowWhy = null; return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + ', as planned when I raised. ' + w, tag: 'snow' }; }
       return { discard: [], reason: 'Stand pat with ' + hstr(hand) + ' — continuing the snow (representing a badugi).', tag: 'snow' };
     }
     // start a snow: heads-up, in position, I have been betting, he is drawing two or more, and my hand is weak
     // but holds low cards he needs (blockers). Badugi players respect pat hands: snowing works well heads-up.
-    if (opps.length === 1 && ip && k <= 1 && !opps[0].allIn && !isCallingStation(game, opps[0])) {
+    if (opps.length === 1 && ip && k === 1 && !opps[0].allIn && !isCallingStation(game, opps[0])) {
       const o = opps[0], oDraw = o.draws.length > k ? o.draws[k] : null;
       const agg = lastAgg(game, game.street);
       const iAgg = agg && agg.seat === p.seat;
       const weak = cands[0].keep.length <= 2 || (cands[0].n >= 1 && Math.max(...cands[0].keep.map(TD.rankOf)) >= lv('9'));
-      if (iAgg && oDraw !== null && oDraw >= 2 && weak && lowCards(hand) >= 2 && R() < (k === 0 ? 0.12 : 0.2)) {
+      if (iAgg && oDraw !== null && oDraw >= 2 && weak && lowCards(hand) >= 2 && R() < 0.15) {
         mem.snow = true; mem.snowSince = k + 1;
-        return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, he drew ' + oDraw + ' and I have been betting; I hold ' + lowCards(hand) + ' of the low cards he needs, so a pat hand is believable and hard for him to call down.', tag: 'snow' };
+        return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, ' + nameOf(o) + ' drew ' + oDraw + ' and I have been betting; I hold ' + lowCards(hand) + ' of the low cards needed, so a pat hand is believable. Mastering Mixed Games: pat the second draw so the snow tells a story.', tag: 'snow' };
       }
     }
     const bestDraw = cands.find((x) => x.n > 0);
@@ -4840,6 +4886,12 @@ window.TD = window.TD || {};
     // last draw, with a badugi: against players who are still drawing, stand pat (they haven't made one)
     if (k === 2 && pat && drewThis.length === opps.length && drewThis.every((n) => n > 0) && opps.length === 1) {
       return { discard: [], reason: '3rd draw: stand pat with ' + hn.short + ' — he drew ' + drewThis[0] + ' in front of me, so he has no badugi yet and must hit to beat any badugi.', tag: '' };
+    }
+    const bk = bookKeep(k, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    if (bk) {
+      const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
+      mem.drawPlan = null;
+      return { discard: keepIdx(hand, bk.choice.keep), reason: WHICH[k] + ' draw: ' + desc(bk.choice) + (plan0 && plan0.key === keyOf(bk.choice.keep) ? ', as planned when I ' + plan0.act : '') + '.' + bk.why, tag: '' };
     }
     // close calls: simulate. The betting round before this draw already made the same choice (mem.drawPlan),
     // and the call or bet was based on it, so keep to it unless something new happened since (someone drew
@@ -4912,6 +4964,7 @@ window.TD = window.TD || {};
     }
     // planned check-raise
     if (!r && mem.crPlan === st && c.toCall > 0 && c.canRaise && c.lvl === 1) r = act('raise', 'Check-raise as planned with ' + c.txt + '.', 'check-raise');
+    if (!r && dRem > 0 && !mem.snow && !mem.snowAborted) r = snowStart(c);
     if (!r && st === 3) r = river(c, fair);
     if (!r) r = drawStreet(c, fair);
     // no bluffs into a dry side pot
@@ -4926,14 +4979,48 @@ window.TD = window.TD || {};
     }
     return r;
   }
-  // betting before the last draw: Greenstein's rules for who does the betting
+  // Mastering Mixed Games on snowing: raise now (a check-raise when I checked) and stand pat at the next draw, so
+  // the snow tells a story. Snow the worst three-card draws (5-6-7, A-6-7, 2-5-6), not the best ones, a lot
+  // more out of position than in position, holding low cards the others need, against players still drawing
+  // (Quiz 2: the small blind check-raises with 6-4-3 against two one-card draws and snows the last draw).
+  const hn0 = (c) => c.hn.short + ' badugi';
+  function snowStart(c) {
+    const { game, p } = c;
+    if (!c.drawing || c.N > 2 || c.st > 2 || c.opps.some((o) => o.allIn || isCallingStation(game, o))) return null;
+    if (c.oppsLast.some((n) => n === 0)) return null; // someone is pat already
+    const ls = lvDesc(c.keepNow);
+    const rough = c.keepNow.length === 3 ? (ls[0] >= lv('8') || (ls[0] === lv('7') && ls[1] >= lv('5')) || (ls[0] === lv('6') && ls[1] >= lv('4'))) && lowCards(c.hand, lv('5')) >= 2
+      : c.st === 1 && lowCards(c.hand) >= 2;
+    if (!rough) return null;
+    const prev = lastAgg(game, c.st - 1);
+    const raiseIt = c.toCall > 0 && c.lvl === 1 && c.canRaise;
+    const betIt = c.toCall === 0 && c.st === 1 && c.ip && prev && prev.seat === p.seat;
+    if (!raiseIt && !betIt) return null;
+    let f = (c.ip ? 0.1 : 0.22) * (c.N === 2 ? 0.7 : 1) * (betIt ? 0.6 : 1);
+    if (R() >= f) return null;
+    p.bot.snow = true; p.bot.snowSince = c.st + 1;
+    const others = c.opps.map((o) => nameOf(o) + ' drew ' + o.draws[c.st - 1]).join(', ');
+    p.bot.snowWhy = 'Mastering Mixed Games: ' + (c.keepNow.length === 3 ? 'snow the worst three-card draws like ' + hstr(c.keepNow) + ', not the best ones' : 'a weak two-card draw holding low cards is a snow candidate') + (c.ip ? '' : ', and snow more out of position') + '; my ' + lowCards(c.hand, lv('5')) + ' low cards are cards the others need, and they are still drawing (' + others + ').';
+    return act(raiseIt ? 'raise' : 'bet', (raiseIt ? (c.iChecked ? 'Check-raise' : 'Raise') : 'Bet') + ' with ' + hstr(c.hand) + ', planning to snow (stand pat at the next draw). ' + p.bot.snowWhy, 'snow');
+  }
+  // betting before the last draw: Greenstein's rules for who does the betting, with Mastering Mixed Games' rhythm
   function drawStreet(c, fair) {
     const { game, p } = c;
     const fewer = c.oppsLast.length > 0 && c.oppsLast.every((n) => n > c.nextDraw); // I draw fewer cards than everyone
     const vsPat = c.oppsLast.some((n) => n === 0);
     const robustDraw = c.drawing && c.keepNow.length === 3 && Math.max(...c.keepNow.map(TD.rankOf)) <= lv('5');
-    const impl = c.drawing ? 0.04 * c.dRem : 0;
+    const myLast = p.draws[c.st - 1];
+    const prev = lastAgg(game, c.st - 1);
+    const iWasAgg = !!prev && prev.seat === p.seat;
+    // a player behind me who drew fewer cards than I did last time has the drawing lead (MMG)
+    const leadBehind = c.opps.find((o) => o.draws[c.st - 1] < myLast && game.actOrder(o.seat) > game.actOrder(p.seat));
+    let impl = c.drawing ? 0.04 * c.dRem : 0;
     if (c.toCall === 0) {
+      if (leadBehind) {
+        const lead = leadBehind.isHuman ? 'you drew fewer cards than I did, so you have' : leadBehind.name + ' drew fewer cards than I did, so has';
+        if (c.made && !c.drawing) { p.bot.crPlan = c.st; return act('check', 'Check the ' + hn0(c) + ' to check-raise. Mastering Mixed Games: ' + lead + ' the drawing lead; having made a badugi, check-raise every time (pat now, so there is nothing left to disguise, and even a rough badugi can make a better king or queen break).', 'check-raise'); }
+        return act('check', 'Check, ' + c.txt + '. Mastering Mixed Games: ' + lead + ' the drawing lead — always check to the player with the drawing lead, and with a one-card draw out of position just call (a check-raise shows my hand the moment I draw one).');
+      }
       if (c.made && !c.drawing) {
         // OOP with a strong pat hand against an aggressive player behind: sometimes check-raise
         if (!c.ip && c.N === 1 && c.E > 0.66 && c.canRaise && R() < 0.3) { p.bot.crPlan = c.st; return act('check', 'Check with ' + c.txt + ', planning to check-raise.', 'check-raise'); }
@@ -4941,14 +5028,27 @@ window.TD = window.TD || {};
         return act('check', 'Check the pat ' + c.txt + ' — too weak to bet against this field.');
       }
       if (vsPat) return act('check', 'Check, ' + c.txt + ' against a pat hand — the pat hand does the betting.');
-      if (fewer && c.E >= fair - 0.02) return act('bet', 'Bet, ' + c.txt + ' — I draw fewer cards than ' + (c.N === 1 ? 'he does' : 'anyone else') + '. Greenstein: the one-card drawer bets until the others are drawing one too.', 'card-ahead');
-      if (!fewer && c.oppsLast.every((n) => n === c.nextDraw) && c.E >= fair + 0.05 && (robustDraw || R() < 0.5)) return act('bet', 'Bet, ' + c.txt + ' — we draw the same number, and I likely have the best incomplete. Greenstein: then whoever thinks they have the best incomplete takes over the betting.', 'value');
+      if (fewer && c.E >= fair - 0.02) return act('bet', 'Bet, ' + c.txt + ' — I draw fewer cards than ' + (c.N === 1 ? 'my opponent' : 'anyone else') + '. Greenstein: the one-card drawer bets until the others are drawing one too.', 'card-ahead');
+      // MMG (the 4-2-A example): with equal draws the action checks to the last raiser; checked to, the raiser bets a decent
+      // draw — behind a made badugi about half the time, but a bet risks little against a big pot and is pure value otherwise
+      const equal = c.oppsLast.every((n) => n === myLast);
+      if (equal && iWasAgg && c.ip && c.drawing && (robustDraw || c.E >= fair * 0.7)) return act('bet', 'Bet, ' + c.txt + ' — everyone drew ' + myLast + ' and it was checked to me, the last raiser. Mastering Mixed Games: with equal draws the action checks to the last aggressor, who bets; even behind a made badugi about half the time, the bet risks little against the pot and is pure value the rest of the time.', 'value');
+      const aggBehind = prev && !iWasAgg && c.opps.some((o) => o.seat === prev.seat) && game.actOrder(prev.seat) > game.actOrder(p.seat);
+      if (!fewer && c.oppsLast.every((n) => n === c.nextDraw) && c.E >= fair + 0.05 && (robustDraw || R() < 0.5) && (!aggBehind || R() < 0.35)) return act('bet', 'Bet, ' + c.txt + ' — we draw the same number, and I likely have the best incomplete. Greenstein: then whoever thinks they have the best incomplete takes over the betting.', 'value');
       return act('check', 'Check, ' + c.txt + '.');
     }
     // facing a bet
+    // MMG: between the first and second draw, fold all unimproved two-card draws; never draw two at the third draw
+    if (c.drawing && c.nextDraw >= 2 && ((c.st === 1 && myLast >= 2) || c.st === 2)) {
+      return act('fold', 'Fold, ' + c.txt + ' — Mastering Mixed Games: ' + (c.st === 1 ? 'between the first and second draw, fold all unimproved two-card draws.' : 'never draw two at the third draw.'));
+    }
     const raiseThr = c.N === 1 ? 0.62 : fair + 0.22;
     if (c.canRaise && c.made && !c.drawing && c.E >= raiseThr) return act('raise', 'Raise with the pat ' + c.txt + ' — well ahead of the betting range.', 'value');
-    if (c.canRaise && c.drawing && fewer && c.lvl === 1 && c.E >= fair + 0.08 && R() < 0.5) return act('raise', 'Raise, ' + c.txt + ' — I am drawing fewer cards than the bettor.', 'card-ahead');
+    // (no check-raising with draws: MMG — out of position, check-call the one-card draws)
+    if (c.canRaise && c.drawing && fewer && c.lvl === 1 && !c.iChecked && c.E >= fair + 0.08 && R() < 0.5) return act('raise', 'Raise, ' + c.txt + ' — I am drawing fewer cards than the bettor.', 'card-ahead');
+    // MMG: once the bets double, a draw facing a raise is usually up against badugis; calling now and calling again
+    // after improving compounds the mistake, so no implied odds and a little more to call
+    if (c.st === 2 && c.drawing && c.lvl >= 2) impl = -0.03;
     let need = c.potOdds - impl;
     const behind = game.players.filter((q) => q !== p && !q.folded && !q.allIn && q.roundBet < game.currentBet).length;
     if (behind > 0) need += 0.02 * Math.min(2, behind);
@@ -4975,10 +5075,20 @@ window.TD = window.TD || {};
         if (c.E >= fair + 0.15) return act('bet', 'Bet the ' + c.txt + ' for value into ' + c.N + ' opponents.', 'value');
         return act('check', 'Check the ' + c.txt + ' multiway.');
       }
-      // no badugi: bluff now and then heads-up when he was drawing too (he can't call with a missed draw)
-      if (c.N === 1 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp)) {
-        const f = bluffFreqVs(game, c.opp, c.pot, c.unit) * (c.ip ? 1 : 0.6);
-        if (R() < f) return act('bet', 'Bluff with ' + c.txt + ' — he drew on the last draw too, so a missed draw can\'t call. MoP: bluff in proportion to the value bets, fewer in bigger pots.', 'bluff');
+      // no badugi. MMG (Quiz 3): a strong three-card hand heads-up against a one-card drawer is worth a value bet —
+      // the drawer should expect some bluffs here and pays off with slightly worse three-cards
+      const prev = lastAgg(game, 2), hasLead = !!prev && prev.seat === p.seat;
+      if (c.N === 1 && hn.cat === 1 && t <= lv('4') && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < 0.75) {
+        return act('bet', 'Bet the ' + c.txt + ' for value. Mastering Mixed Games: a three-card hand this strong is worth a value bet against a player who drew on the last draw, who should expect some bluffs here and pays off with slightly worse three-cards. If raised, I fold.', 'value');
+      }
+      // bluffs when everyone drew on the last draw (a missed draw can't call). MMG: a lead from the player without
+      // the betting lead (a donk bet, or a bet when checked to) reads as a badugi and gets folds, so bluff more
+      // without the lead and less with it (with the lead it looks like a three-card value bet and gets looked up)
+      if (c.N <= 2 && c.opps.every((o) => o.draws[2] > 0) && !c.opps.some((o) => isCallingStation(game, o))) {
+        const who = c.opps.find((o) => o.isHuman) || c.opps[0];
+        const f = bluffFreqVs(game, who, c.pot, c.unit) * (hasLead ? 0.6 : 1.8) * (c.N === 2 ? 0.8 : 1);
+        if (R() < f) return act('bet', 'Bluff with ' + c.txt + ' — ' + (c.N === 1 ? 'my opponent' : 'both opponents') + ' drew on the last draw too, so a missed draw can\'t call. ' +
+          (hasLead ? 'I have the betting lead, so a bet can look like a three-card value bet: MMG says bluff less here.' : 'Mastering Mixed Games: without the betting lead, a bet reads as a badugi and gets folds — bluff more.') + ' MoP: bluff in proportion to the value bets, fewer in bigger pots.', 'bluff');
       }
       return act('check', 'Check, ' + c.txt + (c.made ? '' : ' — Chase\'s notes: a busted smooth draw still has some showdown value against other incompletes.'));
     }
@@ -4992,9 +5102,11 @@ window.TD = window.TD || {};
       if (c.lvl <= 1 && R() < sig((c.E - raiseThr) / 0.03)) return act('raise', 'Raise with the ' + c.txt + ' — well ahead of the betting range.', 'value');
     }
     if (c.made && tier === 7 && c.lvl >= 2) return act('call', 'Call the raise with the ' + c.txt + '. Greenstein: sevens get tenuous — against a tight player, bet a rough seven and just call a raise.');
+    const bluffy = c.opp && c.opp.isHuman ? clamp((userPosterior(game).riverBluff - 0.12) * 0.6, 0, 0.08) : 0;
+    if (!c.made && c.iBet && bluffy < 0.04) return act('fold', 'Fold the ' + c.txt + ' — my value bet got raised. Mastering Mixed Games (Quiz 3): nothing says I missed, and I was known to have a strong draw; without a real reason to think this player bluffs here, a three-card hand folds.', 'discipline');
     const behind = game.players.filter((q) => q !== p && !q.folded && !q.allIn && q.roundBet < game.currentBet).length;
-    const need = c.potOdds + (behind > 0 ? 0.03 : 0) - (c.made ? 0.02 : 0);
-    if (c.E >= need) return act('call', 'Call with the ' + c.txt + ' — ' + priceTxt(c) + '.');
+    const need = c.potOdds + (behind > 0 ? 0.03 : 0) - (c.made ? 0.02 : 0) - bluffy;
+    if (c.E >= need) return act('call', 'Call with the ' + c.txt + ' — ' + priceTxt(c) + (bluffy > 0.02 ? '. You have shown river bluffs, and Mastering Mixed Games says call down quite light against players who bluff the river a lot.' : '.'));
     return act('fold', 'Fold the ' + c.txt + ' — ' + priceTxt(c) + ', and it doesn\'t win often enough.');
   }
 
