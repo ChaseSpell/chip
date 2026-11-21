@@ -429,6 +429,7 @@ body.portrait #drawer { width: 100vw; border-left: none; }
 .tagb.mdf { background: #3f5a2a; color: #e6f8d4; } .tagb.bluff { background: #7a2235; color: #ffe0e6; } .tagb.check-raise { background: #5c3a7a; color: #f0e2ff; }
 .tagb.steal { background: #6a5520; color: #fff1c9; } .tagb.isolate { background: #23524a; color: #d6fff7; } .tagb.card-ahead { background: #234e7a; color: #dcecff; }
 .tagb.two-way { background: #5a4a1e; color: #fff3cf; }
+.tagb.robust { background: #2a5a3c; color: #dbf7e5; } .tagb.denial { background: #5e4a2a; color: #fbead2; }
 .rv-empty, .muted { color: var(--muted); font-style: italic; }
 .rv-player.coach { border-color: var(--accent); }
 .coach-sum { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -2413,6 +2414,80 @@ window.TD = window.TD || {};
     return n ? total / n : 0;
   }
 
+  // Before the river a bet does two jobs (Janda, from Chase's notes): it builds the pot in case I win, and it denies
+  // equity by folding hands that still had some. Chase (Nov 21): profitable bets and raises before the river come from
+  // hands with robust equity, equity that holds up as the range that stays in gets stronger. So score a bet against the
+  // hands that would continue. Chance a hand (after his draws so far, dRem draws left) calls one more bet:
+  function contLik(hand, dRem) {
+    const n = TD.policyDrawCount(hand, dRem);
+    if (n === 0) return TD.isMadeLow(hand) ? 1 : 0.3; // a pat junk hand is a snow
+    const top = Math.max(...TD.policyKeep(hand, dRem).map(TD.rankOf));
+    if (n === 1) return top <= 8 ? 0.97 : top <= 9 ? (dRem >= 2 ? 0.85 : 0.7) : (dRem >= 2 ? 0.6 : 0.4);
+    if (n === 2) return dRem >= 2 ? 0.45 : 0.1;
+    return dRem >= 2 ? 0.08 : 0.02;
+  }
+  // In bets: gain = EV(bet) - EV(check) at showdown, split into building the pot (my share of the callers' extra bets,
+  // minus my own bet) and denial (pot equity gained because hands fold). Ec = my share against the callers.
+  function mcBetEV(game, p, opt) {
+    const opps = opponentsOf(game, p);
+    if (!opps.length) return null;
+    const key = EQ_CACHE ? 'betEV|' + (opt.patForever ? 1 : 0) : null;
+    if (key && key in EQ_CACHE) return EQ_CACHE[key];
+    const models = opps.map((o) => buildModel(game, o));
+    const known = new Set(p.hand.concat(p.discards));
+    const avail = [];
+    for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
+    const pool = new Pool(avail);
+    const P = Math.max(1, (opt.pot || game.pot()) / (opt.unit || game.stakes.big));
+    const budget = game.fastForward ? 25 : 110, minIt = game.fastForward ? 64 : 120, maxIt = opps.length === 1 ? 520 : 400;
+    const t0 = performance.now();
+    let n = 0, build = 0, deny = 0, ecSum = 0, ecN = 0, allFold = 0, eAll = 0;
+    const doneMe0 = p.draws.length;
+    for (let it = 0; it < maxIt; it++) {
+      if (it >= minIt && (it & 15) === 0 && performance.now() - t0 > budget) break;
+      pool.reset();
+      const hands = [p.hand.slice()], done = [doneMe0], cont = [true];
+      for (const m of models) {
+        const h = sampleOpponent(m, pool);
+        hands.push(h); done.push(m.draws.length);
+        cont.push(R() < contLik(h, 3 - m.draws.length));
+      }
+      for (let k = 0; k < 3; k++) for (let j = 0; j < hands.length; j++) {
+        if (done[j] > k) continue;
+        if (!(j === 0 && opt.patForever)) {
+          const keep = TD.policyKeep(hands[j], 3 - k);
+          if (keep.length < 5) hands[j] = drawInto(hands[j], keep, pool);
+        }
+        done[j]++;
+      }
+      const vals = hands.map((h) => TD.evalHand(h));
+      const share = (who) => { let best = Infinity; for (const j of who) best = Math.min(best, vals[j]); if (vals[0] !== best) return 0; return 1 / who.filter((j) => vals[j] === best).length; };
+      const all = hands.map((_, j) => j), callers = all.filter((j) => j === 0 || cont[j]);
+      const sAll = share(all);
+      eAll += sAll;
+      if (callers.length === 1) { allFold++; deny += P * (1 - sAll); }
+      else { const sC = share(callers); ecSum += sC; ecN++; deny += (sC - sAll) * P; build += sC * callers.length - 1; }
+      n++;
+    }
+    if (!n) return null;
+    const res = { gain: (build + deny) / n, build: build / n, deny: deny / n, Ec: ecN ? ecSum / ecN : 1, fold: allFold / n, E: eAll / n, P };
+    if (key) EQ_CACHE[key] = res;
+    return res;
+  }
+  function betEV(c) {
+    if (!c.betEV) c.betEV = mcBetEV(c.game, c.p, { pot: c.pot + c.toCall, unit: c.unit, patForever: !!c.p.bot.snow }) || { gain: 0, build: 0, deny: 0, Ec: c.E, fold: 0, E: c.E };
+    return c.betEV;
+  }
+  function robustTxt(b, N) {
+    if (!b) return '';
+    const pc = (x) => Math.round(x * 100) + '%';
+    const robust = b.Ec >= 0.75 * b.E;
+    const buildTxt = 'I keep ' + pc(b.Ec) + ' against the hands that would call, ' + (b.Ec < b.E - 0.005 ? 'down from ' : 'about the same as the ') + pc(b.E) + ' against the whole range (' + (robust ? 'robust equity: it holds up as the range that stays in gets stronger' : 'not very robust: the hands that stay in are the ones that beat me') + ')';
+    const denyTxt = b.deny > 0.05 ? '; ' + (b.fold >= 0.03 ? 'about ' + pc(b.fold) + ' of the time it folds everyone' : 'it folds some hands') + ' that still had equity against me, worth about ' + b.deny.toFixed(2) + ' bets' : '';
+    return ' Before the river a bet builds the pot in case I win and denies equity (Janda): ' + buildTxt + denyTxt + '.';
+  }
+  function robustTag(b) { return b && b.deny > b.build ? 'denial' : 'robust'; }
+
   /* ---------------- predraw ---------------- */
   function describe(info) {
     switch (info.kind) {
@@ -3302,6 +3377,11 @@ window.TD = window.TD || {};
       r = act('call', 'Call — still drawing (to ' + hstr(c.keepNow) + '). MMG: after betting and getting raised on the first draw, 3-bet only when pat; re-raising a draw is pure spew.', '');
     }
     r = mdfFloor(c, r);
+    // before the river, say which of the two jobs a bet or raise does (Janda; Chase's robust-equity rule)
+    if (dRem > 0 && (r.type === 'bet' || r.type === 'raise') && ['value', 'semi-bluff', 'card-ahead', 'robust', 'denial'].includes(r.tag || 'value')) {
+      const b = betEV(c);
+      r = act(r.type, (r.reason || '').replace(/ for value/g, '').replace(' — equity edge over the field.', '.') + robustTxt(b, N), r.tag === 'card-ahead' ? 'card-ahead' : robustTag(b));
+    }
     if (snowNote) r = act(r.type, snowNote + (r.reason || ''), r.tag);
     return r;
   }
@@ -3775,9 +3855,12 @@ window.TD = window.TD || {};
         const patEarlyMe = c.myPrev === 0; // I was already pat before the last draw
         if (!c.ip) {
           // SS2: out of position, pat vs a drawer
-          if (high && top === 7) {
-            if (!isCallingStation(game, opp) && R() < 0.15) { p.bot.crPlan = c.st; return act('check', 'Check the seven, hoping he bets a made eight so I can check-raise. SS2: now and then, check a seven to trap an eight into betting.', 'check-raise'); }
-            return act('bet', 'Pat ' + mk(hn.short) + ' vs a drawing opponent: bet. SS2: usually just bet it and collect the value.', 'value');
+          // Chase (Nov 21): my river check-raising range here is polarized (very strong hands and a few bluffs). The
+          // strongest pat hands usually bet (getting to 3-bet his raise wins more than a check-raise), but sometimes check
+          // to check-raise, so he can't bet every hand he checks to me with no fear of a raise.
+          if (strong) {
+            if (!isCallingStation(game, opp) && R() < 0.2) { p.bot.crPlan = c.st; return act('check', 'Check ' + mk(hn.short) + ', planning to check-raise. Chase\'s notes: usually bet the strongest pat hands here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise. SS2: now and then, check a seven to trap an eight into betting.', 'check-raise'); }
+            return act('bet', 'Pat ' + mk(hn.short) + ' vs a drawing opponent: bet. SS2: usually just bet it and collect the value. Chase\'s notes: betting is preferred to checking the strongest hands, since a raise lets me 3-bet (three bets beat the two a check-raise gets).', 'value');
           }
           if (high && top === 8 && !(rough8 && patEarlyMe)) return act('bet', 'Pat ' + mk(hn.short) + ': bet. SS2: bet an eight you stood pat with after the second draw — he may call with a weak hand or a nine.', 'value');
           return act('check', 'Pat ' + mk(hn.short) + ' out of position vs a drawing opponent: check (and call one bet). SS2: check a nine, ten or jack — and a rough eight you stood pat with early; if he made a hand you would lose two bets.');
@@ -3791,6 +3874,9 @@ window.TD = window.TD || {};
         return act('check', 'Pat ' + mk(hn.short) + ' in position vs a drawing opponent who checked: check back. Notes/SS2: the problem with betting a rough eight here is that a worse hand will rarely call.');
       }
       if (c.lvl === 1 && c.canRaise && strong) return act('raise', 'He drew and bets into my pat ' + mk(hn.short) + ': raise — only with a strong eight or a seven.', 'value');
+      // Chase (Nov 21): the check-raising range holds a few bluffs, taken from my roughest pat hands
+      const iChecked = game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type === 'check');
+      if (!c.ip && iChecked && c.lvl === 1 && c.canRaise && high && top >= 10 && !isCallingStation(game, opp) && R() < 0.12) return act('raise', 'Check-raise bluff with ' + mk(hn.short) + '. Chase\'s notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest pat hands are the bluffs, and a made eight or nine he bet may fold.', 'bluff');
       if (c.potOdds < 0.2 || c.E >= c.potOdds * 0.8) return act('call', 'He drew and bets into my pat hand — he likely made it, but there are so many bets in the pot. Notes: be pretty certain he won\'t bluff before folding.', 'mdf');
       return act('fold', 'He drew and bets into my pat ' + mk(hn.long) + '; fold.');
     }
@@ -3845,8 +3931,8 @@ window.TD = window.TD || {};
       // ToP ch. 25 #7: bet more hands behind a player who doesn't check-raise
       const ncr = c.ip && c.N === 1 ? userNoCheckRaise(c.game, c.opp) : 0;
       thr -= 0.1 * ncr;
-      if (R() < sig((c.E - thr) / 0.03)) {
-        const why = c.drawing ? 'Bet with ' + hnTxt + ' — equity edge over the field.' : 'Bet ' + hnTxt + ' for value.';
+      if (c.st < 3 ? R() < sig((betEV(c).gain - 0.1 * ncr - (c.ip ? 0 : 0.05)) / 0.05) : R() < sig((c.E - thr) / 0.03)) {
+        const why = c.st < 3 ? 'Bet ' + (c.drawing ? 'with ' : '') + hnTxt + '.' : c.drawing ? 'Bet with ' + hnTxt + ' — equity edge over the field.' : 'Bet ' + hnTxt + ' for value.';
         return act('bet', why + (c.ip ? '' : ' (out of position only with a clear edge — notes: avoid marginal value bets OOP)') + (ncr > 0.1 ? noCheckRaiseNote(c.game) : ''), c.drawing ? 'semi-bluff' : 'value');
       }
       return act('check', 'Check with ' + hnTxt + (c.ip ? '.' : ' — out of position, minimizing losses.'));
@@ -4510,11 +4596,20 @@ window.TD = window.TD || {};
     return p;
   }
   // chance a final hand calls one river bet: badugis call (the better, the likelier), incompletes rarely do
-  function riverCallLik(hand, w) {
-    const v = TD.evalHand(hand);
-    if (TD.evalCat(v) !== 0) return TD.evalCat(v) === 1 ? 0.05 : 0.01;
-    const q = TD._bd.qOfValue(v);
-    return clamp(0.3 + 0.7 * (q - 0.25) / (w || 0.3), 0.3, 1);
+  // how likely he is to call one river bet with this hand. Chase (Nov 21): a player never folds a made badugi to one
+  // river bet (my bet can be a bluff, or a thin value bet with a strong three-card hand like 3-2-A or 4-2-A), and he
+  // bluff-catches with some good three-card hands, more the better they are. w > 0.3: a player shown to fold the river more.
+  // leadMul: MMG — three-card hands call a bettor who had the betting lead more (he may be value betting a three-card
+  // hand) and a bettor without it less (a bet without the lead reads as a badugi)
+  function riverCallLik(hand, w, leadMul) {
+    const v = TD.evalHand(hand), cat = TD.evalCat(v), tight = (w || 0.3) / 0.3;
+    if (cat === 0) return tight > 1 ? clamp(1 - (tight - 1) * 0.6 * (1 - TD._bd.qOfValue(v)), 0.6, 1) : 1;
+    if (cat === 1) {
+      const t = lvDesc(TD.playing(hand))[0];
+      const base = t <= lv('4') ? 0.4 : t <= lv('5') ? 0.25 : t <= lv('6') ? 0.12 : t <= lv('7') ? 0.05 : 0.02;
+      return clamp(base * (leadMul || 1) / tight, 0.01, 0.8);
+    }
+    return 0.01;
   }
   function buildModel(game, opp) {
     const pk = predrawKey(game, opp);
@@ -4567,7 +4662,7 @@ window.TD = window.TD || {};
         if (ok && R() > pa) ok = false;
         if (!ok && w < bestW * 0.5) break;
       }
-      if (model.hypoCall) { const pc = riverCallLik(hand, model.callW); w *= pc; if (ok && R() > pc) ok = false; }
+      if (model.hypoCall) { const pc = riverCallLik(hand, model.callW, model.leadMul); w *= pc; if (ok && R() > pc) ok = false; }
       if (ok) { if (best) for (const c of best.cards) pool.putBack(c); return hand; }
       if (w > bestW) { if (best) for (const c of best.cards) pool.putBack(c); best = { cards: hand }; bestW = w; continue; }
       pool.top = save;
@@ -4591,7 +4686,7 @@ window.TD = window.TD || {};
 
   let EQ_CACHE = null;
   function mcEquity(game, p, opt) {
-    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') : null;
+    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' + (opt.leadMul || 1) : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') : null;
     if (ckey && ckey in EQ_CACHE) return EQ_CACHE[ckey];
     const v = mcEquityRaw(game, p, opt);
     if (ckey) EQ_CACHE[ckey] = v;
@@ -4601,7 +4696,7 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     if (!opps.length) return 1;
     const models = opps.map((o) => buildModel(game, o));
-    if (opt.hypoCall) for (const m of models) m.hypoCall = true;
+    if (opt.hypoCall) for (const m of models) { m.hypoCall = true; m.leadMul = opt.leadMul || 1; }
     const known = new Set(p.hand.concat(p.discards));
     const avail = [];
     for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
@@ -4663,6 +4758,81 @@ window.TD = window.TD || {};
     const res = tot.map((t, q) => (n ? (t + (opt.ev ? ext[q] / potBets : 0)) / n : 0));
     return opt.keeps ? res : res[0];
   }
+
+  // Before the river a bet does two jobs (Janda, from Chase's notes): it builds the pot in case I win, and it denies
+  // equity by folding hands that still had some. Chase (Nov 21): the hands that make profitable bets and raises before
+  // the river are the ones with robust equity, equity that holds up as the range that stays in gets stronger. So score a
+  // bet against the hands that would continue, not against the range at the start of the street.
+  // Chance a hand (after the opponent's draws so far, dRem draws left) calls one more bet before the river.
+  function contLik(hand, dRem) {
+    const inf = infoOfFast(hand);
+    if (inf.kind === 'pat') return TD.isMadeLow(hand) ? (dRem <= 1 && inf.t >= lv('K') ? 0.9 : 1) : 0.3;
+    if (inf.kind === 'three') return inf.t <= lv('8') ? 0.98 : inf.t <= lv('T') ? (dRem >= 2 ? 0.85 : 0.7) : (dRem >= 2 ? 0.55 : 0.35);
+    if (inf.kind === 'two') return dRem >= 2 ? 0.15 : 0.03; // MMG: fold unimproved two-card draws after the first draw
+    return 0.02;
+  }
+  // In bets: gain = EV(bet) - EV(check) at showdown, split into building the pot (my share of the extra bets the callers
+  // put in, minus my own bet) and denial (pot equity I gain because hands fold). Ec = my share against the callers.
+  function mcBetEV(game, p, opt) {
+    const opps = opponentsOf(game, p);
+    if (!opps.length) return null;
+    const key = EQ_CACHE ? 'betEV|' + (opt.nextKeep ? opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') + '|' + (opt.patForever ? 1 : 0) : null;
+    if (key && key in EQ_CACHE) return EQ_CACHE[key];
+    const models = opps.map((o) => buildModel(game, o));
+    const known = new Set(p.hand.concat(p.discards));
+    const avail = [];
+    for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
+    const pool = new Pool(avail);
+    const P = Math.max(1, (opt.pot || game.pot()) / (opt.unit || game.stakes.big));
+    const budget = game.fastForward ? 25 : 110, minIt = game.fastForward ? 60 : 110, maxIt = opps.length === 1 ? 500 : 380;
+    const t0 = performance.now();
+    let n = 0, build = 0, deny = 0, ecSum = 0, ecN = 0, allFold = 0, eAll = 0;
+    const doneMe0 = p.draws.length;
+    for (let it = 0; it < maxIt; it++) {
+      if (it >= minIt && (it & 15) === 0 && performance.now() - t0 > budget) break;
+      pool.reset();
+      const hands = [p.hand.slice()], done = [doneMe0], cont = [true];
+      for (const m of models) {
+        const h = sampleOpponent(m, pool);
+        hands.push(h); done.push(m.draws.length);
+        cont.push(R() < contLik(h, 3 - m.draws.length));
+      }
+      for (let k = 0; k < 3; k++) for (let j = 0; j < hands.length; j++) {
+        if (done[j] > k) continue;
+        if (!(j === 0 && opt.patForever)) {
+          const keep = j === 0 && opt.nextKeep && k === doneMe0 ? opt.nextKeep : TD.policyKeep(hands[j], 3 - k);
+          if (keep.length < 4) hands[j] = drawInto(hands[j], keep, pool);
+        }
+        done[j]++;
+      }
+      const vals = hands.map((h) => TD.evalHand(h));
+      const share = (who) => { let best = Infinity; for (const j of who) best = Math.min(best, vals[j]); if (vals[0] !== best) return 0; return 1 / who.filter((j) => vals[j] === best).length; };
+      const all = hands.map((_, j) => j), callers = all.filter((j) => j === 0 || cont[j]);
+      const sAll = share(all);
+      eAll += sAll;
+      if (callers.length === 1) { allFold++; deny += P * (1 - sAll); }
+      else {
+        const sC = share(callers);
+        ecSum += sC; ecN++;
+        deny += (sC - sAll) * P;
+        build += sC * callers.length - 1;
+      }
+      n++;
+    }
+    if (!n) return null;
+    const res = { gain: (build + deny) / n, build: build / n, deny: deny / n, Ec: ecN ? ecSum / ecN : 1, fold: allFold / n, E: eAll / n, P };
+    if (key) EQ_CACHE[key] = res;
+    return res;
+  }
+  function robustTxt(b, N) {
+    if (!b) return '';
+    const pc = (x) => Math.round(x * 100) + '%';
+    const robust = b.Ec >= 0.75 * b.E;
+    const buildTxt = 'I keep ' + pc(b.Ec) + ' against the hands that would call, ' + (b.Ec < b.E - 0.005 ? 'down from ' : 'about the same as the ') + pc(b.E) + ' against the whole range (' + (robust ? 'robust equity: it holds up as the range that stays in gets stronger' : 'not very robust: the hands that stay in are the ones that beat me') + ')';
+    const denyTxt = b.deny > 0.05 ? '; ' + (b.fold >= 0.03 ? 'about ' + pc(b.fold) + ' of the time it folds everyone' : 'it folds some hands') + ' that still had equity against me, worth about ' + b.deny.toFixed(2) + ' bets' : '';
+    return ' Before the river a bet builds the pot in case I win and denies equity (Janda): ' + buildTxt + denyTxt + '.';
+  }
+  function robustTag(b) { return b && b.deny > b.build ? 'denial' : 'robust'; }
 
   /* ---------------- the user's tendencies (shrunk toward a prior; MoP) ---------------- */
   function shrunk(k, n, prior, weight) { return (k + prior * weight) / ((n || 0) + weight); }
@@ -4788,6 +4958,8 @@ window.TD = window.TD || {};
 
   /* ---------------- draws ---------------- */
   function keepIdx(hand, keep) { const out = []; hand.forEach((c, i) => { if (!keep.includes(c)) out.push(i); }); return out; }
+  // the betting lead going into the river: the last bettor or raiser before it, on any earlier street
+  function leadInto(game, st) { let last = null; for (const a of game.actions) if (a.street < st && (a.type === 'bet' || a.type === 'raise')) last = a; return last; }
   function lastAgg(game, st) { let last = null; for (const a of game.actions) if (a.street === st && (a.type === 'bet' || a.type === 'raise')) last = a; return last; }
   function lowCards(hand, top) { const m = top || lv('4'); return hand.filter((c) => TD.rankOf(c) <= m).length; }
   const nameOf = (o) => (o.isHuman ? 'you' : o.name);
@@ -5046,6 +5218,11 @@ window.TD = window.TD || {};
     if (!r && dRem > 0 && !mem.snow && !mem.snowAborted) r = snowStart(c);
     if (!r && st === 3) r = river(c, fair);
     if (!r) r = drawStreet(c, fair);
+    // before the river, say which of the two jobs a bet or raise does (Janda; Chase's robust-equity rule)
+    if (dRem > 0 && (r.type === 'bet' || r.type === 'raise') && ['value', 'card-ahead', 'robust', 'denial'].includes(r.tag || 'value')) {
+      const b = betEV(c);
+      r = act(r.type, r.reason.replace(/ for value/g, '') + robustTxt(b, N), r.tag === 'card-ahead' ? 'card-ahead' : robustTag(b));
+    }
     // no bluffs into a dry side pot
     if (opps.some((o) => o.allIn) && (r.type === 'bet' || r.type === 'raise') && (r.tag === 'bluff' || r.tag === 'snow')) {
       mem.snow = false;
@@ -5083,6 +5260,10 @@ window.TD = window.TD || {};
     return act(raiseIt ? 'raise' : 'bet', (raiseIt ? (c.iChecked ? 'Check-raise' : 'Raise') : 'Bet') + ' with ' + hstr(c.hand) + ', planning to snow (stand pat at the next draw). ' + p.bot.snowWhy, 'snow');
   }
   // betting before the last draw: Greenstein's rules for who does the betting, with Mastering Mixed Games' rhythm
+  function betEV(c) {
+    if (!c.betEV) c.betEV = mcBetEV(c.game, c.p, { pot: c.pot + c.toCall, unit: c.unit, nextKeep: c.plan ? c.plan.keep : null, patForever: !!c.p.bot.snow }) || { gain: 0, build: 0, deny: 0, Ec: c.E, fold: 0, E: c.E };
+    return c.betEV;
+  }
   function drawStreet(c, fair) {
     const { game, p } = c;
     const fewer = c.oppsLast.length > 0 && c.oppsLast.every((n) => n > c.nextDraw); // I draw fewer cards than everyone
@@ -5101,13 +5282,18 @@ window.TD = window.TD || {};
         return act('check', 'Check, ' + c.txt + '. Mastering Mixed Games: ' + lead + ' the drawing lead — always check to the player with the drawing lead, and with a one-card draw out of position just call (a check-raise shows my hand the moment I draw one).');
       }
       if (c.made && !c.drawing) {
-        // OOP with a strong pat hand against an aggressive player behind: sometimes check-raise
-        if (!c.ip && c.N === 1 && c.E > 0.66 && c.canRaise && R() < 0.3) { p.bot.crPlan = c.st; return act('check', 'Check with ' + c.txt + ', planning to check-raise.', 'check-raise'); }
-        if (c.E >= fair + 0.02 || R() < sig((c.E - fair) / 0.04)) return act('bet', 'Bet the pat ' + c.txt + '. Greenstein: the pat hand keeps betting at each betting round; the drawing hand usually just calls until the last draw.', 'value');
-        return act('check', 'Check the pat ' + c.txt + ' — too weak to bet against this field.');
+        // Chase (Nov 21, Hand #131): a pat hand out of position bets into players who drew more cards than it did. They
+        // rarely bet when checked to (a drawer who missed checks behind a pat hand), so a check-raise plan seldom gets
+        // its chance and just hands out a free draw. Check-raise only when the player behind drew no more than I did.
+        const drewMore = c.oppsLast.length > 0 && c.oppsLast.every((n) => n > myLast);
+        if (!c.ip && !drewMore && c.N === 1 && c.E > 0.66 && c.canRaise && R() < 0.3) { p.bot.crPlan = c.st; return act('check', 'Check with ' + c.txt + ', planning to check-raise: ' + (c.oppsLast[0] === 0 ? 'he stood pat too' : 'he drew as many cards as I did') + ', so he may well bet if I check.', 'check-raise'); }
+        const freeTxt = drewMore ? ' ' + (c.N === 1 ? 'My opponent drew' : 'Everyone else drew') + ' more cards than I did, so checking would give a free draw: a drawer who misses just checks behind a pat hand, so a check-raise would rarely get its chance.' : '';
+        const b = betEV(c);
+        if (R() < sig(b.gain / 0.05)) return act('bet', 'Bet the pat ' + c.txt + '.' + freeTxt + ' Greenstein: the pat hand keeps betting at each betting round; the drawing hand usually just calls until the last draw.', robustTag(b));
+        return act('check', 'Check the pat ' + c.txt + ' — not enough robust equity to bet: the hands that would call have me beaten too often, and few hands with equity would fold.' + robustTxt(b, c.N).replace(' a bet builds', ' a bet would build'));
       }
       if (vsPat) return act('check', 'Check, ' + c.txt + ' against a pat hand — the pat hand does the betting.');
-      if (fewer && c.E >= fair - 0.02) return act('bet', 'Bet, ' + c.txt + ' — I draw fewer cards than ' + (c.N === 1 ? 'my opponent' : 'anyone else') + '. Greenstein: the one-card drawer bets until the others are drawing one too.', 'card-ahead');
+      if (fewer && betEV(c).gain > -0.03) return act('bet', 'Bet, ' + c.txt + ' — I draw fewer cards than ' + (c.N === 1 ? 'my opponent' : 'anyone else') + '. Greenstein: the one-card drawer bets until the others are drawing one too.', 'card-ahead');
       // Chase (Nov 20): an unimproved two-card draw doesn't bet after the first draw, even with equal draws: its equity
       // (robust or not) is too thin against a player who may have made a decent three-card hand, and it would have to fold
       // to a raise (MMG: between the first and second draw, fold all unimproved two-card draws). Take the free card.
@@ -5117,7 +5303,7 @@ window.TD = window.TD || {};
       const equal = c.oppsLast.every((n) => n === myLast);
       if (equal && iWasAgg && c.ip && c.drawing && (robustDraw || c.E >= fair * 0.7)) return act('bet', 'Bet, ' + c.txt + ' — everyone drew ' + myLast + ' and it was checked to me, the last raiser. Mastering Mixed Games: with equal draws the action checks to the last aggressor, who bets; even behind a made badugi about half the time, the bet risks little against the pot and is pure value the rest of the time.', 'value');
       const aggBehind = prev && !iWasAgg && c.opps.some((o) => o.seat === prev.seat) && game.actOrder(prev.seat) > game.actOrder(p.seat);
-      if (!fewer && c.oppsLast.every((n) => n === c.nextDraw) && c.E >= fair + 0.05 && (robustDraw || R() < 0.5) && (!aggBehind || R() < 0.35)) return act('bet', 'Bet, ' + c.txt + ' — we draw the same number, and I likely have the best incomplete. Greenstein: then whoever thinks they have the best incomplete takes over the betting.', 'value');
+      if (!fewer && c.oppsLast.every((n) => n === c.nextDraw) && betEV(c).gain > 0.02 && (robustDraw || R() < 0.5) && (!aggBehind || R() < 0.35)) return act('bet', 'Bet, ' + c.txt + ' — we draw the same number, and I likely have the best incomplete. Greenstein: then whoever thinks they have the best incomplete takes over the betting.', 'value');
       return act('check', 'Check, ' + c.txt + '.');
     }
     // facing a bet
@@ -5145,13 +5331,31 @@ window.TD = window.TD || {};
     const tier = c.made ? (t <= lv('5') ? 5 : t <= lv('6') ? 6 : t <= lv('7') ? 7 : 8) : 9;
     if (c.toCall === 0) {
       if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. Chase\'s notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.', 'value');
+      // Chase (Nov 21): out of position after we both drew on the last draw (1,1). He calls one bet with any badugi he
+      // made and bluff-catches with good three-card hands, so bet every badugi for value, but keep a check-raising range
+      // (very strong badugis plus a few bluffs): a six badugi or better checks to check-raise about 15% of the time. The
+      // check-calling (bluff-catching) range is mostly strong three-card hands, plus a queen or king badugi now and then.
+      if (c.made && c.N === 1 && !c.ip && p.draws[2] > 0 && c.opp.draws[2] > 0) {
+        const why = ' Chase\'s notes: we both drew on the last draw, and he calls one bet with any badugi he made and bluff-catches with good three-card hands.';
+        if (tier <= 6 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.15) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise.' + why + ' Usually bet a badugi this strong, but check-raise it about 15% of the time, so he can\'t bet freely when I check.', 'check-raise'); }
+        if (t >= lv('Q') && R() < 0.25) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher.' + why + ' A queen or king badugi usually bets too; checking it now and then gives my checks something that beats a bluff, along with my strong three-card hands.');
+        return act('bet', 'Bet the ' + c.txt + ' for value.' + why + (tier <= 6 ? ' Betting beats checking to check-raise most of the time: a raise lets me 3-bet, three bets instead of two.' : ''), 'value');
+      }
       if (c.made && c.N === 1) {
-        const Ec = mcEquity(game, p, { mode: 'bet', hypoCall: true });
+        const lead0 = leadInto(game, 3);
+        const Ec = mcEquity(game, p, { mode: 'bet', hypoCall: true, leadMul: lead0 && lead0.seat === p.seat ? 1.3 : 0.6 });
         const need = c.ip ? 0.53 : 0.56;
         if (tier <= 6 || Ec >= need) {
-          if (!c.ip && tier <= 6 && c.canRaise && R() < 0.3) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ' to check-raise.', 'check-raise'); }
-          return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.', 'value');
+          // Chase (Nov 21): out of position, check-raise only when he will bet often enough — when he stood pat behind me.
+          // Against a player who drew, bet the strongest badugis: a worse badugi he made would check behind.
+          const oppDrew = c.opp.draws[2] > 0;
+          if (!c.ip && !oppDrew && tier <= 6 && c.canRaise && R() < 0.3) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ' to check-raise: he stood pat behind me, so he will bet his good badugis if I check.', 'check-raise'); }
+          // Chase (Nov 21): against a player who drew, my check-raising range is polarized (very strong hands, a few
+          // bluffs). Usually bet the strongest (getting to 3-bet his raise wins more than a check-raise), sometimes check-raise.
+          if (!c.ip && oppDrew && tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Chase\'s notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
+          return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.' + (!c.ip && oppDrew ? ' He drew on the last draw, so a worse badugi he made would just check behind if I checked.' + (tier <= 7 ? ' Betting beats checking to check-raise most of the time: a raise lets me 3-bet, three bets instead of two.' : '') : ''), 'value');
         }
+        if (!c.ip && c.opp.draws[2] > 0 && t <= lv('J')) { return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: out of position against a player who drew on the last draw, bet only the strongest badugis; with a decent one, check — he bets his better badugis and bluffs some missed draws, and a bet of mine would mostly be called by better.'); }
         return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — it doesn\'t beat half of the hands that would call a bet.');
       }
       if (c.made) {
@@ -5160,10 +5364,14 @@ window.TD = window.TD || {};
       }
       // no badugi. MMG (Quiz 3): a strong three-card hand heads-up against a one-card drawer is worth a value bet —
       // the drawer should expect some bluffs here and pays off with slightly worse three-cards
-      const prev = lastAgg(game, 2), hasLead = !!prev && prev.seat === p.seat;
-      if (c.N === 1 && hn.cat === 1 && t <= lv('4') && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < 0.75) {
-        return act('bet', 'Bet the ' + c.txt + ' for value. Mastering Mixed Games: a three-card hand this strong is worth a value bet against a player who drew on the last draw, who should expect some bluffs here and pays off with slightly worse three-cards. If raised, I fold.', 'value');
+      const prev = leadInto(game, 3), hasLead = !!prev && prev.seat === p.seat;
+      // MMG: with the betting lead a river bet can look like a three-card value bet and gets called by three-card hands,
+      // so value bet strong three-card hands more with the lead and less without it (a bet without it reads as a badugi)
+      const triBet = hn.cat === 1 ? Math.min(0.95, (t <= lv('3') ? 0.8 : t <= lv('4') ? 0.6 : t <= lv('5') ? 0.3 : 0) * (hasLead ? 1.2 : 0.6)) : 0;
+      if (c.N === 1 && triBet > 0 && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < triBet) {
+        return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead, since a bet can look like a three-card value bet and weaker three-card hands call' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Chase\'s notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
       }
+      if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
       // bluffs when everyone drew on the last draw (a missed draw can't call). MMG: a lead from the player without
       // the betting lead (a donk bet, or a bet when checked to) reads as a badugi and gets folds, so bluff more
       // without the lead and less with it (with the lead it looks like a three-card value bet and gets looked up)
@@ -5184,6 +5392,22 @@ window.TD = window.TD || {};
       const raiseThr = c.N === 1 ? 0.74 : 0.62;
       if (c.lvl <= 1 && R() < sig((c.E - raiseThr) / 0.03)) return act('raise', 'Raise with the ' + c.txt + ' — well ahead of the betting range.', 'value');
     }
+    // Chase (Nov 21): I checked a decent badugi out of position to catch bluffs from a player who drew: call one bet.
+    // With this much in the pot he only needs to bluff now and then for the call to pay, and folding it would let
+    // every missed draw bluff me off the pot.
+    if (c.N === 1 && !c.ip && c.iChecked && c.made && t <= lv('J') && p.draws[2] === 0 && c.opp.draws[2] > 0 && c.lvl === 1) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. He drew on the last draw, so his bet is a better badugi or a missed draw bluffing (a worse badugi would have checked behind); ' + priceTxt(c) + ', he only needs to be bluffing now and then.', 'bluff-catch');
+    // Chase (Nov 21): after we both drew on the last draw and I checked out of position: badugis and strong three-card
+    // hands call one bet as bluff catchers; a missed hand with no showdown value check-raises as a bluff now and then.
+    // MDF sets the share of bluffs among my check-raises (here, the value is a six badugi or better checked about 15%
+    // of the time): he calls one more bet to win the whole pot, so bluffs are about 1 in (pot in bets + 4) of them.
+    if (c.N === 1 && !c.ip && c.iChecked && p.draws[2] > 0 && c.opp.draws[2] > 0 && c.lvl === 1) {
+      if (c.made || (hn.cat === 1 && t <= lv('5'))) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. We both drew on the last draw: his bet is a badugi or a missed draw bluffing, and ' + priceTxt(c) + '.', 'bluff-catch');
+      const potBets = (c.pot + c.toCall) / c.unit, bluffShare = 1 / (potBets + 4);
+      const f = clamp(0.15 * 0.08 / 0.6 * bluffShare / (1 - bluffShare), 0, 0.05);
+      if (c.canRaise && !isCallingStation(game, c.opp) && R() < f) return act('raise', 'Check-raise bluff with ' + c.txt + '. Chase\'s notes: my check-raises here are very strong badugis plus a few bluffs, sized by MDF (about 1 in ' + Math.round(potBets + 4) + '), taken from missed hands with no showdown value.', 'bluff');
+    }
+    // Chase (Nov 21): a few check-raise bluffs with my roughest badugis, so the check-raising range isn't only the nuts
+    if (c.N === 1 && !c.ip && c.iChecked && c.made && t >= lv('Q') && c.canRaise && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp) && R() < 0.12) return act('raise', 'Check-raise bluff with the ' + c.txt + '. Chase\'s notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest badugis are the bluffs, and a worse-than-expected badugi he bet may fold.', 'bluff');
     if (c.made && tier === 7 && c.lvl >= 2) return act('call', 'Call the raise with the ' + c.txt + '. Greenstein: sevens get tenuous — against a tight player, bet a rough seven and just call a raise.');
     const bluffy = c.opp && c.opp.isHuman ? clamp((userPosterior(game).riverBluff - 0.12) * 0.6, 0, 0.08) : 0;
     if (!c.made && c.iBet && bluffy < 0.04) return act('fold', 'Fold the ' + c.txt + ' — my value bet got raised. Mastering Mixed Games (Quiz 3): nothing says I missed, and I was known to have a strong draw; without a real reason to think this player bluffs here, a three-card hand folds.', 'discipline');
@@ -5284,7 +5508,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 40;
+  TD.VERSION = 46;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
