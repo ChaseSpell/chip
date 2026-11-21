@@ -5315,6 +5315,14 @@ window.TD = window.TD || {};
     if (c.canRaise && c.made && !c.drawing && c.E >= raiseThr) return act('raise', 'Raise with the pat ' + c.txt + ' — well ahead of the betting range.', 'value');
     // (no check-raising with draws: MMG — out of position, check-call the one-card draws)
     if (c.canRaise && c.drawing && fewer && c.lvl === 1 && !c.iChecked && c.E >= fair + 0.08 && R() < 0.5) return act('raise', 'Raise, ' + c.txt + ' — I am drawing fewer cards than the bettor.', 'card-ahead');
+    // Chase (Nov 21): in position, facing a bet from the player who drew fewer cards, raise a strong three-card hand I just
+    // improved to (4-2-A after drawing two). He bets every three-card hand because he drew fewer, so mine is often the
+    // best incomplete: robust equity against the hands that call a raise, so the raise builds the pot in case I win, and
+    // it can push him to break a weak badugi and draw (equity denied).
+    if (c.canRaise && c.drawing && c.nextDraw === 1 && c.lvl === 1 && c.ip && c.N === 1 && !c.iChecked && c.oppsLast[0] >= 1 && c.oppsLast[0] < myLast) {
+      const b = betEV(c);
+      if (R() < sig((b.Ec - 0.45) / 0.03)) return act('raise', 'Raise, ' + c.txt + ' — ' + (c.opp.isHuman ? 'you drew' : c.opp.name + ' drew') + ' fewer cards and bet' + (c.opp.isHuman ? '' : 's') + ' every three-card hand from the drawing lead, so mine is often the best incomplete. The raise builds the pot in case I win, and it can push a weak badugi to break and draw.', 'robust');
+    }
     // MMG: once the bets double, a draw facing a raise is usually up against badugis; calling now and calling again
     // after improving compounds the mistake, so no implied odds and a little more to call
     if (c.st === 2 && c.drawing && c.lvl >= 2) impl = -0.03;
@@ -5508,7 +5516,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 46;
+  TD.VERSION = 47;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
