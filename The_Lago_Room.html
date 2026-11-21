@@ -5108,6 +5108,10 @@ window.TD = window.TD || {};
       }
       if (vsPat) return act('check', 'Check, ' + c.txt + ' against a pat hand — the pat hand does the betting.');
       if (fewer && c.E >= fair - 0.02) return act('bet', 'Bet, ' + c.txt + ' — I draw fewer cards than ' + (c.N === 1 ? 'my opponent' : 'anyone else') + '. Greenstein: the one-card drawer bets until the others are drawing one too.', 'card-ahead');
+      // Chase (Nov 20): an unimproved two-card draw doesn't bet after the first draw, even with equal draws: its equity
+      // (robust or not) is too thin against a player who may have made a decent three-card hand, and it would have to fold
+      // to a raise (MMG: between the first and second draw, fold all unimproved two-card draws). Take the free card.
+      if (c.drawing && c.nextDraw >= 2 && c.st >= 1) return act('check', 'Check, ' + c.txt + ' — an unimproved two-card draw after the first draw is too weak to bet, even when ' + (c.oppsLast.every((n) => n === myLast) ? 'everyone drew ' + myLast + ' and it was checked to me' : 'it is checked to me') + ': the opponent may have made a decent three-card hand, and I would have to fold to a raise (Mastering Mixed Games: between the first and second draw, fold all unimproved two-card draws). Take the free card.');
       // MMG (the 4-2-A example): with equal draws the action checks to the last raiser; checked to, the raiser bets a decent
       // draw — behind a made badugi about half the time, but a bet risks little against a big pot and is pure value otherwise
       const equal = c.oppsLast.every((n) => n === myLast);
@@ -5280,7 +5284,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 39;
+  TD.VERSION = 40;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
