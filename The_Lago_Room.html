@@ -5286,7 +5286,14 @@ window.TD = window.TD || {};
         // rarely bet when checked to (a drawer who missed checks behind a pat hand), so a check-raise plan seldom gets
         // its chance and just hands out a free draw. Check-raise only when the player behind drew no more than I did.
         const drewMore = c.oppsLast.length > 0 && c.oppsLast.every((n) => n > myLast);
-        if (!c.ip && !drewMore && c.N === 1 && c.E > 0.66 && c.canRaise && R() < 0.3) { p.bot.crPlan = c.st; return act('check', 'Check with ' + c.txt + ', planning to check-raise: ' + (c.oppsLast[0] === 0 ? 'he stood pat too' : 'he drew as many cards as I did') + ', so he may well bet if I check.', 'check-raise'); }
+        // Chase (Nov 21): with equal draws, usually bet: he will check behind often, and a check gives him a free draw to
+        // outdraw me (he over-realizes his equity). Check-raise only about 10% of the time, enough that he can't bet
+        // behind without fear of a check-raise. When he stood pat behind, he bets more often, so check-raise more.
+        // Chase (Nov 21): only strong pat hands mix in the check-raise. Weaker ones lose to more pat hands, so their equity
+        // is less robust: a ten badugi check-raises less, a jack or worse (a Q badugi) just bets.
+        const topR = lvDesc(c.hand)[0];
+        const crF = c.oppsLast[0] === 0 ? 0.3 : topR <= lv('9') ? 0.1 : topR === lv('T') ? 0.05 : 0;
+        if (!c.ip && !drewMore && c.N === 1 && c.E > 0.66 && c.canRaise && R() < crF) { p.bot.crPlan = c.st; return act('check', 'Check with ' + c.txt + ', planning to check-raise. This is a mixed play, about ' + Math.round(crF * 100) + '% of the time: ' + (c.oppsLast[0] === 0 ? 'my opponent stood pat too, so will often bet if I check, but betting is still the main play.' : 'my opponent drew as many cards as I did and may bet if I check, but will also check behind often and take a free draw, so I usually bet. Checking now and then means a bet behind me always has to fear a check-raise. Only strong pat hands mix this in' + (topR === lv('T') ? ', and a ten badugi less often than better ones' : '') + '.'), 'check-raise'); }
         const freeTxt = drewMore ? ' ' + (c.N === 1 ? 'My opponent drew' : 'Everyone else drew') + ' more cards than I did, so checking would give a free draw: a drawer who misses just checks behind a pat hand, so a check-raise would rarely get its chance.' : '';
         const b = betEV(c);
         if (R() < sig(b.gain / 0.05)) return act('bet', 'Bet the pat ' + c.txt + '.' + freeTxt + ' Greenstein: the pat hand keeps betting at each betting round; the drawing hand usually just calls until the last draw.', robustTag(b));
@@ -5516,7 +5523,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 47;
+  TD.VERSION = 49;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
