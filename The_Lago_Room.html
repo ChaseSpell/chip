@@ -4314,15 +4314,22 @@ window.TD = window.TD || {};
     const three = opts.find((o) => o.n === 1);
     const two = opts.find((o) => o.n === 2);
     let kind, keep;
-    if (pat && (best === pat || !lowUnder(pat))) { kind = 'pat'; keep = pat.keep; } // break only to a low three-card draw
-    else if (three) { kind = 'three'; keep = three.keep; }
+    // break only to a low three-card draw: a six or better, since the first draw never draws one to a seven or worse
+    if (pat && (best === pat || lvDesc(pat.keep)[1] > lv('6'))) { kind = 'pat'; keep = pat.keep; }
+    // a rough three-card hand the draw values would break (T-5-3: throw the ten, draw two to 5-3) is played
+    // predraw as the two-card hand it will draw to, so the predraw decision and the draw agree
+    else if (three && !(two && best === two)) { kind = 'three'; keep = three.keep; }
     else if (two) { kind = 'two'; keep = two.keep; }
     else { kind = 'one'; keep = (opts.find((o) => o.n === 3) || best).keep; }
     const ls = lvDesc(keep);
-    return { kind, keep, t: ls[0] || 15, s2: ls[1] || 15, s3: ls[2] || 15, broken: !!pat && kind !== 'pat', pat, best, label: hstr(keep), score: TD.predrawScore(hand) };
+    // a three-card seven or worse is still judged by the book's three-card ranges, but the first draw breaks it
+    // (Chase: never draw one to a three-card eight or nine on the first draw, and hardly ever to a seven)
+    const breakTo = kind === 'three' && ls[0] >= lv('7') ? opts.find((o) => o.n === 2 && o.keep.every((c) => keep.includes(c))) : null;
+    return { kind, keep, t: ls[0] || 15, s2: ls[1] || 15, s3: ls[2] || 15, broken: !!pat && kind !== 'pat', pat, best, breakTo, label: hstr(keep), score: TD.predrawScore(hand) };
   }
   function describe(i) {
     if (i.kind === 'pat') return 'a pat ' + i.label + ' badugi';
+    if (i.kind === 'three' && i.breakTo && !i.broken) return 'a three-card ' + i.label + ' draw (at the first draw I\'ll ' + (i.t === lv('7') ? 'usually ' : '') + 'throw the ' + TD.RANK_WORD[i.t].toLowerCase() + ' and draw two to ' + hstr(i.breakTo.keep) + ')';
     if (i.kind === 'three') return (i.broken ? 'a ' + hstr(i.pat.keep) + ' badugi to break to ' : 'a three-card ') + i.label + (i.broken ? '' : ' draw');
     if (i.kind === 'two') return 'a two-card ' + i.label + ' draw';
     return 'a one-card hand';
@@ -4557,9 +4564,9 @@ window.TD = window.TD || {};
     const keep = hand.filter((c, i) => sub & (1 << i));
     let kind = keep.length === 4 ? 'pat' : keep.length === 3 ? 'three' : keep.length === 2 ? 'two' : 'one';
     let kk = keep;
-    if (kind !== 'pat' && keep.length < 3) { // the DP may prefer drawing two to a rough three-card hand: still describe the three-card hand
+    if (kind !== 'pat' && keep.length < 3) { // the DP may prefer drawing two to a rough three-card hand: like infoOf, that is a two-card hand
       const pl = TD.playing(hand);
-      if (pl.length === 3) { kind = 'three'; kk = pl; } else if (pl.length === 4) { kind = 'pat'; kk = pl; }
+      if (pl.length === 4) { kind = 'pat'; kk = pl; }
     }
     const ls = lvDesc(kk);
     return { kind, t: ls[0] || 15, s2: ls[1] || 15 };
@@ -4723,8 +4730,10 @@ window.TD = window.TD || {};
             : 'In the ' + pos + ' opening range (Mastering Mixed Games: from the hijack on, king badugis, all three-card sevens and smooth eights).';
         return act('raise', 'Open-raise from the ' + pos + ' with ' + d + '. ' + why, LATE.includes(pos) ? 'steal' : '');
       }
-      if (border && R() < 0.3 + steal) return act('raise', 'Open-raise from the ' + pos + ' with ' + d + ' — just outside the book range, mixed in some of the time: experts play a little wider because of "reduction", improving the incomplete along the way.' + (steal > 0.1 ? ' He folds his blind often, so I steal more.' : ''), 'steal');
-      return fold('Fold ' + d + ' from the ' + pos + ' — outside the opening range (' + (i.kind === 'two' ? 'Mastering Mixed Games: two-card hands only from the cutoff on' : i.kind === 'pat' ? 'Mastering Mixed Games: no king badugis from the first seat' : 'Greenstein: draw to a three-card hand that can win as the best incomplete') + ').');
+      if (border && R() < 0.3 + steal) return act('raise', 'Open-raise from the ' + pos + ' with ' + d + ' — just outside the book range, mixed in some of the time: experts play a little wider because of "reduction", improving the incomplete along the way.' + (steal > 0.1 ? ' The blinds fold often, so I steal more.' : ''), 'steal');
+      return fold('Fold ' + d + ' from the ' + pos + ' — outside the opening range (' + (i.kind === 'two' ? (pos === 'CO' ? 'Mastering Mixed Games: from the cutoff, the only two-card opens are 2-A and 3-A'
+        : pos === 'BTN' || pos === 'SB' ? 'Mastering Mixed Games: from the ' + (pos === 'SB' ? 'small blind (the button range)' : 'button') + ', two-card opens go only as far as 4-A, 3-2 and 4-3'
+          : 'Mastering Mixed Games: two-card draws are opened only from the cutoff or later, never from the ' + pos) : i.kind === 'pat' ? 'Mastering Mixed Games: no king badugis from the first seat' : 'Greenstein: draw to a three-card hand that can win as the best incomplete') + ').');
     }
     // facing a single raise
     if (c.level === 2) {
@@ -4792,6 +4801,22 @@ window.TD = window.TD || {};
   // Mastering Mixed Games' draw rules, ahead of the draw values: never keep an eight-or-worse three-card on the
   // second draw when the two under it are A-2, A-3 or 2-3 (throw the eight and draw two again: a very common
   // mistake), and never draw two at the third draw
+  // Chase (Nov 20): never draw one to a three-card nine or eight on the first draw, and probably not to a seven:
+  // with three draws to come, two cards to a low draw often make a badugi or a better three-card, and a
+  // three-card seven, eight or nine has little showdown value. (A six can have some; the simulations decide.)
+  // Greenstein's seven exceptions (against a pat hand; in the blinds against a late raiser) are applied first.
+  const roughTri = (x) => x.n === 1 && x.keep.length === 3 && lvDesc(x.keep)[0] >= lv('7');
+  function firstDrawRough(cands) {
+    const top = cands[0];
+    if (!roughTri(top)) return null;
+    const pat = cands.find((x) => x.n === 0);
+    const sub = cands.find((x) => x.n === 2 && x.keep.every((c) => top.keep.includes(c)));
+    const keepPat = pat && lvDesc(pat.keep)[1] > lv('6'); // the only reason to break it was the rough three-card
+    const choice = keepPat ? pat : (sub || cands.find((x) => !roughTri(x)) || top);
+    const w = TD.RANK_WORD[lvDesc(top.keep)[0]].toLowerCase();
+    return { choice, why: (keepPat ? ' Breaking it would mean drawing one to ' + hstr(top.keep) + '.' : ' Throw the ' + w + '.') +
+      (w === 'seven' ? ' Hardly ever draw one to a three-card seven' : ' Never draw one to a three-card ' + w) + ' on the first draw: with three draws to come, two low cards have a good chance to make a badugi or a better three-card, and a three-card seven, eight or nine has little showdown value.' };
+  }
   function bookKeep(k, cands, oppPat) {
     const top = cands[0];
     // keep a badugi with nothing low under it on the first two draws (MMG Quiz 1: a queen badugi stands pat
@@ -4823,8 +4848,10 @@ window.TD = window.TD || {};
   function planNextDraw(game, p, st) {
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
-    const cands = TD.keepOptions(p.hand, 3 - st);
-    const bk = bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    let cands = TD.keepOptions(p.hand, 3 - st);
+    const fr = st === 0 ? firstDrawRough(cands) : null;
+    if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
+    const bk = fr || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     const cc = bk ? { choice: bk.choice, alt: null } : closeKeep(game, p, st, cands, opps, ip);
     const oppDraws = {};
     for (const o of opps) oppDraws[o.seat] = o.draws.length;
@@ -4871,16 +4898,32 @@ window.TD = window.TD || {};
       const three = cands.find((x) => x.n === 1);
       if (three) {
         const ls = lvDesc(three.keep);
-        if (ls[0] === lv('7') && ls[1] <= lv('4')) {
-          const pos = game.posName(p.seat);
+        // a made badugi below a queen (8-7-4-2, J-7-4-2) is never broken to the seven draw here: it stands pat (Chase, Nov 20: strength first)
+        const roughPat = !pat || lvDesc(pat.keep)[0] >= lv('Q');
+        if (ls[0] === lv('7') && ls[1] <= lv('4') && roughPat) {
+          // a blind that 3-bet a pat badugi plays it as the pat hand it raised with (the first-draw rule below keeps it)
+          const iRaised = game.actions.some((a) => a.street === 0 && a.seat === p.seat && (a.type === 'raise' || a.type === 'bet'));
+          const pos = (pat && iRaised) ? '' : game.posName(p.seat);
           const vsLatePat = drewThis.includes(0) || oppPat;
           const lateRaiser = (() => { const r = game.actions.find((a) => a.street === 0 && (a.type === 'raise' || a.type === 'bet')); return r && LATE.includes(game.posName(r.seat)) && r.seat !== p.seat; })();
           const two = TD.keepOptions(hand, d).filter((x) => x.n === 2 && x.keep.every((cc) => three.keep.includes(cc)))[0];
           if (vsLatePat) return { discard: keepIdx(hand, three.keep), reason: '1st draw: draw one to ' + hstr(three.keep) + ' against the pat hand. Greenstein\'s "paradox of Badugi": initial pat hands are weak, so the seven draw is live — drawing two would give up the chance to win with a smooth incomplete for nothing.', tag: '' };
           if ((pos === 'SB' || pos === 'BB') && two && !lateRaiser) return { discard: keepIdx(hand, two.keep), reason: '1st draw: throw the seven and draw two to ' + hstr(two.keep) + '. Greenstein: in the blinds with A-2-7 up to 3-4-7, usually draw two to give yourself a chance at the best incomplete.', tag: '' };
+          // Chase (Nov 20): a rough king badugi like K-7-4-2 in the blinds that called an open draws two to 4-2
+          if ((pos === 'SB' || pos === 'BB') && lateRaiser && pat && two) return { discard: keepIdx(hand, two.keep), reason: '1st draw: break the ' + hn.short + ' and draw two to ' + hstr(two.keep) + '. Calling an open from the blinds, the ' + TD.RANK_WORD[lvDesc(pat.keep)[0]].toLowerCase() + ' badugi is too weak to stand pat and the seven draw too rough: two low cards with three draws to come are the best draw.', tag: '' };
           if ((pos === 'SB' || pos === 'BB') && lateRaiser) return { discard: keepIdx(hand, three.keep), reason: '1st draw: keep the seven and draw one to ' + hstr(three.keep) + ' — Greenstein: against a late-position raiser, who draws to rougher incompletes, the seven draw is good enough.', tag: '' };
         }
       }
+    }
+    // Chase's first-draw rule: no drawing one to a three-card seven or worse (after Greenstein's seven exceptions above)
+    if (k === 0) {
+      const fr = firstDrawRough(cands);
+      if (fr) {
+        const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
+        mem.drawPlan = null;
+        return { discard: keepIdx(hand, fr.choice.keep), reason: '1st draw: ' + desc(fr.choice) + (plan0 && plan0.key === keyOf(fr.choice.keep) ? ', as planned when I ' + plan0.act : '') + '.' + fr.why, tag: '' };
+      }
+      if (cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
     }
     let choice = cands[0], reason = '', tag = '';
     // last draw, with a badugi: against players who are still drawing, stand pat (they haven't made one)
@@ -6253,6 +6296,12 @@ window.TD = window.TD || {};
         let finished = false;
         let t = null;
         const go = () => { if (finished) return; finished = true; this.clearButtons(); clearTimeout(t); resolve(); };
+        // auto-deal never fires behind an open dialog: it waits, then starts a fresh countdown once it closes
+        const autoGo = () => {
+          if (finished) return;
+          if (this.dialogOpen()) { this.whenNoDialog().then(() => { if (!finished) setAuto(); }); return; }
+          go();
+        };
         const box = $('#action-btns');
         box.innerHTML = '';
         $('#pre-actions').innerHTML = '';
@@ -6266,7 +6315,7 @@ window.TD = window.TD || {};
         const setAuto = () => {
           clearTimeout(t);
           if (this.settings.autoDeal) {
-            t = setTimeout(go, Math.max(1100, autoMs * this.f));
+            t = setTimeout(autoGo, Math.max(1100, autoMs * this.f));
             pause.innerHTML = 'Pause<small>stop auto-deal</small>';
             $('#action-msg').textContent = 'Next hand deals automatically…';
           } else {
@@ -6489,6 +6538,15 @@ window.TD = window.TD || {};
       root.classList.add('show');
       return root.firstChild;
     }
+    // A dialog (Settings, Stakes, Review, Rules…) is open. The table holds the next deal until it
+    // closes, so a hand is never dealt behind it (a stakes change made there then lands on the hand you see next).
+    dialogOpen() { const r = $('#modal-root'); return !!r && r.classList.contains('show'); }
+    whenNoDialog() {
+      if (!this.dialogOpen()) return Promise.resolve();
+      return new Promise((resolve) => {
+        const t = setInterval(() => { if (!this.dialogOpen()) { clearInterval(t); resolve(); } }, 120);
+      });
+    }
 
     showSettings() {
       const s = this.settings;
@@ -6611,7 +6669,7 @@ window.TD = window.TD || {};
       this.resetRequested = true;
       const st = this.settings.stakes;
       this.toast('New session at ' + money(st.small) + '/' + money(st.big) + (this.game && this.game.handInProgress ? ' from the next hand' : ''));
-      if (this.onStakesChanged) this.onStakesChanged();
+      if (this.onResetRequested) this.onResetRequested(); // between hands: the new session starts at once
     }
 
     showRules() {
@@ -6650,7 +6708,7 @@ window.TD = window.TD || {};
     resetSession() {
       const st = this.stakes;
       this.modal('<h2>New Session?</h2><div class="sub">Reset stacks &amp; stats</div><p style="text-align:center">All stacks return to ' + money(st.buyin) + ' and session statistics are cleared. The new session starts with the next hand.</p>',
-        [['Start fresh', () => { store.remove(TD.SESSION_KEY); this.resetRequested = true; this.toast('New session starts next hand'); }], ['Cancel', null, true]]);
+        [['Start fresh', () => { store.remove(TD.SESSION_KEY); this.resetRequested = true; this.toast(this.game && this.game.handInProgress ? 'New session starts next hand' : 'New session started'); if (this.onResetRequested) this.onResetRequested(); }], ['Cancel', null, true]]);
     }
   }
 
@@ -6680,6 +6738,19 @@ window.TD = window.TD || {};
   try { saved = JSON.parse(TD.store.get(SESSION_KEY) || 'null'); } catch (e) { saved = null; }
   // don't re-save a session that is about to be replaced (new stakes / new session requested mid-hand)
   ui.onHandDone = (g) => { if (!ui.resetRequested && g === game) TD.store.set(SESSION_KEY, JSON.stringify(g.serialize())); };
+
+  // New stakes or "Start fresh": during a hand the new session starts with the next hand (top of the loop);
+  // between hands it starts at once, so the header and stacks change right away
+  function startNewSession() {
+    ui.resetRequested = false;
+    game = newGame();
+    TD.game = game;
+    ui.attach(game);
+    document.getElementById('log').innerHTML = '';
+    ui.logLines = [];
+    ui.log('New session started at ' + TD.uiHelpers.money(game.stakes.small) + '/' + TD.uiHelpers.money(game.stakes.big) + '.', 'sys');
+  }
+  ui.onResetRequested = () => { if (ui.resetRequested && !game.handInProgress) startNewSession(); };
 
   function welcome() {
     return new Promise((resolve) => {
@@ -6725,15 +6796,7 @@ window.TD = window.TD || {};
     TD.Sound.init();
     ui.log('Welcome to the Lago Room. ' + (ui.settings.gameMode === 'MIX' ? 'Limit 2-7 / A-5 Mix, six hands of each' : TD.gameInfo.limitName) + '.', 'sys');
     for (;;) {
-      if (ui.resetRequested) {
-        ui.resetRequested = false;
-        game = newGame();
-        TD.game = game;
-        ui.attach(game);
-        document.getElementById('log').innerHTML = '';
-        ui.logLines = [];
-        ui.log('New session started at ' + TD.uiHelpers.money(game.stakes.small) + '/' + TD.uiHelpers.money(game.stakes.big) + '.', 'sys');
-      }
+      if (ui.resetRequested) startNewSession();
       const me = game.players[0];
       if (me.stack <= 0) await ui.onBust(game, me);
       ui.flushTopUp(game);
@@ -6747,6 +6810,8 @@ window.TD = window.TD || {};
       game.handInProgress = false; game.handOver = true;
       ui.renderPre();
       await ui.betweenHands(game);
+      // never deal the next hand behind an open dialog (Zoom deals at once, auto-deal on a timer)
+      await ui.whenNoDialog();
     }
   }
   loop();
