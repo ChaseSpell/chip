@@ -4329,7 +4329,7 @@ window.TD = window.TD || {};
   }
   function describe(i) {
     if (i.kind === 'pat') return 'a pat ' + i.label + ' badugi';
-    if (i.kind === 'three' && i.breakTo && !i.broken) return 'a three-card ' + i.label + ' draw (at the first draw I\'ll ' + (i.t === lv('7') ? 'usually ' : '') + 'throw the ' + TD.RANK_WORD[i.t].toLowerCase() + ' and draw two to ' + hstr(i.breakTo.keep) + ')';
+    if (i.kind === 'three' && i.breakTo && !i.broken) return 'a three-card ' + i.label + ' draw (at the first draw I\'ll ' + (i.t <= lv('8') ? 'usually ' : '') + 'throw the ' + TD.RANK_WORD[i.t].toLowerCase() + ' and draw two to ' + hstr(i.breakTo.keep) + ')';
     if (i.kind === 'three') return (i.broken ? 'a ' + hstr(i.pat.keep) + ' badugi to break to ' : 'a three-card ') + i.label + (i.broken ? '' : ' draw');
     if (i.kind === 'two') return 'a two-card ' + i.label + ' draw';
     return 'a one-card hand';
@@ -4801,21 +4801,36 @@ window.TD = window.TD || {};
   // Mastering Mixed Games' draw rules, ahead of the draw values: never keep an eight-or-worse three-card on the
   // second draw when the two under it are A-2, A-3 or 2-3 (throw the eight and draw two again: a very common
   // mistake), and never draw two at the third draw
-  // Chase (Nov 20): never draw one to a three-card nine or eight on the first draw, and probably not to a seven:
+  // Chase (Nov 20): never draw one to a three-card nine on the first draw, rarely an eight, and probably not a seven:
   // with three draws to come, two cards to a low draw often make a badugi or a better three-card, and a
   // three-card seven, eight or nine has little showdown value. (A six can have some; the simulations decide.)
   // Greenstein's seven exceptions (against a pat hand; in the blinds against a late raiser) are applied first.
   const roughTri = (x) => x.n === 1 && x.keep.length === 3 && lvDesc(x.keep)[0] >= lv('7');
-  function firstDrawRough(cands) {
+  // Chase (Nov 20, later): eights are "rarely", not never — Mastering Mixed Games opens smooth eights from the hijack on,
+  // so drawing one to a smooth eight (8-3-2) is reasonable too; he prefers breaking it, so the mix leans that way.
+  // How often the bot keeps the three-card and draws one; nines never. One roll per hand, so the plan and the draw agree.
+  const KEEP_RATE = (t, s2) => (t === lv('7') ? (s2 <= lv('4') ? 0.3 : 0.2) : t === lv('8') ? (s2 <= lv('4') ? 0.25 : 0.1) : 0);
+  function firstDrawRough(cands, mem) {
     const top = cands[0];
     if (!roughTri(top)) return null;
+    const ls = lvDesc(top.keep), w = TD.RANK_WORD[ls[0]].toLowerCase();
+    const smooth = ls[0] <= lv('8') && ls[1] <= lv('4');
+    const rate = KEEP_RATE(ls[0], ls[1]), pct = Math.round(rate * 100) + '%';
     const pat = cands.find((x) => x.n === 0);
     const sub = cands.find((x) => x.n === 2 && x.keep.every((c) => top.keep.includes(c)));
     const keepPat = pat && lvDesc(pat.keep)[1] > lv('6'); // the only reason to break it was the rough three-card
+    if (mem && mem.firstMix === undefined) mem.firstMix = R();
+    const roll = mem ? mem.firstMix : R();
+    if (rate > 0 && roll < rate) {
+      return { choice: top, why: ' Mixing it up: usually I ' + (keepPat ? 'stand pat with ' + hstr(pat.keep) : 'throw the ' + w) + ' on the first draw, but ' +
+        (smooth ? 'a smooth ' + w + ' like ' + hstr(top.keep) + ' is a reasonable one-card draw (Mastering Mixed Games opens smooth eights and every three-card seven from the hijack on)' : 'now and then a three-card ' + w + ' is worth a one-card draw') +
+        ', so about ' + pct + ' of the time I ' + (keepPat ? 'break it and ' : '') + 'draw one.' };
+    }
     const choice = keepPat ? pat : (sub || cands.find((x) => !roughTri(x)) || top);
-    const w = TD.RANK_WORD[lvDesc(top.keep)[0]].toLowerCase();
+    const how = rate > 0 ? ' Most of the time, don\'t draw one to a three-card ' + w : ' Never draw one to a three-card ' + w;
     return { choice, why: (keepPat ? ' Breaking it would mean drawing one to ' + hstr(top.keep) + '.' : ' Throw the ' + w + '.') +
-      (w === 'seven' ? ' Hardly ever draw one to a three-card seven' : ' Never draw one to a three-card ' + w) + ' on the first draw: with three draws to come, two low cards have a good chance to make a badugi or a better three-card, and a three-card seven, eight or nine has little showdown value.' };
+      how + ' on the first draw: with three draws to come, two low cards have a good chance to make a badugi or a better three-card, and a three-card seven, eight or nine has little showdown value.' +
+      (rate > 0 ? ' (About ' + pct + ' of the time I ' + (keepPat ? 'break it and draw one to ' + hstr(top.keep) : 'keep the ' + w + ' and draw one') + ' instead.)' : '') };
   }
   function bookKeep(k, cands, oppPat) {
     const top = cands[0];
@@ -4849,7 +4864,7 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
     let cands = TD.keepOptions(p.hand, 3 - st);
-    const fr = st === 0 ? firstDrawRough(cands) : null;
+    const fr = st === 0 ? firstDrawRough(cands, p.bot) : null;
     if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
     const bk = fr || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     const cc = bk ? { choice: bk.choice, alt: null } : closeKeep(game, p, st, cands, opps, ip);
@@ -4917,7 +4932,7 @@ window.TD = window.TD || {};
     }
     // Chase's first-draw rule: no drawing one to a three-card seven or worse (after Greenstein's seven exceptions above)
     if (k === 0) {
-      const fr = firstDrawRough(cands);
+      const fr = firstDrawRough(cands, mem);
       if (fr) {
         const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
         mem.drawPlan = null;
@@ -5243,6 +5258,8 @@ window.TD = window.TD || {};
   const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
+  // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
+  TD.VERSION = 36;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6577,7 +6594,8 @@ window.TD = window.TD || {};
         '<div class="setting"><div class="lbl">Coach my decisions<small>Compare your actions and draws with the AI strategy (in Review)</small></div>' + sw('coach', s.coach !== false) + '</div>' +
         '<div class="setting"><div class="lbl">Sound effects</div>' + sw('sound', s.sound) + '</div>' +
         '<div class="setting"><div class="lbl">Rules &amp; hand rankings</div><button class="mbtn ghost" id="btn-rules" style="min-width:0;min-height:42px">Open</button></div>' +
-        '<p class="muted land-only" style="font-size:13px;margin-top:14px">Keyboard: <span class="kbd">F</span> fold · <span class="kbd">C</span>/<span class="kbd">Space</span> check/call · <span class="kbd">R</span> bet/raise · <span class="kbd">1</span>–<span class="kbd">5</span> mark discards · <span class="kbd">D</span> draw · <span class="kbd">P</span> stand pat · <span class="kbd">G</span> God mode</p>';
+        '<p class="muted land-only" style="font-size:13px;margin-top:14px">Keyboard: <span class="kbd">F</span> fold · <span class="kbd">C</span>/<span class="kbd">Space</span> check/call · <span class="kbd">R</span> bet/raise · <span class="kbd">1</span>–<span class="kbd">5</span> mark discards · <span class="kbd">D</span> draw · <span class="kbd">P</span> stand pat · <span class="kbd">G</span> God mode</p>' +
+        '<p class="muted" id="app-version" style="font-size:12px;text-align:center;margin-top:14px">The Lago Room · Version ' + TD.VERSION + '</p>';
       const m = this.modal(html, [['Done', null]]);
       $$('#set-speed button', m).forEach((b) => (b.onclick = () => { s.speed = b.dataset.k; this.saveSettings(); $$('#set-speed button', m).forEach((x) => x.classList.toggle('on', x === b)); }));
       const live = () => this.game && this.game.handInProgress;
