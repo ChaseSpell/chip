@@ -1247,6 +1247,19 @@ window.TD = window.TD || {};
   BASE.GAMES = GAMES;
   BASE.GAME_KEYS = ['27', 'A5', 'BD']; // Badugi (GAMES.BD) is added by badugi.js
   BASE.forGame = (g) => GAMES[GAMES[g] ? g : '27'];
+  // The games the player picked (Settings and the welcome screen): one plays on its own, two or three
+  // rotate every 6 hands in this order. Older saved settings had gameMode: '27', 'A5', 'BD' or 'MIX' (all three).
+  BASE.pickedGames = (s) => {
+    let g = s && Array.isArray(s.games) ? s.games : s && s.gameMode === 'MIX' ? BASE.GAME_KEYS : s && s.gameMode ? [s.gameMode] : [BASE.GAME];
+    g = BASE.GAME_KEYS.filter((k) => g.includes(k));
+    return g.length ? g : ['27'];
+  };
+  // the next picked game after cur, in rotation order
+  BASE.nextPicked = (cur, picked) => {
+    const ks = BASE.GAME_KEYS, i0 = Math.max(0, ks.indexOf(cur));
+    for (let i = 1; i <= ks.length; i++) { const k = ks[(i0 + i) % ks.length]; if (picked.includes(k)) return k; }
+    return picked[0];
+  };
   BASE.setGame = (g) => { const k = GAMES[g] ? g : '27'; Object.assign(BASE, GAMES[k]); return k; };
   BASE.startGame = startGame;
   BASE.setGame(startGame());
@@ -1257,8 +1270,7 @@ window.TD = window.TD || {};
 /* =====================================================================
    Limit Deuce-to-Seven Triple Draw — game engine
    - 6-handed, $20/$40 blinds, $40/$80 limit
-   - cap: a bet and three raises with 3+ players; unlimited heads-up
-     (when the hand becomes heads-up before the cap is reached)
+   - cap: a bet and three raises on every street, heads-up included
    - incomplete all-in raise rule (half-bet rule for limit)
    - draw order from first active player left of the button
    - last card of the stub is never dealt: it is shuffled with the
@@ -1356,12 +1368,15 @@ window.TD = window.TD || {};
     }
 
     /* ---------- hand lifecycle ---------- */
-    // 2-7, A-5, Badugi, or Mix (orbits of six hands: 2-7, then A-5, then Badugi). Changes only between hands.
+    // The picked games: one is played on its own; two or three rotate, six hands (one orbit) each, in the
+    // order 2-7, A-5, Badugi. Changes only between hands. Dropping the game being played moves on to the next
+    // picked game at the next hand; adding or dropping another game keeps the current orbit going.
     gameForNextHand() {
-      const mode = (this.settings && this.settings.gameMode) || TD.GAME;
-      if (mode !== 'MIX') { this.mixGame = null; this.mixLeft = 0; return TD.GAMES[mode] ? mode : '27'; }
-      if (!this.mixGame) { this.mixGame = TD.GAME; this.mixLeft = 6; }
-      if (this.mixLeft <= 0) { const ks = TD.GAME_KEYS; this.mixGame = ks[(ks.indexOf(this.mixGame) + 1) % ks.length]; this.mixLeft = 6; }
+      const picked = TD.pickedGames(this.settings);
+      if (picked.length === 1) { this.mixGame = null; this.mixLeft = 0; return TD.GAMES[picked[0]] ? picked[0] : '27'; }
+      if (!this.mixGame) { this.mixGame = picked.includes(TD.GAME) ? TD.GAME : TD.nextPicked(TD.GAME, picked); this.mixLeft = 6; }
+      else if (!picked.includes(this.mixGame)) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = 6; }
+      else if (this.mixLeft <= 0) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = 6; }
       this.mixLeft--;
       return this.mixGame;
     }
@@ -1531,7 +1546,7 @@ window.TD = window.TD || {};
       const others = this.players.filter((q) => q !== p && q.canAct).length;
       let canRaise = !p.raiseLocked && p.stack > toCall && others > 0;
       if (canRaise) {
-        if (this.betLevel >= CAP_BETS && (!headsUp || this.capReached)) canRaise = false;
+        if (this.betLevel >= CAP_BETS) canRaise = false; // a bet and three raises, always (heads-up too)
       }
       const raiseTo = this.currentBet + this.unit;
       const raiseCost = Math.min(raiseTo - p.roundBet, p.stack);
@@ -1587,7 +1602,7 @@ window.TD = window.TD || {};
           if (full) {
             this.betLevel++;
             for (const q of this.players) if (q !== p) { q.acted = false; q.raiseLocked = false; }
-            if (this.betLevel >= CAP_BETS && this.activePlayers().length > 2) this.capReached = true;
+            if (this.betLevel >= CAP_BETS) this.capReached = true;
           } else {
             // incomplete raise: players who already acted may only call or fold
             for (const q of this.players) if (q !== p && q.acted) q.raiseLocked = true;
@@ -1595,9 +1610,9 @@ window.TD = window.TD || {};
           this.currentBet = newTotal;
           this.lastAggressor = p.seat; this.roundAggressor = p.seat;
         }
-        const capping = this.betLevel >= 4 && full && this.activePlayers().length > 2;
+        const capping = this.betLevel >= CAP_BETS && full;
         const verb = p.isHuman ? (wasBet ? 'bet' : capping ? 'cap it at' : 'raise to') : (wasBet ? 'bets' : capping ? 'caps it at' : 'raises to');
-        p.lastAction = (wasBet ? 'Bet' : (this.betLevel >= 4 && full && this.activePlayers().length > 2 ? 'Cap' : 'Raise')) + (p.allIn ? ' (all-in)' : '');
+        p.lastAction = (wasBet ? 'Bet' : (capping ? 'Cap' : 'Raise')) + (p.allIn ? ' (all-in)' : '');
         this.record(p.seat, wasBet ? 'bet' : 'raise', amt, { to: newTotal });
         this.log((p.isHuman ? 'You' : p.name) + ' ' + verb + ' $' + newTotal + (p.allIn ? ' (all-in)' : ''), 'act');
         type = wasBet ? 'bet' : 'raise';
@@ -1665,7 +1680,7 @@ window.TD = window.TD || {};
       const ut = TD.AI.normType(act.type, opts);
       const pu = res.dist[ut] || 0;
       const verdict = (ut === res.top || pu >= 0.5) ? 'agree' : pu >= 0.12 ? 'mixed' : 'differs';
-      const capping = opts.betLevel + 1 >= CAP_BETS && !opts.headsUp;
+      const capping = opts.betLevel + 1 >= CAP_BETS;
       const label = (t) => (t === 'raise' ? (opts.isBet ? 'bet' : capping ? 'cap' : 'raise') : t);
       const dist = Object.keys(res.dist).sort((a, b) => res.dist[b] - res.dist[a]).map((k) => label(k) + ' ' + Math.round(res.dist[k] * 100) + '%').join(' · ');
       this.coachNotes.push({
@@ -2650,8 +2665,7 @@ window.TD = window.TD || {};
       return md && r.type === 'fold' ? act('fold', r.reason + ' ' + predrawMdfHead(md, '3-bet', 'opened with from ' + pos) + ' This hand is among the weakest of them — the part MDF lets me fold.', r.tag) : r;
     }
 
-    // ---------- capped (or heads-up beyond the cap) ----------
-    if (opts.canRaise && c.opps === 1 && sc >= 97 && lvl < 6) return act('raise', 'Heads-up (no cap) with ' + d + ': keep raising with the nuts-type holding.', 'value');
+    // ---------- capped (a bet and three raises; no raising past it, heads-up included) ----------
     // MMG: facing a cap without having raised yourself, play only one-card wheel (seven) draws and good pat eights
     if (p.roundBet < 2 * game.stakes.small) {
       const maxR = info.kind === 'one' ? Math.max(...TD.maskRanksAsc(info.mask)) : 0;
@@ -4766,7 +4780,7 @@ window.TD = window.TD || {};
       if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
-    // four bets and more
+    // four bets (the cap: a bet and three raises, heads-up too)
     if (opts.canRaise && (capRange(i) || (i.kind === 'three' && i.t <= lv('5') && R() < 0.5))) return act('raise', (c.level >= 4 ? 'Cap it' : 'Raise') + ' with ' + d + '. Mastering Mixed Games: with three wheel cards or a jack-or-better badugi, cap with all the badugis; cap or call with the one-card draws.', 'value');
     if (callThreeBetRange(i, Math.max(1, c.invested), true) || (c.invested >= 2 && opts.headsUp && (i.kind !== 'two' || i.t <= lv('4')))) return act('call', 'Call with ' + d + ' — already ' + plural(c.invested, 'bet') + ' in.');
     return act('fold', 'Fold ' + d + ' to four bets.');
@@ -5160,7 +5174,7 @@ window.TD = window.TD || {};
     // facing a bet or raise
     const loose = c.opp && isLoose(game, c.opp);
     if (c.canRaise && c.made) {
-      if (tier === 5 && (c.lvl <= 3 || (t <= lv('5') && hn.second <= lv('3') && c.lvl <= 5))) return act('raise', 'Raise with the ' + c.txt + '. Greenstein: it is normally profitable to raise to the cap with a five badugi.', 'value');
+      if (tier === 5 && c.lvl <= 3) return act('raise', 'Raise with the ' + c.txt + '. Greenstein: it is normally profitable to raise to the cap with a five badugi.', 'value');
       if (tier === 6 && c.lvl <= 2) return act('raise', 'Raise with the ' + c.txt + '. Greenstein: six badugis are invariably good — reraise even on the river.', 'value');
       if (tier === 7 && (c.lvl <= 1 || (loose && c.lvl <= 2))) return act('raise', 'Raise with the ' + c.txt + (loose ? '. Greenstein: against loose players reraising a seven badugi is often profitable.' : '.'), 'value');
       const raiseThr = c.N === 1 ? 0.74 : 0.62;
@@ -5266,7 +5280,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 37;
+  TD.VERSION = 39;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -5412,7 +5426,9 @@ window.TD = window.TD || {};
       if (!['rotate', 'fixed'].includes(this.settings.seatView)) this.settings.seatView = 'rotate';
       if (!['classic', 'light', 'dark'].includes(this.settings.theme)) this.settings.theme = 'classic';
       this.settings.game = TD.GAME; // the game being played now
-      if (!TD.GAME_KEYS.concat('MIX').includes(this.settings.gameMode)) this.settings.gameMode = TD.GAME; // what the player picked
+      this.settings.games = TD.pickedGames(this.settings); // the games the player picked (older saves: gameMode)
+      this.settings.gameMode = undefined;
+      if (!this.settings.games.includes(TD.GAME)) { TD.setGame(this.settings.games[0]); this.settings.game = TD.GAME; }
       this.slots = [[], [], [], [], [], []];
       this.heroSel = new Set();
       this.drawMode = false;
@@ -5578,21 +5594,46 @@ window.TD = window.TD || {};
       if (this.settings.speed !== 'turbo') { this.showBanner(TD.gameInfo.name, ''); await this.wait(1100); this.hideBanner(); }
     }
 
-    // 2-7 / A-5 / Mix. Between hands the table changes at once; during a hand, from the next hand.
-    setGameMode(k) {
+    // The game buttons are toggles: tap a game to add it to or drop it from the games played (at least one
+    // stays picked). One game plays on its own; more rotate every 6 hands. Between hands, a table whose game
+    // was dropped changes at once; during a hand, from the next hand.
+    toggleGame(k) {
       const s = this.settings;
-      if (!TD.GAME_KEYS.concat('MIX').includes(k) || s.gameMode === k) return;
-      s.gameMode = k;
+      if (!TD.GAME_KEYS.includes(k)) return false;
+      const cur = TD.pickedGames(s);
+      const next = cur.includes(k) ? cur.filter((x) => x !== k) : TD.GAME_KEYS.filter((x) => x === k || cur.includes(x));
+      if (!next.length) { this.toast('Pick at least one game'); return false; }
+      s.games = next;
       const g = this.game;
       const live = g && g.handInProgress;
-      if (g && k !== 'MIX') { g.mixGame = null; g.mixLeft = 0; }
-      if (!live && k !== 'MIX' && k !== TD.GAME) { TD.setGame(k); s.game = k; this.refreshStakesText(); this.relayout(); }
+      if (next.length === 1 && g) { g.mixGame = null; g.mixLeft = 0; }
+      const dropped = !next.includes(TD.GAME);
+      if (!live && dropped) {
+        const to = next.length === 1 ? next[0] : TD.nextPicked(TD.GAME, next);
+        TD.setGame(to); s.game = to; this.refreshStakesText(); this.relayout();
+        if (g && next.length > 1) { g.mixGame = to; g.mixLeft = 6; }
+      }
       this.saveSettings();
       if (g) this.update(g, {});
-      const label = k === 'MIX' ? 'Mix: 2-7, A-5 and Badugi change every 6 hands' : TD.GAME_INFO[k].name;
-      if (live) this.toast(label + ' from the next hand');
-      else if (k === 'MIX') this.toast(label);
-      if (this.onGameMode) this.onGameMode(k);
+      this.toast(this.gamesLabel() + (live && dropped ? ' from the next hand' : ''));
+      if (this.onGameMode) this.onGameMode(next);
+      return true;
+    }
+    // "Playing Badugi" / "Playing 2-7 and Badugi, 6 hands each" / "Playing 2-7, A-5 and Badugi, 6 hands each"
+    gamesLabel() {
+      const p = TD.pickedGames(this.settings);
+      if (p.length === 1) return 'Playing ' + TD.GAME_INFO[p[0]].name;
+      const ns = p.map((k) => TD.GAME_INFO[k].short);
+      return 'Playing ' + (ns.length === 2 ? ns.join(' and ') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]) + ', 6 hands each';
+    }
+    // the game buttons (Settings and the welcome screen); the picked ones are highlighted
+    gameButtons() {
+      const picked = TD.pickedGames(this.settings);
+      return TD.GAME_KEYS.map((k) => '<button data-k="' + k + '" aria-pressed="' + picked.includes(k) + '" class="' + (picked.includes(k) ? 'on' : '') + '">' + TD.GAME_INFO[k].short + '</button>').join('');
+    }
+    markGameButtons(btns) {
+      const picked = TD.pickedGames(this.settings);
+      btns.forEach((b) => { const on = picked.includes(b.dataset.k); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
     }
 
     refreshStakesText() {
@@ -5730,7 +5771,9 @@ window.TD = window.TD || {};
       this.renderBurns(game);
       const net = human.stack - human.buyins;
       const st = game.stakes;
-      const mixTxt = this.settings.gameMode === 'MIX' && game.mixGame ? ' · Mix, ' + (game.mixLeft > 0 ? game.mixLeft + ' more' : 'switches next hand') : '';
+      const picked = TD.pickedGames(this.settings);
+      const nextG = picked.length > 1 && game.mixGame ? TD.GAME_INFO[TD.nextPicked(game.mixGame, picked)].short : '';
+      const mixTxt = nextG ? (picked.includes(game.mixGame) && game.mixLeft > 0 ? ' · ' + game.mixLeft + ' more, then ' + nextG : ' · ' + nextG + ' next hand') : '';
       $('#hand-no').textContent = (game.handNo ? 'Hand #' + game.handNo + ' · ' : '') + TD.gameInfo.short + mixTxt + ' · ' + money(st.small) + '/' + money(st.big) + ' limit';
       $('#session-net').innerHTML = 'Session <b class="' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</b>';
       const canTop = human.stack + human.totalBet < st.buyin;
@@ -6107,7 +6150,7 @@ window.TD = window.TD || {};
         mk('fold', 'Fold', '', 'F', () => done({ type: 'fold', forceFold: true }), opts.canCheck);
         if (opts.canCheck) mk('call', 'Check', '', 'C', () => done({ type: 'check' }));
         else mk('call', 'Call', money(opts.toCall) + (opts.allInCall ? ' all-in' : ''), 'C', () => done({ type: 'call' }));
-        const capWord = (opts.betLevel + 1 >= 4 && !opts.headsUp) ? 'Cap' : 'Raise';
+        const capWord = (opts.betLevel + 1 >= 4) ? 'Cap' : 'Raise';
         if (opts.isBet) mk('raise', 'Bet', money(opts.raiseTo), 'R', () => done({ type: 'raise' }), !opts.canRaise);
         else mk('raise', opts.canRaise ? capWord : 'Raise', opts.canRaise ? 'to ' + money(opts.raiseTo) : 'capped', 'R', () => done({ type: 'raise' }), !opts.canRaise);
         $('#action-msg').textContent = (game.allSeats ? this.seatName(game, p) + ' · ' : '') + 'Pot ' + money(opts.pot) + (opts.toCall ? ' · to call ' + money(opts.toCall) : '') + (opts.betLevel ? ' · ' + opts.betLevel + (opts.betLevel === 1 ? ' bet' : ' bets') : '');
@@ -6586,8 +6629,8 @@ window.TD = window.TD || {};
         themeOpt('dark', 'Dark', '#0b0d10', '#171b21', 'inherit') + '</div>' +
         '<div class="setting"><div class="lbl">Four-colour deck<small>Blue diamonds, green clubs — easier to spot flushes</small></div>' + sw('fourColor', s.fourColor) + '</div>' +
         '<div class="set-group">Table</div>' +
-        '<div class="setting"><div class="lbl">Game<small>Mix changes game every 6 hands (one orbit). A change during a hand starts with the next hand.</small></div><div class="seg" id="set-game">' +
-        [['27', '2-7'], ['A5', 'A-5'], ['BD', 'Badugi'], ['MIX', 'Mix']].map(([k, l]) => '<button data-k="' + k + '" class="' + (s.gameMode === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
+        '<div class="setting"><div class="lbl">Games<small>Select which games you would like to play. Tap a game to add or remove it; with more than one, the game changes every 6 hands (one orbit). A change during a hand starts with the next hand.</small></div><div class="seg" id="set-game">' +
+        this.gameButtons() + '</div></div>' +
         '<div class="setting"><div class="lbl">Stakes &amp; stacks<small>' + money(st.sb) + '/' + money(st.bb) + ' blinds · ' + money(st.small) + '/' + money(st.big) + ' limit · ' + money(st.buyin) + ' stacks</small></div><button class="mbtn ghost" id="btn-stakes" style="min-width:0;min-height:42px">Change</button></div>' +
         '<div class="setting"><div class="lbl">Game speed</div><div class="seg" id="set-speed">' + speeds.map(([k, l]) => '<button data-k="' + k + '" class="' + (s.speed === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
         '<div class="setting"><div class="lbl">Zoom<small>When you fold, the next hand is dealt at once (the rest plays out instantly and still shows in History and Review). Before your turn, Fold now folds straight away.</small></div>' + sw('zoom', s.zoom !== false) + '</div>' +
@@ -6641,7 +6684,7 @@ window.TD = window.TD || {};
         s.theme = b.dataset.theme; this.saveSettings();
         $$('.theme-opt', m).forEach((x) => x.classList.toggle('on', x === b));
       }));
-      $$('#set-game button', m).forEach((b) => (b.onclick = () => { this.setGameMode(b.dataset.k); $$('#set-game button', m).forEach((x) => x.classList.toggle('on', x === b)); }));
+      $$('#set-game button', m).forEach((b) => (b.onclick = () => { this.toggleGame(b.dataset.k); this.markGameButtons($$('#set-game button', m)); }));
       $('#btn-stakes', m).onclick = () => this.showStakes();
       $('#btn-rules', m).onclick = () => this.showRules();
     }
@@ -6703,7 +6746,7 @@ window.TD = window.TD || {};
       if (TD.IS_A5) return this.showRulesA5(st);
       const html = '<div class="rules"><h2>Deuce-to-Seven Triple Draw</h2><div class="sub">Limit · ' + money(st.sb) + '/' + money(st.bb) + ' blinds · ' + money(st.small) + '/' + money(st.big) + '</div>' +
         '<h3>Object</h3><p>Make the <b>lowest</b> five-card hand. Aces are always <b>high</b>, and straights and flushes count against you. The best hand is 7-5-4-3-2 of mixed suits ("Number One"). A-2-3-4-5 is not a straight — it is just ace-high.</p>' +
-        '<h3>The deal</h3><ul><li>Each player gets five cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap with three or more players; raising is unlimited once only two players remain (if the cap was not already reached).</li><li>In each draw, players discard 0–5 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
+        '<h3>The deal</h3><ul><li>Each player gets five cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap on every street, heads-up included.</li><li>In each draw, players discard 0–5 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
         '<h3>Reading the table</h3><p>The three boxes under each player show how many cards they drew on draws 1, 2 and 3 (<b>PAT</b> = stood pat). The dealer burns a card before each draw, and the burn cards tucked under the pot chips show the street: none before the first draw, one after the first draw, two after the second, three after the third. Tap (or hover over) the pot to see how many cards are left in the stub. Tap your cards at any time to mark them for the next draw.</p>' +
         '<h3>Ranking examples (best → worse)</h3><ol class="rank-list"><li>7-5-4-3-2 (the nuts)</li><li>7-6-4-3-2</li><li>7-6-5-3-2</li><li>7-6-5-4-2</li><li>8-5-4-3-2</li><li>8-6-4-3-2</li><li>8-7-6-5-3 (worst eight)</li><li>9-high, 10-high … ace-high</li><li>One pair (pair of deuces is best)</li><li>Two pair, trips, straights, flushes, full houses, quads, straight flushes</li></ol><p>7-6-5-4-3 and 8-7-6-5-4 are straights, so they lose to any no-pair hand.</p>' +
         '<h3>Showdown</h3><p>The last aggressor on the final round shows first; if it was checked through, the first player left of the button shows first. Split pots are divided evenly with odd chips to the first winner left of the button. Side pots are created for all-in players.</p></div>';
@@ -6713,7 +6756,7 @@ window.TD = window.TD || {};
     showRulesA5(st) {
       const html = '<div class="rules"><h2>Ace-to-Five Triple Draw</h2><div class="sub">Limit · ' + money(st.sb) + '/' + money(st.bb) + ' blinds · ' + money(st.small) + '/' + money(st.big) + '</div>' +
         '<h3>Object</h3><p>Make the <b>lowest</b> five-card hand. Aces are always <b>low</b>, and straights and flushes <b>don\'t count</b>. The best hand is 5-4-3-2-A ("the wheel"), suited or not.</p>' +
-        '<h3>The deal</h3><ul><li>Each player gets five cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap with three or more players; raising is unlimited once only two players remain (if the cap was not already reached).</li><li>In each draw, players discard 0–5 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
+        '<h3>The deal</h3><ul><li>Each player gets five cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap on every street, heads-up included.</li><li>In each draw, players discard 0–5 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
         '<h3>Reading the table</h3><p>The three boxes under each player show how many cards they drew on draws 1, 2 and 3 (<b>PAT</b> = stood pat). The burn cards tucked under the pot chips show the street. Tap (or hover over) the pot to see how many cards are left in the stub. Tap your cards at any time to mark them for the next draw.</p>' +
         '<h3>Ranking examples (best → worse)</h3><ol class="rank-list"><li>5-4-3-2-A (the wheel, the nuts)</li><li>6-4-3-2-A</li><li>6-5-3-2-A</li><li>6-5-4-3-2</li><li>7-4-3-2-A</li><li>7-6-5-4-3 (worst seven)</li><li>8-high, 9-high … king-high</li><li>One pair (pair of aces is best)</li><li>Two pair, trips, full houses, quads</li></ol><p>Hands are compared from the top card down: 7-5-4-3-2 beats 7-6-3-2-A. 9-8-7-6-5 is just a nine-low, and a flush is just its high cards.</p>' +
         '<h3>Showdown</h3><p>The last aggressor on the final round shows first; if it was checked through, the first player left of the button shows first. Split pots are divided evenly with odd chips to the first winner left of the button. Side pots are created for all-in players.</p></div>';
@@ -6723,7 +6766,7 @@ window.TD = window.TD || {};
     showRulesBD(st) {
       const html = '<div class="rules"><h2>Badugi</h2><div class="sub">Limit triple draw · ' + money(st.sb) + '/' + money(st.bb) + ' blinds · ' + money(st.small) + '/' + money(st.big) + '</div>' +
         '<h3>Object</h3><p>Make the <b>lowest</b> four-card hand with cards of <b>four different ranks and four different suits</b> — a <b>badugi</b>. Aces are always <b>low</b>; straights don\'t count. The best hand is A-2-3-4 of four suits.</p>' +
-        '<h3>The deal</h3><ul><li>Each player gets four cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap with three or more players; raising is unlimited once only two players remain (if the cap was not already reached).</li><li>In each draw, players discard 0–4 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
+        '<h3>The deal</h3><ul><li>Each player gets four cards face down. Small blind ' + money(st.sb) + ', big blind ' + money(st.bb) + '.</li><li>Four betting rounds with three draws between them: Predraw → Draw 1 → Bet → Draw 2 → Bet → Draw 3 → Bet → Showdown.</li><li>Bets are ' + money(st.small) + ' on the first two rounds and ' + money(st.big) + ' on the last two.</li><li>A bet and three raises is the cap on every street, heads-up included.</li><li>In each draw, players discard 0–4 cards in turn starting left of the button and receive replacements. Standing pat = drawing none.</li><li>The dealer burns one card before each draw. The last card of the stub is never dealt — it is shuffled with the discards and burn cards (not the current player\'s discards) to form a new stub.</li><li>An all-in for less than half a bet does not reopen the betting.</li></ul>' +
         '<h3>Reading the table</h3><p>The three boxes under each player show how many cards they drew on draws 1, 2 and 3 (<b>PAT</b> = stood pat). Tap your cards at any time to mark them for the next draw.</p>' +
         '<h3>Ranking</h3><p>A hand with a pair or two cards of one suit plays only its best set of cards with different ranks and suits. Any four-card badugi beats any three-card hand, which beats any two-card hand. Hands of the same size compare from the highest card down.</p><ol class="rank-list"><li>4-3-2-A badugi (the nuts)</li><li>5-3-2-A, 5-4-2-A … 7-4-2-A, 9-6-3-A …</li><li>K-Q-J-T badugi (the worst badugi)</li><li>Three-card 3-2-A (best three-card hand)</li><li>… three-card K-Q-J</li><li>Two-card hands, then one card</li></ol><p>Example: A♠ 2♥ 3♥ 7♦ plays as the three-card 7-2-A (one heart is dead) and loses to any badugi.</p>' +
         '<h3>Showdown</h3><p>The last aggressor on the final round shows first; if it was checked through, the first player left of the button shows first. Split pots are divided evenly with odd chips to the first winner left of the button. Side pots are created for all-in players.</p></div>';
@@ -6783,14 +6826,19 @@ window.TD = window.TD || {};
       const m = TD.uiHelpers.money;
       const st = game.stakes;
       const gi = TD.gameInfo;
-      const rulesTxt = () => (ui.settings.gameMode === 'MIX' ? 'Mix: six hands (one orbit) of each game in turn: 2-7, then A-5, then Badugi. Lowest hand wins — in 2-7 aces are high and straights and flushes count against you; in A-5 aces are low and they don\'t count; in Badugi four cards of different ranks and suits beat any hand with a pair or two of a suit.'
-        : TD.IS_BD ? 'Lowest hand wins with four cards of four different suits and ranks (a badugi). Aces are low, so A-2-3-4 of four suits is the nuts; pairs and suited cards don\'t play.'
-        : TD.IS_A5 ? 'Lowest hand wins — aces are low and straights and flushes don\'t count, so 5-4-3-2-A is the nuts.' : 'Lowest hand wins — aces are high, straights and flushes count against you.');
-      const subTxt = () => (ui.settings.gameMode === 'MIX' ? 'Limit 2-7 / A-5 / Badugi Mix' : TD.gameInfo.limitName) + ' · ' + m(st.small) + '/' + m(st.big);
+      const picked = () => TD.pickedGames(ui.settings);
+      const RULE = {
+        '27': ['Lowest hand wins — aces are high, straights and flushes count against you.', 'in 2-7 aces are high and straights and flushes count against you'],
+        'A5': ['Lowest hand wins — aces are low and straights and flushes don\'t count, so 5-4-3-2-A is the nuts.', 'in A-5 aces are low and straights and flushes don\'t count'],
+        'BD': ['Lowest hand wins with four cards of four different suits and ranks (a badugi). Aces are low, so A-2-3-4 of four suits is the nuts; pairs and suited cards don\'t play.', 'in Badugi four cards of different ranks and suits beat any hand with a pair or two of a suit']
+      };
+      const rulesTxt = () => { const p = picked(); return p.length === 1 ? RULE[p[0]][0] : 'Six hands (one orbit) of each game in turn: ' + p.map((k) => TD.GAME_INFO[k].short).join(', then ') + '. Lowest hand wins — ' + p.map((k) => RULE[k][1]).join('; ') + '.'; };
+      const subTxt = () => { const p = picked(); return (p.length === 1 ? TD.GAME_INFO[p[0]].limitName : 'Limit ' + p.map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix') + ' · ' + m(st.small) + '/' + m(st.big); };
       let html = '<svg class="crest"><use href="#crest"/></svg>' +
         '<h2>THE LAGO ROOM</h2><div class="sub" id="wel-sub">' + subTxt() + '</div>' +
+        '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Select which games you would like to play</p>' +
         '<div style="display:flex;justify-content:center;margin:4px 0 10px"><div class="seg" id="welcome-game">' +
-        [['27', '2-7'], ['A5', 'A-5'], ['BD', 'Badugi'], ['MIX', 'Mix']].map(([k, l]) => '<button data-k="' + k + '" class="' + (ui.settings.gameMode === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
+        ui.gameButtons() + '</div></div>' +
         '<p style="text-align:center">Six-handed against five seasoned regulars. Blinds ' + m(st.sb) + '/' + m(st.bb) + ', bets ' + m(st.small) + ' before and after the first draw, ' + m(st.big) + ' after the second and third. <span id="wel-rules">' + rulesTxt() + '</span></p>' +
         '<p style="text-align:center;font-size:14px" class="muted">Buy-in ' + m(st.buyin) + '. Tap your cards any time to mark discards for the next draw. Open <b>Review</b> after a hand to see every opponent\'s cards and reasoning — and how your decisions compare with the AI. Change stakes and the table style in <b>Settings</b>.</p>';
       if (canResume) {
@@ -6808,8 +6856,8 @@ window.TD = window.TD || {};
       buttons.push([canResume ? 'New session' : 'Take your seat', () => { TD.store.remove(SESSION_KEY); resolve(); }, canResume]);
       const box = ui.modal(html, buttons, false);
       box.querySelectorAll('#welcome-game button').forEach((b) => (b.onclick = () => {
-        ui.setGameMode(b.dataset.k);
-        box.querySelectorAll('#welcome-game button').forEach((x) => x.classList.toggle('on', x === b));
+        ui.toggleGame(b.dataset.k);
+        ui.markGameButtons(box.querySelectorAll('#welcome-game button'));
         box.querySelector('#wel-sub').textContent = subTxt();
         box.querySelector('#wel-rules').textContent = rulesTxt();
       }));
@@ -6819,7 +6867,7 @@ window.TD = window.TD || {};
   async function loop() {
     await welcome();
     TD.Sound.init();
-    ui.log('Welcome to the Lago Room. ' + (ui.settings.gameMode === 'MIX' ? 'Limit 2-7 / A-5 Mix, six hands of each' : TD.gameInfo.limitName) + '.', 'sys');
+    ui.log('Welcome to the Lago Room. ' + (TD.pickedGames(ui.settings).length > 1 ? 'Limit ' + TD.pickedGames(ui.settings).map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix, six hands of each' : TD.gameInfo.limitName) + '.', 'sys');
     for (;;) {
       if (ui.resetRequested) startNewSession();
       const me = game.players[0];
