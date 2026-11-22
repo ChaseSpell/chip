@@ -4574,11 +4574,18 @@ window.TD = window.TD || {};
       if (a.type === 'bet' || a.type === 'raise') aggr++;
       if (a.type === 'raise') raises++; else if (a.type === 'call') calls++; else if (a.type === 'check') checks++;
     }
-    return { aggr, raises, calls, checks };
+    // did everyone else still in at that draw draw at least one card? (then a made badugi bets and raises whatever its size)
+    const others = street >= 1 ? game.players.filter((q) => q.seat !== seat && q.draws.length >= street) : [];
+    const oppsDrew = others.length > 0 && others.every((q) => q.draws[street - 1] >= 1);
+    return { aggr, raises, calls, checks, oppsDrew };
   }
   // strength (0..1, the showdown-quality scale) -> chance of each kind of betting line
-  function actionLik(sum, s, street) {
+  function actionLik(sum, s, street, made) {
     if (!sum) return 1;
+    // Chase (Nov 21, the MDF hand), Greenstein and MMG: against players still drawing, a made badugi bets at every
+    // round and check-raises the drawing lead every time, king and queen badugis included (they are about half of all
+    // badugis). So before the river that aggression says "badugi", not "a strong badugi".
+    if (made && sum.oppsDrew && street < 3 && sum.aggr > 0) return sum.aggr > 1 ? 0.75 : 0.9;
     let p = 1;
     if (sum.aggr > 0) {
       if (street === 3) p *= 0.06 + 0.94 * Math.pow(clamp((s - 0.3) / 0.45, 0, 1), 1.5);
@@ -4657,7 +4664,7 @@ window.TD = window.TD || {};
         w *= pc;
         if (ok && R() > pc) ok = false;
         if (n > 0) hand = drawInto(hand, forcedKeep(hand, 4 - n, dRem), pool);
-        const pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1);
+        const pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1, TD.isMadeLow(hand));
         w *= pa;
         if (ok && R() > pa) ok = false;
         if (!ok && w < bestW * 0.5) break;
@@ -5218,6 +5225,7 @@ window.TD = window.TD || {};
     if (!r && dRem > 0 && !mem.snow && !mem.snowAborted) r = snowStart(c);
     if (!r && st === 3) r = river(c, fair);
     if (!r) r = drawStreet(c, fair);
+    r = mdfFloor(c, r);
     // before the river, say which of the two jobs a bet or raise does (Janda; Chase's robust-equity rule)
     if (dRem > 0 && (r.type === 'bet' || r.type === 'raise') && ['value', 'card-ahead', 'robust', 'denial'].includes(r.tag || 'value')) {
       const b = betEV(c);
@@ -5263,6 +5271,52 @@ window.TD = window.TD || {};
   function betEV(c) {
     if (!c.betEV) c.betEV = mcBetEV(c.game, c.p, { pot: c.pot + c.toCall, unit: c.unit, nextKeep: c.plan ? c.plan.keep : null, patForever: !!c.p.bot.snow }) || { gain: 0, build: 0, deny: 0, Ec: c.E, fold: 0, E: c.E };
     return c.betEV;
+  }
+  // MDF floor on raises (Chase, Nov 21, from 2-7/A-5): facing a raise heads-up, I may fold no more than the raise's
+  // risk / pot of the hands I bet with in this line, and less still with draws to come (he can still draw out, so
+  // some of his raises are draws with equity). A fold stands only for the weakest part of my range; otherwise call.
+  const MDF_FOLD_KEEP = [1, 0.7, 0.5];
+  function selfShareAbove(c) {
+    if (EQ_CACHE && 'self' in EQ_CACHE) return EQ_CACHE.self;
+    const { game, p } = c;
+    const model = buildModel(game, p);
+    model.human = false;
+    const all = [];
+    for (let i = 0; i < 52; i++) all.push(i);
+    const pool = new Pool(all);
+    const mine = TD.strengthNow(p.hand, c.dRem);
+    const budget = game.fastForward ? 20 : 60, minIt = game.fastForward ? 60 : 160, maxIt = 400;
+    const t0 = performance.now();
+    let above = 0, n = 0;
+    for (let it = 0; it < maxIt; it++) {
+      if (it >= minIt && (it & 15) === 0 && performance.now() - t0 > budget) break;
+      pool.reset();
+      const s = TD.strengthNow(sampleOpponent(model, pool), c.dRem);
+      if (s > mine + 1e-9) above++;
+      else if (s >= mine - 1e-9) above += 0.5;
+      n++;
+    }
+    const v = n ? above / n : 0;
+    if (EQ_CACHE) EQ_CACHE.self = v;
+    return v;
+  }
+  function mdfFloor(c, r) {
+    if (r.type !== 'fold' || c.N !== 1 || c.toCall <= 0 || c.lvl < 2 || c.p.bot.snow || r.tag === 'snow') return r;
+    if (c.drawing && c.nextDraw >= 2) return r; // MMG: unimproved two-card draws fold
+    if (c.st === 3 && !c.made) return r; // MMG Quiz 3: a three-card value bet that gets raised on the river folds
+    const last = lastAgg(c.game, c.st);
+    if (!last || last.seat !== c.opp.seat) return r;
+    const risk = last.amount > 0 ? last.amount : c.toCall;
+    const foldMdf = clamp(risk / c.pot, 0, 1);
+    const foldMax = foldMdf * MDF_FOLD_KEEP[clamp(c.dRem, 0, 2)];
+    const heChecked = c.game.actions.some((a) => a.street === c.st && a.seat === c.opp.seat && a.type === 'check');
+    const word = c.lvl >= 3 ? 're-raise' : heChecked ? 'check-raise' : 'raise', mine = c.lvl >= 3 ? 'raise' : 'bet';
+    const who = c.opp.isHuman ? 'your' : c.opp.name + '\'s';
+    const head = 'MDF applies to every raise: ' + who + ' ' + word + ' risks ' + money(risk) + ' to win ' + money(c.pot - risk) + ', so I can fold no more than ' +
+      Math.round(foldMdf * 100) + '% of the hands I ' + mine + ' with here' + (c.dRem > 0 ? '; with ' + c.dRem + ' draw' + (c.dRem > 1 ? 's' : '') + ' to come the raiser can still draw out, so I defend more than that' : '') + '.';
+    const share = selfShareAbove(c);
+    if (share >= 1 - foldMax) return act('fold', r.reason + ' ' + head + ' This hand is among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), the part MDF lets me fold.', r.tag);
+    return act('call', 'Call, ' + c.txt + '. ' + head + ' This hand is not among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), so it is part of the range that has to defend.', 'mdf');
   }
   function drawStreet(c, fair) {
     const { game, p } = c;
@@ -5523,7 +5577,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 49;
+  TD.VERSION = 50;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
