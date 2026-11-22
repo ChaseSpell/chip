@@ -4475,7 +4475,7 @@ window.TD = window.TD || {};
   // Hijack: add king badugis, all three-card sevens, smooth three-card eights. Cutoff: add 2-A and 3-A.
   // Button: add 4-A, 3-2 and 4-3. Small blind: the button range. ('WIDE' is the mixed-in edge beyond the
   // button: Barry's weakest button hands, 8-6-5 and 5-4.)
-  function rfi(i, pos) {
+  function rfi0(i, pos) {
     if (i.kind === 'pat') return pos === 'LJ' ? i.t <= lv('Q') : true; // no king badugis up front
     if (i.kind === 'three') {
       if (pos === 'LJ') return i.t <= lv('6') || (i.t === lv('7') && i.s2 <= lv('3'));
@@ -4505,7 +4505,7 @@ window.TD = window.TD || {};
     if (i.kind === 'three') return i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'));
     return false;
   }
-  function bbDefendRange(i, opPos, multi) {
+  function bbDefendRange0(i, opPos, multi) {
     const late = LATE.includes(opPos);
     if (i.kind === 'pat') return true;
     if (i.kind === 'three') return i.t <= lv('7') || (i.t === lv('8') && i.s2 <= (late ? lv('7') : lv('5'))) || (late && !multi && i.t === lv('9') && i.s2 <= lv('5'));
@@ -4520,12 +4520,22 @@ window.TD = window.TD || {};
     if (i.kind === 'three') return i.t <= lv('4');
     return false;
   }
-  function callThreeBetRange(i, invested, late) {
+  function callThreeBetRange0(i, invested, late) {
     if (i.kind === 'pat') return i.t <= (invested >= 2 ? lv('Q') : lv('J')); // most players drop queen and king badugis to a raise and a reraise
     if (i.kind === 'three') return invested >= 1 ? (i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'))) : (i.t <= lv('5') && i.s2 <= lv('4'));
     if (i.kind === 'two') return invested >= 1 && late && i.t <= lv('3');
     return false;
   }
+  // Chase (Nov 22): a three-card hand the first draw breaks (9-3-2: throw the nine, draw two to 3-2) is at least as
+  // playable as the two-card hand it draws to, so it also gets that hand's range (it used to fold to a 3-bet that
+  // a bare 3-2 calls)
+  function asTwo(i) {
+    if (!i || i.kind !== 'three' || i.broken || !i.breakTo) return null;
+    const ls = lvDesc(i.breakTo.keep);
+    return Object.assign({}, i, { kind: 'two', keep: i.breakTo.keep, t: ls[0] || 15, s2: ls[1] || 15, s3: 15, breakTo: null });
+  }
+  const orTwo = (fn) => (i, ...a) => fn(i, ...a) || (!!asTwo(i) && fn(asTwo(i), ...a));
+  const rfi = orTwo(rfi0), bbDefendRange = orTwo(bbDefendRange0), callThreeBetRange = orTwo(callThreeBetRange0);
   function capRange(i) {
     if (i.kind === 'pat') return i.t <= lv('J');
     if (i.kind === 'three') return i.t <= lv('4') && i.s2 <= lv('3');
@@ -4562,7 +4572,7 @@ window.TD = window.TD || {};
       case '4bet': return fourBetRange(i) ? 1 : threeBetRange(i, 'BTN') ? 0.25 : out;
       case 'call': return coldCallRange(i, model.opener || 'CO') ? (threeBetRange(i, model.opener) ? 0.25 : 1) : h && bbDefendRange(i, 'BTN') ? 0.6 : out;
       case 'bbdefend': return bbDefendRange(i, model.opener || 'BTN') ? (threeBetRange(i, model.opener) ? 0.3 : 1) : out * 1.5;
-      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : h && bbDefendRange(i, 'BTN') ? 0.4 : out;
+      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (i.kind === 'two' && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
       case 'limp': return rfi(i, 'BTN') ? 0.6 : 0.25;
       case 'bbcheck': return threeBetRange(i, 'BTN') ? 0.25 : 1;
       default: return 1;
@@ -4984,6 +4994,17 @@ window.TD = window.TD || {};
       if (opts.canRaise && fourBetRange(i)) return act('raise', '4-bet with ' + d + (i.kind === 'pat' ? '. Mastering Mixed Games: play every badugi the same way predraw, so raising doesn\'t give away which ones are strong.' : '.'), 'value');
       if (opts.canRaise && i.kind === 'three' && i.t <= lv('5') && R() < 0.5) return act('raise', '4-bet with ' + d + '. Mastering Mixed Games: with three wheel cards, cap or call at your discretion (mixed).', 'value');
       const inv = c.invested;
+      // Chase (Nov 22): a two-card draw I opened, facing a predraw 3-bet, has a lot of raw equity against the 3-bet
+      // range (3-2 about 38%, even 6-4 about 33%, needing about 14% at 6-to-1). In position it always continues:
+      // acting last helps it realize that equity. Out of position the steals fold and only the best two-card
+      // draws (3-2, 3-A, 2-A) call.
+      const two = i.kind === 'two' ? i : asTwo(i);
+      if (two && inv >= 1) {
+        const price = opts.toCall > 0 ? ' Getting ' + (opts.pot / opts.toCall).toFixed(1) + '-to-1' : '';
+        if (isIP(game, p, opponentsOf(game, p))) return act('call', 'Call the 3-bet with ' + d + '. Chase\'s rule: a two-card draw in position always continues against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has plenty of equity against the 3-bet range, and acting last on every street helps it realize that equity.');
+        if (two.t <= lv('3')) return act('call', 'Call the 3-bet with ' + d + ', one of the best two-card draws (3-2, 3-A, 2-A). Chase\'s rule: out of position only the best two-card draws continue against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has enough equity against the 3-bet range to call.');
+        return act('fold', 'Fold ' + d + ' to the 3-bet. Chase\'s rule: out of position facing a predraw 3-bet, the two-card steals fold; only the best two-card draws (3-2, 3-A, 2-A) continue.');
+      }
       if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
@@ -5647,7 +5668,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 54;
+  TD.VERSION = 56;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
