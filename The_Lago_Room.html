@@ -376,7 +376,8 @@ body.portrait #action-panel .msg { position: absolute; left: 0; right: 0; top: 0
 body.portrait #log-panel { display: none; }
 #log-panel .lh { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent-hi); padding: 7px 12px 4px; border-bottom: 1px solid var(--panel-line); font-weight: 700; }
 #log { flex: 1; overflow-y: auto; padding: 4px 12px 8px; font-size: 15px; line-height: 1.45; color: var(--text); user-select: text; }
-#log div, .log-live div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-live div { white-space: normal; overflow-wrap: anywhere; }
 :is(#log, .log-live, .hh-log) .hand { color: var(--accent-hi); margin-top: 4px; font-weight: 700; }
 :is(#log, .log-live, .hh-log) .win { color: var(--good); font-weight: 700; }
 :is(#log, .log-live, .hh-log) .show { color: var(--accent-hi); }
@@ -1345,7 +1346,18 @@ window.TD = window.TD || {};
     bbSeat() { return this.next(this.next(this.button)); }
     activePlayers() { return this.players.filter((p) => !p.folded); }
     pot() { return this.players.reduce((s, p) => s + p.totalBet, 0); }
-    log(text, cls) { this.handLog.push({ text, cls }); this.ui.log(text, cls); }
+    // full: the same line with every card named, shown in the Log once the hand is over and in History
+    // (Chase, Nov 22). liveOnly: a line for the Log during the hand only (the full lines already hold it).
+    log(text, cls, full, liveOnly) {
+      const e = { text, cls };
+      if (full && full !== text) e.full = full;
+      if (liveOnly) e.liveOnly = true;
+      this.handLog.push(e); this.ui.log(text, cls, e);
+      return e;
+    }
+    // whose cards the user may see during the hand: their own seat, or every seat in God mode
+    canSee(p) { return (this.settings && this.settings.godMode && this.godNow()) || (p.isHuman && !this.allSeats); }
+    cardsTxt(cards) { return '[' + TD.sortForDisplay(cards).map(TD.cardStr).join(' ') + ']'; }
     // "Marco calls" / "You call"
     say(p, third, second) { return p.isHuman ? 'You ' + second : p.name + ' ' + third; }
     record(seat, type, amount, extra) {
@@ -1449,6 +1461,12 @@ window.TD = window.TD || {};
         }
       }
       for (const p of this.players) { p.startHand = p.hand.slice(); }
+      for (let k = 0, s = this.sbSeat(); k < 6; k++, s = this.next(s)) {
+        const p = this.players[s];
+        if (!p.hand.length) continue;
+        const t = this.say(p, 'is dealt ', 'are dealt ') + this.cardsTxt(p.hand);
+        this.log(this.canSee(p) ? t : '', 'draw', t);
+      }
       if (this.ui.flush) await this.ui.flush();
       await this.ui.update(this, {});
 
@@ -1572,7 +1590,7 @@ window.TD = window.TD || {};
         p.folded = true; p.lastAction = 'Fold';
         this.muck.push(...p.hand);
         this.record(p.seat, 'fold');
-        this.log(this.say(p, 'folds', 'fold'), 'act');
+        { const t = this.say(p, 'folds', 'fold'), f = t + ' ' + this.cardsTxt(p.hand); this.log(this.canSee(p) ? f : t, 'act', f); }
         // Zoom: the user's hand is over — play the rest out instantly and deal the next hand
         if (p.isHuman && !this.allSeats && this.settings && this.settings.zoom !== false) {
           this.fastForward = true;
@@ -1673,6 +1691,11 @@ window.TD = window.TD || {};
       um.riverAggShown = (um.riverAggShown || 0) + 1;
       const hn = TD.handName(p.hand);
       if (TD.bluffShown(p.hand)) um.riverBluffShown = (um.riverBluffShown || 0) + 1;
+      // stood pat on the last draw and bet: a bluff shown here is a snow (the Badugi bots' snow-frequency read)
+      if (p.draws && p.draws.length && p.draws[p.draws.length - 1] === 0) {
+        um.patRiverAggShown = (um.patRiverAggShown || 0) + 1;
+        if (TD.bluffShown(p.hand)) um.snowShown = (um.snowShown || 0) + 1;
+      }
     }
 
     /* ---------- coach notes (user's decisions vs the AI strategy) ---------- */
@@ -1758,10 +1781,11 @@ window.TD = window.TD || {};
         p.lastAction = n === 0 ? 'Pat' : 'Draws ' + n;
         this.record(p.seat, 'draw', 0, { n, drawIdx });
         // God mode: the log also names the cards thrown away
-        const godTxt = n && this.settings && this.settings.godMode ? ' (throws ' + thrown.map(TD.cardStr).join(' ') + ')' : '';
-        this.log((n === 0 ? this.say(p, 'stands pat', 'stand pat') : this.say(p, 'draws ' + n, 'draw ' + n)) + godTxt, 'draw');
+        const base = n === 0 ? this.say(p, 'stands pat', 'stand pat') : this.say(p, 'draws ' + n, 'draw ' + n);
+        const godTxt = n && this.canSee(p) ? ' ' + this.cardsTxt(thrown) : '';
+        const entry = this.log(base + godTxt, 'draw', base);
         await this.ui.showDiscards(this, p.seat, discardIdx);
-        declared.push({ p, discardIdx, thrown, served: false });
+        declared.push({ p, discardIdx, thrown, served: false, entry, base });
         this.ui.setTurn(this, -1);
         await this.ui.update(this, {});
       }
@@ -1785,9 +1809,13 @@ window.TD = window.TD || {};
           for (let i = 0; i < n; i++) newCards.push(this.drawCard());
           discardIdx.forEach((hi, j) => { p.hand[hi] = newCards[j]; });
           p.handHistory.push({ drawIdx, n, kept: p.hand.filter((c) => !newCards.includes(c)), got: newCards, thrown });
+          const you = p.isHuman && !this.allSeats;
+          d.entry.full = d.base + ' ' + this.cardsTxt(thrown) + ', ' + (you ? 'get ' : 'gets ') + this.cardsTxt(newCards);
+          if (this.canSee(p)) this.log((you ? 'You get ' : p.name + ' gets ') + this.cardsTxt(newCards), 'draw', null, true);
           await this.ui.dealReplacements(this, p.seat, discardIdx);
         } else {
           p.handHistory.push({ drawIdx, n: 0, kept: p.hand.slice(), got: [], thrown: [] });
+          d.entry.full = d.base + ' ' + this.cardsTxt(p.hand);
         }
         p.discards.push(...thrown);
         if (!d.released) this.muck.push(...thrown);
@@ -1848,7 +1876,7 @@ window.TD = window.TD || {};
         results.winners[w.seat] = total;
         results.pots.push({ amount: total, winners: [w.seat], hand: null });
         w.stats.wins++;
-        this.log(this.say(w, 'wins $', 'win $') + total + ' (uncontested)', 'win');
+        { const t = this.say(w, 'wins $', 'win $') + total + ' (uncontested)', f = t + ' with ' + this.cardsTxt(w.hand); this.log(this.canSee(w) ? f : t, 'win', f); }
         await this.ui.awardPot(this, [{ seat: w.seat, amount: total }], null, 0);
       } else {
         // showdown order
@@ -1868,12 +1896,12 @@ window.TD = window.TD || {};
           if (mustShow) {
             p.shown = true; bestShown = Math.min(bestShown, v);
             const hn = TD.handName(p.hand);
-            this.log(this.say(p, 'shows ', 'show ') + hn.short + ' — ' + hn.long, 'show');
+            this.log(this.say(p, 'shows ', 'show ') + hn.short + ' — ' + hn.long + ' ' + this.cardsTxt(p.hand), 'show');
             results.shown.push(seat);
             await this.ui.showHand(this, seat, hn);
           } else {
             p.mucked = true;
-            this.log(this.say(p, 'mucks', 'muck'), 'act');
+            { const t = this.say(p, 'mucks', 'muck'), f = t + ' ' + this.cardsTxt(p.hand); this.log(this.canSee(p) ? f : t, 'act', f); }
             await this.ui.muckHand(this, seat);
           }
           p.stats.showdowns++;
@@ -1913,6 +1941,8 @@ window.TD = window.TD || {};
         for (const seat of sdWinners) { this.players[seat].stats.sdWins++; this.players[seat].stats.wins++; }
       }
       for (const p of this.players) p.stats.won = p.stack + 0 - p.buyins;
+      // the hand is over: the Log shows every card now (as History does)
+      for (const e of this.handLog) e.done = true;
       // build record for history/review
       const rec = {
         handNo: this.handNo, button: this.button, game: this.gameKey, allSeats: !!this.allSeats, god: !!this.godSeen,
@@ -5394,6 +5424,34 @@ window.TD = window.TD || {};
     if (c.E >= need) return act('call', 'Call, ' + c.txt + ' — ' + priceTxt(c) + (c.drawing ? ', plus implied odds' : '') + (vsPat && c.drawing ? '. Greenstein: against a pat hand the drawer usually calls until the last draw.' : '.'));
     return act('fold', 'Fold, ' + c.txt + ' — not enough for the price (' + priceTxt(c) + ').');
   }
+  // how often a player who stood pat on the last draw and bet the river is snowing (Chase, Nov 22). Standing pat
+  // from the first draw is the strongest story: a tight opener does it with a snow maybe 3% of the time. A snow that
+  // starts at the second draw (the Mastering Mixed Games way) is more common, more so from a late seat.
+  function snowRate(game, opp) {
+    let k = 0;
+    for (let i = opp.draws.length - 1; i >= 0 && opp.draws[i] === 0; i--) k++;
+    const pos = game.posName(opp.seat), early = pos === 'UTG' || pos === 'LJ' || pos === 'HJ';
+    let rate = k >= 3 ? (early ? 0.03 : 0.05) : k === 2 ? (early ? 0.07 : 0.1) : (early ? 0.05 : 0.07);
+    const who = opp.isHuman ? 'you' : 'my opponent';
+    const line = (early ? 'From the ' + pos + ', ' + who : who.charAt(0).toUpperCase() + who.slice(1)) + ' stood pat on ' + (k >= 3 ? 'all three draws' : k === 2 ? 'the last two draws' : 'the last draw');
+    let adj = '';
+    if (opp.isHuman) {
+      const um = game.userModel || {}, n = um.patRiverAggShown || 0, sn = um.snowShown || 0;
+      if (n > 0) {
+        const m = clamp(shrunk(sn, n, 0.06, 12) / 0.06, 0.5, 3);
+        rate *= m;
+        if (m > 1.15 || m < 0.87) adj = ' (adjusted for the ' + sn + ' snow' + (sn === 1 ? '' : 's') + ' you have shown in ' + n + ' called river bets after standing pat)';
+      }
+    }
+    return { rate: clamp(rate, 0.005, 0.5), txt: line + ' and bet; that line is a snow about ' + Math.max(1, Math.round(rate * 100)) + '% of the time' + adj };
+  }
+  // snows are weak three-card hands (5-6-7, A-6-7, 2-5-6) or two-card hands holding low blockers
+  function triBeatsSnow(hand) {
+    const pl = TD.playing(hand);
+    if (pl.length < 3) return 0.1;
+    const t = lvDesc(pl)[0];
+    return t <= lv('4') ? 0.95 : t <= lv('5') ? 0.85 : t <= lv('6') ? 0.7 : t <= lv('7') ? 0.5 : t <= lv('8') ? 0.35 : t <= lv('9') ? 0.25 : 0.15;
+  }
   function river(c, fair) {
     const { game, p, hn } = c;
     const t = hn.top;
@@ -5464,13 +5522,13 @@ window.TD = window.TD || {};
     // Chase (Nov 21): I checked a decent badugi out of position to catch bluffs from a player who drew: call one bet.
     // With this much in the pot he only needs to bluff now and then for the call to pay, and folding it would let
     // every missed draw bluff me off the pot.
-    if (c.N === 1 && !c.ip && c.iChecked && c.made && t <= lv('J') && p.draws[2] === 0 && c.opp.draws[2] > 0 && c.lvl === 1) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. He drew on the last draw, so his bet is a better badugi or a missed draw bluffing (a worse badugi would have checked behind); ' + priceTxt(c) + ', he only needs to be bluffing now and then.', 'bluff-catch');
+    if (c.N === 1 && !c.ip && c.iChecked && c.made && t <= lv('J') && p.draws[2] === 0 && c.opp.draws[2] > 0 && c.lvl === 1) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. My opponent drew on the last draw, so the bet is a better badugi or a missed draw bluffing (a worse badugi would have checked behind); ' + priceTxt(c) + ', so a bluff now and then is enough.', 'bluff-catch');
     // Chase (Nov 21): after we both drew on the last draw and I checked out of position: badugis and strong three-card
     // hands call one bet as bluff catchers; a missed hand with no showdown value check-raises as a bluff now and then.
     // MDF sets the share of bluffs among my check-raises (here, the value is a six badugi or better checked about 15%
     // of the time): he calls one more bet to win the whole pot, so bluffs are about 1 in (pot in bets + 4) of them.
     if (c.N === 1 && !c.ip && c.iChecked && p.draws[2] > 0 && c.opp.draws[2] > 0 && c.lvl === 1) {
-      if (c.made || (hn.cat === 1 && t <= lv('5'))) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. We both drew on the last draw: his bet is a badugi or a missed draw bluffing, and ' + priceTxt(c) + '.', 'bluff-catch');
+      if (c.made || (hn.cat === 1 && t <= lv('5'))) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. We both drew on the last draw: my opponent\'s bet is a badugi or a strong three-card hand betting for value, and sometimes a missed draw bluffing; ' + priceTxt(c) + '.', 'bluff-catch');
       const potBets = (c.pot + c.toCall) / c.unit, bluffShare = 1 / (potBets + 4);
       const f = clamp(0.15 * 0.08 / 0.6 * bluffShare / (1 - bluffShare), 0, 0.05);
       if (c.canRaise && !isCallingStation(game, c.opp) && R() < f) return act('raise', 'Check-raise bluff with ' + c.txt + '. Chase\'s notes: my check-raises here are very strong badugis plus a few bluffs, sized by MDF (about 1 in ' + Math.round(potBets + 4) + '), taken from missed hands with no showdown value.', 'bluff');
@@ -5479,6 +5537,18 @@ window.TD = window.TD || {};
     if (c.N === 1 && !c.ip && c.iChecked && c.made && t >= lv('Q') && c.canRaise && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp) && R() < 0.12) return act('raise', 'Check-raise bluff with the ' + c.txt + '. Chase\'s notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest badugis are the bluffs, and a worse-than-expected badugi he bet may fold.', 'bluff');
     if (c.made && tier === 7 && c.lvl >= 2) return act('call', 'Call the raise with the ' + c.txt + '. Greenstein: sevens get tenuous — against a tight player, bet a rough seven and just call a raise.');
     const bluffy = c.opp && c.opp.isHuman ? clamp((userPosterior(game).riverBluff - 0.12) * 0.6, 0, 0.08) : 0;
+    // Chase (Nov 22): a three-card hand facing a river bet from a player who stood pat on the last draw only beats a
+    // snow, so it is worth a call only if that player snows often enough. A tight opener who stood pat on every draw
+    // rarely snows (a snow from the first draw tends to get called down instead of ending the hand cheaply): a few
+    // percent, far less than the pot odds. The rate comes from the line (position, how many draws stood pat), and
+    // against the user it moves with the snows actually shown down.
+    if (!c.made && c.toCall > 0 && c.N === 1 && c.opp && c.opp.draws.length === 3 && c.opp.draws[2] === 0 && !(c.iBet && bluffy >= 0.04)) {
+      const s = snowRate(game, c.opp), beat = triBeatsSnow(c.hand), win = s.rate * beat;
+      const pct = (x) => (x < 0.01 ? 'under 1' : Math.round(x * 100)) + '%';
+      const why = s.txt + '. My ' + hstr(TD.playing(c.hand)) + ' beats ' + (beat >= 0.9 ? 'nearly every snow' : beat >= 0.6 ? 'most snows' : 'only some snows') + ', so it wins about ' + pct(win);
+      if (win >= c.potOdds) return act('call', 'Call with the ' + c.txt + ', a bluff catcher against a snow. ' + why + ', enough for the price (' + priceTxt(c) + ').', 'bluff-catch');
+      return act('fold', 'Fold the ' + c.txt + ' — it only beats a snow. ' + why + ', not enough for the price (' + priceTxt(c) + ').', 'discipline');
+    }
     if (!c.made && c.iBet && bluffy < 0.04) return act('fold', 'Fold the ' + c.txt + ' — my value bet got raised. Mastering Mixed Games (Quiz 3): nothing says I missed, and I was known to have a strong draw; without a real reason to think this player bluffs here, a three-card hand folds.', 'discipline');
     const behind = game.players.filter((q) => q !== p && !q.folded && !q.allIn && q.roundBet < game.currentBet).length;
     const need = c.potOdds + (behind > 0 ? 0.03 : 0) - (c.made ? 0.02 : 0) - bluffy;
@@ -5577,7 +5647,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 50;
+  TD.VERSION = 54;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6392,9 +6462,10 @@ window.TD = window.TD || {};
     }
     hideBanner() { $('#banner').classList.remove('show'); }
 
-    log(text, cls) {
-      this.logLines.push({ text, cls });
+    log(text, cls, entry) {
+      this.logLines.push({ text, cls, entry });
       if (this.logLines.length > 300) this.logLines.shift();
+      if (!text) return; // a card line kept back until the hand is over
       const el = document.createElement('div');
       el.textContent = text;
       if (cls) el.className = cls;
@@ -6728,7 +6799,7 @@ window.TD = window.TD || {};
       badge.textContent = diff;
       badge.title = diff ? diff + ' decision' + (diff > 1 ? 's' : '') + ' where the AI would have played differently' : '';
       badge.style.display = diff ? '' : 'none';
-      if (this.drawerTab && this.drawerTab !== 'log') this.renderDrawer();
+      if (this.drawerTab) this.renderDrawer();
       this.renderHeroLabel(game);
       if (this.onHandDone) this.onHandDone(game, rec);
     }
@@ -6753,7 +6824,9 @@ window.TD = window.TD || {};
       if (this.drawerTab === 'history') body.innerHTML = this.historyHTML(g);
       else if (this.drawerTab === 'stats') body.innerHTML = this.statsHTML(g);
       else if (this.drawerTab === 'log') {
-        body.innerHTML = '<div class="log-live">' + this.logLines.map((l) => '<div class="' + (l.cls || '') + '">' + escapeHTML(l.text) + '</div>').join('') + '</div>';
+        // once a hand is over its lines name every player's cards and discards (Chase, Nov 22)
+        const shown = (l) => (l.entry && l.entry.done ? (l.entry.liveOnly ? '' : l.entry.full || l.entry.text) : l.text);
+        body.innerHTML = '<div class="log-live">' + this.logLines.map((l) => [l, shown(l)]).filter((x) => x[1]).map(([l, t]) => '<div class="' + (l.cls || '') + '">' + escapeHTML(t) + '</div>').join('') + '</div>';
         body.scrollTop = body.scrollHeight;
       } else body.innerHTML = this.reviewHTML(g);
       $$('.hh-sum', body).forEach((el) => (el.onclick = () => el.parentElement.classList.toggle('open')));
@@ -6769,7 +6842,7 @@ window.TD = window.TD || {};
         const me = h.players[0];
         const winners = Object.keys(h.results.winners).map((s) => (+s === 0 ? 'You' : h.players[s].name));
         const net = me.net;
-        const lines = h.log.map((l) => '<div class="' + (l.cls || '') + '">' + escapeHTML(l.text) + '</div>').join('');
+        const lines = h.log.filter((l) => !l.liveOnly && (l.full || l.text)).map((l) => '<div class="' + (l.cls || '') + '">' + escapeHTML(l.full || l.text) + '</div>').join('');
         return '<div class="hh-item"><div class="hh-sum"><span><span class="n">#' + h.handNo + '</span> · ' + (h.game ? TD.GAME_INFO[h.game].short + ' · ' : '') + (h.allSeats ? 'every seat · ' : '') + (h.god ? 'God mode · ' : '') + me.pos + ' · ' + miniCards(me.start) + ' → ' + (me.folded ? '<span class="muted">folded</span>' : miniCards(me.final)) +
           '</span><span class="r ' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</span></div>' +
           '<div class="hh-log"><div class="muted">Won by ' + escapeHTML(winners.join(' & ')) + '</div>' + lines + '</div></div>';
