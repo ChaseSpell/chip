@@ -1781,7 +1781,7 @@ window.TD = window.TD || {};
         p.lastAction = n === 0 ? 'Pat' : 'Draws ' + n;
         this.record(p.seat, 'draw', 0, { n, drawIdx });
         // God mode: the log also names the cards thrown away
-        const base = n === 0 ? this.say(p, 'stands pat', 'stand pat') : this.say(p, 'draws ' + n, 'draw ' + n);
+        const base = n === 0 ? this.say(p, 'stands pat', 'stand pat') : this.say(p, 'discards ' + n, 'discard ' + n);
         const godTxt = n && this.canSee(p) ? ' ' + this.cardsTxt(thrown) : '';
         const entry = this.log(base + godTxt, 'draw', base);
         await this.ui.showDiscards(this, p.seat, discardIdx);
@@ -1810,8 +1810,8 @@ window.TD = window.TD || {};
           discardIdx.forEach((hi, j) => { p.hand[hi] = newCards[j]; });
           p.handHistory.push({ drawIdx, n, kept: p.hand.filter((c) => !newCards.includes(c)), got: newCards, thrown });
           const you = p.isHuman && !this.allSeats;
-          d.entry.full = d.base + ' ' + this.cardsTxt(thrown) + ', ' + (you ? 'get ' : 'gets ') + this.cardsTxt(newCards);
-          if (this.canSee(p)) this.log((you ? 'You get ' : p.name + ' gets ') + this.cardsTxt(newCards), 'draw', null, true);
+          d.entry.full = d.base + ' ' + this.cardsTxt(thrown) + ', ' + (you ? 'get ' : 'gets ') + this.cardsTxt(newCards) + ' → ' + this.cardsTxt(p.hand);
+          if (this.canSee(p)) this.log((you ? 'You get ' : p.name + ' gets ') + this.cardsTxt(newCards) + ' → ' + this.cardsTxt(p.hand), 'draw', null, true);
           await this.ui.dealReplacements(this, p.seat, discardIdx);
         } else {
           p.handHistory.push({ drawIdx, n: 0, kept: p.hand.slice(), got: [], thrown: [] });
@@ -5668,7 +5668,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 56;
+  TD.VERSION = 57;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
