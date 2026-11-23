@@ -3793,7 +3793,10 @@ window.TD = window.TD || {};
     return miss > 0.05 ? clamp(value / (X * miss), 0, 0.6) : 0;
   }
   const patBluffOK = (c) => c.N === 1 && c.myLast > 0 && c.oppLast === 0 && !c.opp.allIn && !isCallingStation(c.game, c.opp);
-  const patBluffTxt = (f, X, what) => 'Chase\'s rule: my range needs bluffs here too, or the pat hand could fold everything that only beats a bluff. My ' + what + ' offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value ' + what + 's makes him indifferent to calling; with the hands my draw could have made, that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.';
+  // Chase (Nov 23): one frequency per sentence. The share of my bets that are bluffs is 1 in (X + 1) (1 bluff per X
+  // value bets); the share of my missed draws that bluff is a different, smaller number, because most of the range missed.
+  const gtoTxt = (X, what, f, act) => 'Bluff at GTO frequency so the opponent is indifferent to bluff-catching. The chance we are bluffing is exactly the same as the odds the opponent is getting to call: at ' + X.toFixed(1) + '-to-1, 1 bluff per ' + X.toFixed(1) + ' value ' + what + 's, so ' + Math.round(100 / (X + 1)) + '% of my ' + what + 's here are bluffs. Most of my draws missed, so that takes only about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws' + (act === 'bluff' ? ', and this is one of them.' : ', and this one ' + act + '.');
+  const patBluffTxt = (f, X, what) => gtoTxt(X, what, f, 'bluff');
 
   function riverRules(c) {
     const { hn, toCall, game, p } = c;
@@ -3899,6 +3902,7 @@ window.TD = window.TD || {};
         if (patBluffOK(c) && (hn.cat !== 0 || top >= 11)) {
           const X = (c.pot + c.unit) / c.unit, fb = patBluff(p, 'stab', X);
           if (R() < fb) return act('bet', 'He stood pat and checked: bluff with ' + mk(hn.long) + '. ' + patBluffTxt(fb, X, 'bet'), 'bluff');
+          return act('check', 'Check back ' + mk(hn.long) + ' behind his pat hand. ' + gtoTxt(X, 'bet', fb, 'checks'));
         }
         return act('check', 'Check back ' + mk(hn.long) + ' behind his pat hand.');
       }
@@ -3914,7 +3918,7 @@ window.TD = window.TD || {};
       if (patBluffOK(c) && (hn.cat !== 0 || top >= 11)) {
         const X = (c.pot + c.unit) / c.unit, fl = patBluff(p, 'lead', X);
         if (R() < fl) return act('bet', 'Bluff-lead into his pat hand with ' + mk(hn.long) + '. ' + patBluffTxt(fl, X, 'bet'), 'bluff');
-        return act('check', 'Check ' + mk(hn.long) + ' into his pat hand; my missed draws bluff-lead only about ' + Math.max(1, Math.round(fl * 100)) + '% of the time (Chase\'s rule: 1 bluff per ' + X.toFixed(1) + ' value bets at these pot odds).');
+        return act('check', 'Check ' + mk(hn.long) + ' into his pat hand. ' + gtoTxt(X, 'bet', fl, 'checks'));
       }
       return null;
     }
@@ -5542,6 +5546,9 @@ window.TD = window.TD || {};
     const vm = drawValueShare(p, VAL_W[kind]);
     return vm.miss > 0.05 ? clamp(vm.value / (X * vm.miss), 0, 0.6) : 0;
   }
+  // Chase (Nov 23): one frequency per sentence. The share of my bets that are bluffs is 1 in (X + 1) (1 bluff per X
+  // value bets); the share of my missed draws that bluff is a different, smaller number, because most of the range missed.
+  const gtoTxt = (X, what, f, act) => 'Bluff at GTO frequency so the opponent is indifferent to bluff-catching. The chance we are bluffing is exactly the same as the odds the opponent is getting to call: at ' + X.toFixed(1) + '-to-1, 1 bluff per ' + X.toFixed(1) + ' value ' + what + 's, so ' + Math.round(100 / (X + 1)) + '% of my ' + what + 's here are bluffs. Most of my draws missed, so that takes only about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws' + (act === 'bluff' ? ', and this is one of them.' : ', and this one ' + act + '.');
   const patBluffOK = (c, p) => c.N === 1 && p.draws[2] > 0 && c.opp.draws[2] === 0 && !c.opp.allIn && !isCallingStation(c.game, c.opp);
   function river(c, fair) {
     const { game, p, hn } = c;
@@ -5596,8 +5603,8 @@ window.TD = window.TD || {};
         const X = (c.pot + c.unit) / c.unit, kind = c.ip ? 'stab' : 'lead';
         const f = patBluff(p, kind, X);
         const spot = c.ip ? 'he stood pat and checked' : 'he stood pat';
-        if (R() < f) return act('bet', (c.ip ? 'Bluff behind his check with ' : 'Bluff-lead with ') + c.txt + '. Chase\'s rule: my range needs bluffs here too, or a pat hand could fold everything that only beats a bluff. My bet offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value bets makes him indifferent to calling; with the badugis my draw could have made, that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.', 'bluff');
-        return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — ' + spot + ', and my missed draws bluff only about ' + Math.max(1, Math.round(f * 100)) + '% of the time (Chase\'s rule: 1 bluff per ' + X.toFixed(1) + ' value bets at these pot odds).');
+        if (R() < f) return act('bet', (c.ip ? 'Bluff behind his check with ' : 'Bluff-lead with ') + c.txt + '. ' + gtoTxt(X, 'bet', f, 'bluff'), 'bluff');
+        return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — ' + spot + '. ' + gtoTxt(X, 'bet', f, 'checks'));
       }
       // bluffs when everyone drew on the last draw (a missed draw can't call). MMG: a lead from the player without
       // the betting lead (a donk bet, or a bet when checked to) reads as a badugi and gets folds, so bluff more
@@ -5646,7 +5653,7 @@ window.TD = window.TD || {};
     // 1 for every X value raises, X = the odds he gets to call the raise
     if (!c.made && c.toCall > 0 && c.lvl === 1 && c.canRaise && !c.iBet && c.opp && patBluffOK(c, p)) {
       const X = (c.pot + c.toCall + c.unit) / c.unit, f = patBluff(p, 'raise', X);
-      if (R() < f) return act('raise', 'Bluff-raise with ' + c.txt + '. Chase\'s rule: he stood pat and bet, and my raising range needs bluffs as well as strong badugis, or he could fold everything that only beats a bluff. My raise offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value raises; that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.', 'bluff');
+      if (R() < f) return act('raise', 'Bluff-raise with ' + c.txt + '. ' + gtoTxt(X, 'raise', f, 'bluff'), 'bluff');
     }
     if (!c.made && c.toCall > 0 && c.N === 1 && c.opp && c.opp.draws.length === 3 && c.opp.draws[2] === 0 && !(c.iBet && bluffy >= 0.04)) {
       const s = snowRate(game, c.opp), beat = triBeatsSnow(c.hand), win = s.rate * beat;
@@ -5753,7 +5760,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 60;
+  TD.VERSION = 62;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
