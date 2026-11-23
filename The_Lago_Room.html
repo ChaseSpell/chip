@@ -3770,6 +3770,31 @@ window.TD = window.TD || {};
     return freezeRule(c);
   }
 
+  // Chase (Nov 23): the drawing hand's river range against a player who stood pat needs bluffs in every spot (leading
+  // into him, betting when he checks, raising his bet): 1 bluff for every X value hands, X = the pot odds the pat hand
+  // gets to call, so he is indifferent to bluff-catching ("the bots should play balanced in almost all nodes"). The
+  // value share is estimated from my own last draw: enumerate the cards it could have caught and weight each made
+  // hand by how often it bets or raises there for value (the rules below: lead any eight, bet behind a check about
+  // what beats half his calling range, raise only a strong eight or a seven, 8-6 sometimes).
+  const PAT_W = {
+    lead: (h) => (h.top <= 8 ? 1 : 0),
+    stab: (h) => (h.top <= 8 ? 1 : h.top === 9 ? 0.5 : h.top === 10 ? 0.2 : 0),
+    raise: (h) => (h.top <= 7 || (h.top === 8 && h.second <= 5) ? 1 : h.top === 8 && h.second === 6 ? 0.4 : 0),
+  };
+  function patBluff(p, kind, X) {
+    const n = p.draws[p.draws.length - 1] || 1, hand = p.hand, seenR = new Set(), keep = [];
+    for (const cd of hand.slice().sort((x, y) => TD.rankOf(x) - TD.rankOf(y))) { if (keep.length < 5 - n && !seenR.has(TD.rankOf(cd))) { seenR.add(TD.rankOf(cd)); keep.push(cd); } }
+    const seen = new Set(hand), deck = TD.newDeck().filter((x) => !seen.has(x)), need = 5 - keep.length, w = PAT_W[kind];
+    let value = 0, miss = 0, tot = 0;
+    const add = (h5) => { tot++; const h = TD.handName(h5); const v = h.cat === 0 ? w(h) : 0; value += v; if (h.cat !== 0 || h.top >= 11) miss++; };
+    if (need === 1) for (const x of deck) add(keep.concat([x]));
+    else for (let k = 0; k < 500; k++) { for (let i = 0; i < need; i++) { const j = i + Math.floor(Math.random() * (deck.length - i)); const t = deck[i]; deck[i] = deck[j]; deck[j] = t; } add(keep.concat(deck.slice(0, need))); }
+    value /= tot; miss /= tot;
+    return miss > 0.05 ? clamp(value / (X * miss), 0, 0.6) : 0;
+  }
+  const patBluffOK = (c) => c.N === 1 && c.myLast > 0 && c.oppLast === 0 && !c.opp.allIn && !isCallingStation(c.game, c.opp);
+  const patBluffTxt = (f, X, what) => 'Chase\'s rule: my range needs bluffs here too, or the pat hand could fold everything that only beats a bluff. My ' + what + ' offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value ' + what + 's makes him indifferent to calling; with the hands my draw could have made, that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.';
+
   function riverRules(c) {
     const { hn, toCall, game, p } = c;
     if (c.N !== 1) {
@@ -3855,6 +3880,10 @@ window.TD = window.TD || {};
         // MMG: a pat player's river bet is a very good 8-6 or better, or a bluff; in a big pot any hand that beats
         // a bluff is a call — at 12-to-1 or more, calling can't be a big mistake
         if (c.lvl === 1 && high && c.pot / toCall >= 12) return act('call', 'He stood pat and bet: call with ' + mk(hn.short) + ' as a bluff-catcher — ' + priceTxt(c) + '. MMG: his bet is a strong 8-6 or better or a bluff, and in a pot this big calling can\'t be a large mistake.', 'mdf');
+        if (c.lvl === 1 && c.canRaise && !c.iBet && patBluffOK(c)) {
+          const X = (c.pot + toCall + c.unit) / c.unit, fr = patBluff(p, 'raise', X);
+          if (R() < fr) return act('raise', 'He stood pat and bet: bluff-raise with ' + mk(hn.long) + '. ' + patBluffTxt(fr, X, 'raise'), 'bluff');
+        }
         return act('fold', 'He stood pat and bet; ' + mk(hn.long) + ' can\'t beat enough of his pat range.');
       }
       if (c.ip) {
@@ -3867,6 +3896,10 @@ window.TD = window.TD || {};
           if (Ec >= need) return act('bet', 'He stood pat and checked; value bet ' + mk(hn.short) + ': simulated against his pat range, it beats more than half of the hands that would call. (Notes: bet any eight; MMG: bet 8-7-4 and better — settled here by simulation.)', 'value');
           return act('check', 'Check back ' + mk(hn.short) + ' behind his pat hand: simulated against his pat range, it doesn\'t beat half of the hands that would call, so a bet is called mainly by better. (MMG: a pat player who checks usually has a bad 8 or 9 that calls.)');
         }
+        if (patBluffOK(c) && (hn.cat !== 0 || top >= 11)) {
+          const X = (c.pot + c.unit) / c.unit, fb = patBluff(p, 'stab', X);
+          if (R() < fb) return act('bet', 'He stood pat and checked: bluff with ' + mk(hn.long) + '. ' + patBluffTxt(fb, X, 'bet'), 'bluff');
+        }
         return act('check', 'Check back ' + mk(hn.long) + ' behind his pat hand.');
       }
       // out of position: I drew into his pat hand
@@ -3877,6 +3910,11 @@ window.TD = window.TD || {};
       }
       if (hn.cat === 1 && c.oppPrev > 0 && R() < 0.15) {
         return act('bet', 'Paired on the last draw against a player who only stood pat now: bluff. SS2: he knows you know he\'s pat, so a bet represents a made hand — a good player may fold a jack, ten or even a nine (this fails if he stood pat early).', 'bluff');
+      }
+      if (patBluffOK(c) && (hn.cat !== 0 || top >= 11)) {
+        const X = (c.pot + c.unit) / c.unit, fl = patBluff(p, 'lead', X);
+        if (R() < fl) return act('bet', 'Bluff-lead into his pat hand with ' + mk(hn.long) + '. ' + patBluffTxt(fl, X, 'bet'), 'bluff');
+        return act('check', 'Check ' + mk(hn.long) + ' into his pat hand; my missed draws bluff-lead only about ' + Math.max(1, Math.round(fl * 100)) + '% of the time (Chase\'s rule: 1 bluff per ' + X.toFixed(1) + ' value bets at these pot odds).');
       }
       return null;
     }
@@ -5479,6 +5517,32 @@ window.TD = window.TD || {};
     const t = lvDesc(pl)[0];
     return t <= lv('4') ? 0.95 : t <= lv('5') ? 0.85 : t <= lv('6') ? 0.7 : t <= lv('7') ? 0.5 : t <= lv('8') ? 0.35 : t <= lv('9') ? 0.25 : 0.15;
   }
+  // Chase (Nov 23): the drawing hand's river range against a player who stood pat needs bluffs in every spot (leading
+  // into him, betting when he checks, raising his bet), 1 bluff for every X value hands, X = the pot odds the pat hand
+  // gets to call, so he is indifferent to bluff-catching. The value share is estimated from my own last draw: enumerate
+  // the cards it could have caught and weight each badugi by how often it bets or raises there for value (weights
+  // calibrated on the bots' own river play, Nov 23: against a pat 4-bettor, nines lead every time, tens about 2/3).
+  const VAL_W = {
+    lead: (t) => (t <= lv('6') ? 0.7 : t <= lv('9') ? 1 : t <= lv('T') ? 0.67 : 0),
+    stab: (t) => (t <= lv('9') ? 1 : t <= lv('T') ? 0.8 : t <= lv('J') ? 0.5 : t <= lv('Q') ? 0.2 : 0),
+    raise: (t) => (t <= lv('6') ? 1 : t <= lv('7') ? 0.9 : t <= lv('8') ? 0.3 : 0),
+  };
+  function drawValueShare(p, w) {
+    const n = p.draws[p.draws.length - 1] || 1, hand = p.hand;
+    const keep = TD.playing(hand).slice().sort((a, b) => TD.rankOf(a) - TD.rankOf(b)).slice(0, Math.max(0, 4 - n));
+    const seen = new Set(hand), deck = TD.newDeck().filter((x) => !seen.has(x));
+    let made = 0, value = 0, tot = 0;
+    const add = (h) => { tot++; const hn = TD.handName(h); if (hn.cat === 0) { made++; value += w(hn.top); } };
+    if (n === 1) for (const x of deck) add(keep.concat([x]));
+    else for (let k = 0; k < 600; k++) { TD.shuffle(deck); add(keep.concat(deck.slice(0, n))); }
+    return { value: value / tot, miss: 1 - made / tot };
+  }
+  // the bluff frequency for a missed draw: bluffs / misses = (value share / X) / miss share
+  function patBluff(p, kind, X) {
+    const vm = drawValueShare(p, VAL_W[kind]);
+    return vm.miss > 0.05 ? clamp(vm.value / (X * vm.miss), 0, 0.6) : 0;
+  }
+  const patBluffOK = (c, p) => c.N === 1 && p.draws[2] > 0 && c.opp.draws[2] === 0 && !c.opp.allIn && !isCallingStation(c.game, c.opp);
   function river(c, fair) {
     const { game, p, hn } = c;
     const t = hn.top;
@@ -5526,6 +5590,15 @@ window.TD = window.TD || {};
         return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead, since a bet can look like a three-card value bet and weaker three-card hands call' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Chase\'s notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
       }
       if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
+      // Chase (Nov 23): leading into, or betting behind the check of, a player who stood pat on the last draw after I
+      // drew: 1 bluff for every X value bets, X = the pot odds my bet offers him (8.5-to-1 means 1 per 8.5)
+      if (patBluffOK(c, p)) {
+        const X = (c.pot + c.unit) / c.unit, kind = c.ip ? 'stab' : 'lead';
+        const f = patBluff(p, kind, X);
+        const spot = c.ip ? 'he stood pat and checked' : 'he stood pat';
+        if (R() < f) return act('bet', (c.ip ? 'Bluff behind his check with ' : 'Bluff-lead with ') + c.txt + '. Chase\'s rule: my range needs bluffs here too, or a pat hand could fold everything that only beats a bluff. My bet offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value bets makes him indifferent to calling; with the badugis my draw could have made, that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.', 'bluff');
+        return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — ' + spot + ', and my missed draws bluff only about ' + Math.max(1, Math.round(f * 100)) + '% of the time (Chase\'s rule: 1 bluff per ' + X.toFixed(1) + ' value bets at these pot odds).');
+      }
       // bluffs when everyone drew on the last draw (a missed draw can't call). MMG: a lead from the player without
       // the betting lead (a donk bet, or a bet when checked to) reads as a badugi and gets folds, so bluff more
       // without the lead and less with it (with the lead it looks like a three-card value bet and gets looked up)
@@ -5569,6 +5642,12 @@ window.TD = window.TD || {};
     // rarely snows (a snow from the first draw tends to get called down instead of ending the hand cheaply): a few
     // percent, far less than the pot odds. The rate comes from the line (position, how many draws stood pat), and
     // against the user it moves with the snows actually shown down.
+    // Chase (Nov 23): facing a pat hand's river bet after I drew, my raising range (value raises) also needs bluffs,
+    // 1 for every X value raises, X = the odds he gets to call the raise
+    if (!c.made && c.toCall > 0 && c.lvl === 1 && c.canRaise && !c.iBet && c.opp && patBluffOK(c, p)) {
+      const X = (c.pot + c.toCall + c.unit) / c.unit, f = patBluff(p, 'raise', X);
+      if (R() < f) return act('raise', 'Bluff-raise with ' + c.txt + '. Chase\'s rule: he stood pat and bet, and my raising range needs bluffs as well as strong badugis, or he could fold everything that only beats a bluff. My raise offers him ' + X.toFixed(1) + '-to-1, so 1 bluff for every ' + X.toFixed(1) + ' value raises; that is about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws.', 'bluff');
+    }
     if (!c.made && c.toCall > 0 && c.N === 1 && c.opp && c.opp.draws.length === 3 && c.opp.draws[2] === 0 && !(c.iBet && bluffy >= 0.04)) {
       const s = snowRate(game, c.opp), beat = triBeatsSnow(c.hand), win = s.rate * beat;
       const pct = (x) => (x < 0.01 ? 'under 1' : Math.round(x * 100)) + '%';
@@ -5674,7 +5753,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 59;
+  TD.VERSION = 60;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
