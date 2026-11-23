@@ -4572,7 +4572,7 @@ window.TD = window.TD || {};
       case '4bet': return fourBetRange(i) ? 1 : threeBetRange(i, 'BTN') ? 0.25 : out;
       case 'call': return coldCallRange(i, model.opener || 'CO') ? (threeBetRange(i, model.opener) ? 0.25 : 1) : h && bbDefendRange(i, 'BTN') ? 0.6 : out;
       case 'bbdefend': return bbDefendRange(i, model.opener || 'BTN') ? (threeBetRange(i, model.opener) ? 0.3 : 1) : out * 1.5;
-      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (i.kind === 'two' && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
+      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (i.kind === 'two' && model.opener === model.pos && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
       case 'limp': return rfi(i, 'BTN') ? 0.6 : 0.25;
       case 'bbcheck': return threeBetRange(i, 'BTN') ? 0.25 : 1;
       default: return 1;
@@ -4999,7 +4999,9 @@ window.TD = window.TD || {};
       // acting last helps it realize that equity. Out of position the steals fold and only the best two-card
       // draws (3-2, 3-A, 2-A) call.
       const two = i.kind === 'two' ? i : asTwo(i);
-      if (two && inv >= 1) {
+      // Chase (Nov 22, later): this rule is only for the player who opened; players yet to act (or the blinds) facing
+      // the open and the 3-bet use their own ranges
+      if (two && p.seat === c.opener) {
         const price = opts.toCall > 0 ? ' Getting ' + (opts.pot / opts.toCall).toFixed(1) + '-to-1' : '';
         if (isIP(game, p, opponentsOf(game, p))) return act('call', 'Call the 3-bet with ' + d + '. Chase\'s rule: a two-card draw in position always continues against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has plenty of equity against the 3-bet range, and acting last on every street helps it realize that equity.');
         if (two.t <= lv('3')) return act('call', 'Call the 3-bet with ' + d + ', one of the best two-card draws (3-2, 3-A, 2-A). Chase\'s rule: out of position only the best two-card draws continue against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has enough equity against the 3-bet range to call.');
@@ -5668,7 +5670,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 57;
+  TD.VERSION = 58;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
