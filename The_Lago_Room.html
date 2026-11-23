@@ -4523,7 +4523,10 @@ window.TD = window.TD || {};
   function callThreeBetRange0(i, invested, late) {
     if (i.kind === 'pat') return i.t <= (invested >= 2 ? lv('Q') : lv('J')); // most players drop queen and king badugis to a raise and a reraise
     if (i.kind === 'three') return invested >= 1 ? (i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'))) : (i.t <= lv('5') && i.s2 <= lv('4'));
-    if (i.kind === 'two') return invested >= 1 && late && i.t <= lv('3');
+    // Chase (Nov 23): nobody cold-calls a 3-bet (or 4-bet) planning to draw two, the big blind included; a two-card
+    // draw from the BB is only worth calling one more small bet when it closes the action. (The opener's two-card
+    // draws facing a 3-bet have their own rule in the betting code.)
+    if (i.kind === 'two') return false;
     return false;
   }
   // Chase (Nov 22): a three-card hand the first draw breaks (9-3-2: throw the nine, draw two to 3-2) is at least as
@@ -5008,6 +5011,7 @@ window.TD = window.TD || {};
         return act('fold', 'Fold ' + d + ' to the 3-bet. Chase\'s rule: out of position facing a predraw 3-bet, the two-card steals fold; only the best two-card draws (3-2, 3-A, 2-A) continue.');
       }
       if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
+      if (i.kind === 'two') return act('fold', 'Fold ' + d + ' to the 3-bet. Chase\'s rule: from any seat, the big blind included, don\'t cold-call a 3-bet planning to draw two; a two-card draw is only worth calling from the big blind for one more small bet when that closes the action.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
     // four bets (the cap: a bet and three raises, heads-up too)
@@ -5670,7 +5674,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 58;
+  TD.VERSION = 59;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
