@@ -5578,7 +5578,7 @@ window.TD = window.TD || {};
           // Chase (Nov 21): against a player who drew, my check-raising range is polarized (very strong hands, a few
           // bluffs). Usually bet the strongest (getting to 3-bet his raise wins more than a check-raise), sometimes check-raise.
           if (!c.ip && oppDrew && tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Chase\'s notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
-          return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.' + (!c.ip && oppDrew ? ' He drew on the last draw, so a worse badugi he made would just check behind if I checked.' + (tier <= 7 ? ' Betting beats checking to check-raise most of the time: a raise lets me 3-bet, three bets instead of two.' : '') : ''), 'value');
+          return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.' + (!c.ip && oppDrew ? ' I stood pat on the last draw, so he won\'t necessarily bet a worse badugi he made if I check. Hands good enough to value bet here should usually not attempt a check-raise (especially hands that are strong enough to 3-bet).' : ''), 'value');
         }
         if (!c.ip && c.opp.draws[2] > 0 && t <= lv('J')) { return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: out of position against a player who drew on the last draw, bet only the strongest badugis; with a decent one, check — he bets his better badugis and bluffs some missed draws, and a bet of mine would mostly be called by better.'); }
         return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — it doesn\'t beat half of the hands that would call a bet.');
@@ -5760,7 +5760,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 62;
+  TD.VERSION = 63;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
