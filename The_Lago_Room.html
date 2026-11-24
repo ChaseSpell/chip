@@ -3576,6 +3576,18 @@ window.TD = window.TD || {};
   // MDF as a floor: a fold in a spot where MDF binds stands only if the hand is among the weakest part
   // of my range (the share MDF lets me fold); otherwise it becomes a call. MDF never turns a call into a
   // fold — it is a minimum, and defending more is fine.
+  // Chase's rule (Nov 24, hand #8), all three games: never call a bet or raise after the 1st draw planning to draw
+  // three on the next draw. Drawing three after the 1st draw is only reasonable when the action was checked through,
+  // so with a three-card draw coming: fold to a bet, and check rather than bet (a snow stands pat, so it is not a draw).
+  function noThreeAfterBet(c, r) {
+    if (c.st < 1 || c.dRem <= 0 || c.nextDraw < 3 || c.p.bot.snow || r.tag === 'snow') return r;
+    const which = c.dRem === 2 ? '2nd' : '3rd';
+    const plan = 'I would have to draw ' + c.nextDraw + ' on the ' + which + ' draw (keeping ' + hstr(c.keepNow) + ')';
+    const rule = 'Chase\'s rule: never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
+    if (c.toCall > 0 && (r.type === 'call' || r.type === 'raise')) return act('fold', 'Fold — ' + plan + '. ' + rule, 'standard');
+    if (c.toCall === 0 && r.type === 'bet') return act('check', 'Check — ' + plan + ', and a bet would only get called or raised. ' + rule, 'standard');
+    return r;
+  }
   function mdfFloor(c, r) {
     if (r.type !== 'fold' || r.tag === 'snow' || r.tag === 'play' || c.p.bot.snow) return r;
     const m = mdfSpot(c);
@@ -3686,6 +3698,7 @@ window.TD = window.TD || {};
       r = act('call', 'Call — still drawing (to ' + hstr(c.keepNow) + '). MMG: after betting and getting raised on the first draw, 3-bet only when pat; re-raising a draw is pure spew.', '');
     }
     r = mdfFloor(c, r);
+    r = noThreeAfterBet(c, r);
     // before the river, say which of the two jobs a bet or raise does (Janda; Chase's robust-equity rule)
     if (dRem > 0 && (r.type === 'bet' || r.type === 'raise') && ['value', 'semi-bluff', 'card-ahead', 'robust', 'denial'].includes(r.tag || 'value')) {
       const b = betEV(c);
@@ -5690,6 +5703,7 @@ window.TD = window.TD || {};
     if (!r && st === 3) r = river(c, fair);
     if (!r) r = drawStreet(c, fair);
     r = mdfFloor(c, r);
+    r = noThreeAfterBet(c, r);
     // before the river, say which of the two jobs a bet or raise does (Janda; Chase's robust-equity rule)
     if (dRem > 0 && (r.type === 'bet' || r.type === 'raise') && ['value', 'card-ahead', 'robust', 'denial'].includes(r.tag || 'value')) {
       const b = betEV(c);
@@ -5763,6 +5777,18 @@ window.TD = window.TD || {};
     const v = n ? above / n : 0;
     if (EQ_CACHE) EQ_CACHE.self = v;
     return v;
+  }
+  // Chase's rule (Nov 24, hand #8), all three games: never call a bet or raise after the 1st draw planning to draw
+  // three on the next draw. Drawing three after the 1st draw is only reasonable when the action was checked through,
+  // so with a three-card draw coming: fold to a bet, and check rather than bet (a snow stands pat, so it is not a draw).
+  function noThreeAfterBet(c, r) {
+    if (c.st < 1 || c.dRem <= 0 || c.nextDraw < 3 || c.p.bot.snow || r.tag === 'snow') return r;
+    const which = c.dRem === 2 ? '2nd' : '3rd';
+    const plan = 'I would have to draw ' + c.nextDraw + ' on the ' + which + ' draw (keeping ' + hstr(c.keepNow) + ')';
+    const rule = 'Chase\'s rule: never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
+    if (c.toCall > 0 && (r.type === 'call' || r.type === 'raise')) return act('fold', 'Fold — ' + plan + '. ' + rule, 'standard');
+    if (c.toCall === 0 && r.type === 'bet') return act('check', 'Check — ' + plan + ', and a bet would only get called or raised. ' + rule, 'standard');
+    return r;
   }
   function mdfFloor(c, r) {
     if (r.type !== 'fold' || c.N !== 1 || c.toCall <= 0 || c.lvl < 2 || c.p.bot.snow || r.tag === 'snow') return r;
@@ -6159,7 +6185,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 80;
+  TD.VERSION = 81;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
