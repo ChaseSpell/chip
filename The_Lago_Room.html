@@ -600,7 +600,6 @@ body.god-on #god-tag { display: inline-block; }
         <div id="toolbar">
           <button class="tb land-only" id="tb-chips" title="Add chips (top up to the starting stack)"><svg><use href="#ic-chips"/></svg><span>Add Chips</span></button>
           <button class="tb" id="tb-review" title="Hand review: bot reasoning and your play vs the AI"><svg><use href="#ic-review"/></svg><span>Review</span></button>
-          <button class="tb port-only" id="tb-log" title="Dealer log"><svg><use href="#ic-log"/></svg><span>Log</span></button>
           <button class="tb" id="tb-history" title="Hand history"><svg><use href="#ic-history"/></svg><span>History</span></button>
           <button class="tb" id="tb-stats" title="Session stats"><svg><use href="#ic-stats"/></svg><span>Stats</span></button>
           <button class="tb land-only" id="tb-rules" title="Rules"><svg><use href="#ic-rules"/></svg><span>Rules</span></button>
@@ -650,7 +649,6 @@ body.god-on #god-tag { display: inline-block; }
   <aside id="drawer">
     <div class="drawer-head">
       <div class="tab" data-tab="review">Review</div>
-      <div class="tab" data-tab="log">Log</div>
       <div class="tab" data-tab="history">History</div>
       <div class="tab" data-tab="stats">Stats</div>
       <button class="drawer-close" id="drawer-close" title="Close">✕</button>
@@ -906,8 +904,13 @@ window.TD = window.TD || {};
   /* First draw (three draws to come): no one-card draws to a nine or worse in 2-7 — with three draws a
      two-card draw makes better than a ten or nine too often (Chase's rule). A-5 (SS2): no one-card draws to
      a seven or worse (draw two to A-2-3, not one to A-2-3-7). Levels: bit i = level i + 2. */
+  // Chase (Nov 23, SS2): in 2-7 the deuce is the key card; a seven-or-better one-card draw with no deuce is a
+  // straight draw too (7-6-5-3: only a deuce makes a good seven, a four makes a straight). It's a weak draw:
+  // on the first draw, draw two to the three-card hand under it (7-5-3) instead, hoping to catch a deuce.
+  const DEUCELESS_ONE = A5 ? [] : ['3457', '3467', '3567', '4567', '3456'].map(levelMask);
   function weakFirstOne(m) {
     if (POP[m] !== 4) return false;
+    if (DEUCELESS_ONE.includes(m)) return true;
     return 31 - Math.clz32(m) + 2 >= (A5 ? 8 : 9);
   }
   function buildDP() {
@@ -1071,6 +1074,12 @@ window.TD = window.TD || {};
     else s = 38 - 4 * Math.max(0, max - 8) - (deuce ? 0 : 6);
     PSCORE[m] = Math.max(1, s);
     PKIND[m] = 5 - pc;
+  }
+  // Chase (Nov 23): predraw, those deuce-less one-card draws play as the three-card hand under them
+  for (const m of DEUCELESS_ONE) {
+    let best3 = 0;
+    for (let b = 0; b < 13; b++) if (m & (1 << b)) best3 = Math.max(best3, PSCORE[m ^ (1 << b)]);
+    if (PSCORE[m] >= best3) PSCORE[m] = Math.max(1, best3 - 1);
   }
   /* A-5 predraw scores: Super System 2's A-5 section (notes/a5-ss2-notes.md, sent by the user
      2026-11-19), written on the same score scale as the 2-7 notes so the position ranges carry over.
@@ -2861,6 +2870,13 @@ window.TD = window.TD || {};
     return disc;
   }
 
+  const SIX_SEVENS = ['3467', '3567', '4567'].map((x) => TD.levelMask(x)), SEVEN_543 = TD.levelMask('3457');
+  // a strong predraw range: he raised first in from the LJ or HJ, or he reraised (Chase, Nov 23)
+  function strongPreRange(game, o) {
+    const acts = game.actions.filter((a) => a.street === 0 && a.type !== 'post');
+    const raises = acts.filter((a) => a.type === 'raise' || a.type === 'bet');
+    return raises.some((a, i) => a.seat === o.seat && (i > 0 || ['LJ', 'HJ'].includes(game.posName(o.seat))));
+  }
   function decideDraw(game, p) {
     const k = game.drawRound, d = 3 - k;
     const hand = p.hand, mem = p.bot;
@@ -2936,12 +2952,45 @@ window.TD = window.TD || {};
     let firstNote = '';
     if (k === 0 && cands.some((c) => c.n >= 2)) {
       const weak = cands.filter((c) => c.n === 1 && TD.weakFirstOne(c.mask));
-      if (weak.length) {
+      // Chase (Nov 23): a deuce-less seven draw with a six (7-6-5-3, 7-6-4-3, 7-6-5-4) mixes. Keep the six and
+      // draw one more often heads-up against a relatively weaker range; pitch the six and draw two more often
+      // multiway or against a strong range, where making smooth hands matters more.
+      // Chase (Nov 23, later): 7-5-4-3 is a stronger one-card draw than any of those with a six, so it draws one
+      // more often than they do in every case (no "keep the six" there; it draws two by pitching one card).
+      const six = A5 ? null : weak.find((c) => SIX_SEVENS.includes(c.mask) || c.mask === SEVEN_543);
+      if (six) {
+        const is543 = six.mask === SEVEN_543;
+        if (mem.keepSix === undefined) {
+          const strong = opps.some((o) => strongPreRange(game, o));
+          mem.keepSixCtx = opps.length > 1 ? 'multi' : strong ? 'strong' : 'weak';
+          const rate = is543 ? { weak: 0.85, strong: 0.5, multi: 0.3 } : { weak: 0.7, strong: 0.3, multi: 0.15 };
+          mem.keepSix = R() < rate[mem.keepSixCtx];
+        }
+        let ctxTxt, why;
+        if (is543) {
+          ctxTxt = mem.keepSixCtx === 'multi' ? 'This pot is multiway, so I draw one less often here.'
+            : mem.keepSixCtx === 'strong' ? 'Heads-up against a strong range (an early open or a reraise), so I draw one about half the time.'
+              : 'Heads-up against a relatively weaker range, so I usually draw one.';
+          why = ' Chase\'s rule: 7-5-4-3 is a stronger one-card draw than the deuce-less seven draws with a six, so it draws one more often than they do; still more often heads-up against weaker ranges, and less often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
+        } else {
+          ctxTxt = mem.keepSixCtx === 'multi' ? 'This pot is multiway, so I usually pitch the six and draw two.'
+            : mem.keepSixCtx === 'strong' ? 'Heads-up against a strong range (an early open or a reraise), so I usually pitch the six and draw two.'
+              : 'Heads-up against a relatively weaker range, so I usually keep the six and draw one.';
+          why = ' Chase\'s rule: with a deuce-less seven draw that holds a six, keep the six and draw one more often heads-up against weaker ranges, and pitch the six and draw two more often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
+        }
+        if (mem.keepSix) return { discard: keepIdx(hand, six.keep), reason: '1st draw: draw 1 to ' + hstr(six.keep) + (is543 ? '.' : ', keeping the six.') + why, tag: '' };
+        cands = cands.filter((c) => !weak.includes(c));
+        const twos = cands.filter((c) => c.n === 2); if (twos.length) cands = twos; // pitch one card: draw two
+        firstNote = (is543 ? ' Drawing two rather than one to ' + hstr(six.keep) + ': with no deuce, only a deuce makes a good seven and a six makes a straight.'
+          : ' Pitching the six rather than drawing one to ' + hstr(six.keep) + ': with no deuce it is a weak draw (only a deuce makes a good seven, a four or the missing card makes a straight).') + why;
+      } else if (weak.length) {
         const contender = weak.find((c) => c.val >= cands[0].val * 0.78 || (mem.plan && mem.plan.draw === 1));
         cands = cands.filter((c) => !weak.includes(c));
         if (contender) {
           const top = Math.max(...contender.keep.map(TD.rankOf));
+          if (!A5 && top <= 7) { const twos = cands.filter((c) => c.n === 2); if (twos.length) cands = twos; } // deuce-less seven: draw two (Chase)
           firstNote = A5 ? mk(' SS2: no one-card draws to a seven or worse on the first draw (with A-2-3-7, draw two to A-2-3), so not drawing one to ') + hstr(contender.keep) + mk('.')
+            : top <= 7 ? ' Not drawing one to ' + hstr(contender.keep) + ': with no deuce it is a weak draw. Only a deuce makes a good seven, and the missing card makes a straight. Chase\'s rule (SS2: the deuce is the key card, and most hands you play should contain one): draw two, hoping to catch a deuce or make a hand worth patting.'
             : ' Not drawing one to ' + hstr(contender.keep) + ': on the first draw, drawing one to a ' + (top === 9 ? 'nine is a marginal play at best' : TD.RANK_WORD[top].toLowerCase() + ' is never right') + '. With three draws to come, the two-card draw ends up with a better hand too often.';
         }
       }
@@ -4985,6 +5034,7 @@ window.TD = window.TD || {};
     if (!h || !['SB', 'BB'].includes(game.posName(h.seat))) return 0;
     return clamp((userPosterior(game).stealFold - 0.55) * 2, 0, 0.6); // chance to open one notch wider
   }
+  const lvSortAscCards = (cs) => cs.slice().sort((x, y) => TD.rankOf(x) - TD.rankOf(y));
   function predraw(game, p, opts) {
     const i = infoOf(p.hand);
     const c = predrawCtx(game, p);
@@ -5009,6 +5059,8 @@ window.TD = window.TD || {};
             : 'In the ' + pos + ' opening range (Mastering Mixed Games: from the hijack on, king badugis, all three-card sevens and smooth eights).';
         return act('raise', 'Open-raise from the ' + pos + ' with ' + d + '. ' + why, LATE.includes(pos) ? 'steal' : '');
       }
+      // Chase (Nov 23): Greenstein folds an unbreakable pat king badugi from the lojack; no "reduction" mix for it
+      if (pos === 'LJ' && i.kind === 'pat' && i.t >= lv('K')) return fold('Fold ' + d + ' from the LJ. Greenstein: he folds an unbreakable pat king badugi from the first seat (no bad king badugis in early position six-handed or more). With no strong three-card hand to break to, it can only stand pat, and it loses to the other badugis that play behind me.');
       if (border && R() < 0.3 + steal) return act('raise', 'Open-raise from the ' + pos + ' with ' + d + ' — just outside the book range, mixed in some of the time: experts play a little wider because of "reduction", improving the incomplete along the way.' + (steal > 0.1 ? ' The blinds fold often, so I steal more.' : ''), 'steal');
       return fold('Fold ' + d + ' from the ' + pos + ' — outside the opening range (' + (i.kind === 'two' ? (pos === 'CO' ? 'Mastering Mixed Games: from the cutoff, the only two-card opens are 2-A and 3-A'
         : pos === 'BTN' || pos === 'SB' ? 'Mastering Mixed Games: from the ' + (pos === 'SB' ? 'small blind (the button range)' : 'button') + ', two-card opens go only as far as 4-A, 3-2 and 4-3'
@@ -5036,6 +5088,17 @@ window.TD = window.TD || {};
     // facing a 3-bet
     if (c.level === 3) {
       const late = LATE.includes(c.openerPos);
+      // Chase (Nov 23): playing every pat badugi the same way predraw doesn't mean every pat badugi is played. In the
+      // blinds, facing a raise and a 3-bet before I've put in a raise, a queen or king badugi folds: reverse implied
+      // odds — I act first on every street against the strongest part of two ranges that are linear to the nuts, and
+      // I'm often already dead to a better pat hand. With a strong three-card hand underneath (a six or better), call
+      // and break it to that draw instead.
+      if (i.kind === 'pat' && i.t >= lv('Q') && (pos === 'BB' || pos === 'SB') && !c.iRaised) {
+        const under = lvSortAscCards(i.keep).slice(0, 3), uTop = Math.max(...under.map(TD.rankOf));
+        const rio = 'Chase\'s rule: from the blinds facing a raise and a 3-bet, a ' + TD.RANK_WORD[i.t].toLowerCase() + ' badugi is too weak to play pat. Reverse implied odds: I act first on every street against the strongest part of both ranges (linear to the nuts), and I\'m often already dead to a better pat hand. Playing every badugi the same way predraw doesn\'t mean every badugi is played.';
+        if (uTop <= lv('6')) { mem.breakFirst = keyOf(under); return act('call', 'Call the 3-bet with ' + d + ', planning to break it to ' + hstr(under) + ' on the first draw. ' + rio + ' The strong three-card hand underneath is worth drawing to.'); }
+        return act('fold', 'Fold ' + d + ' to the raise and 3-bet. ' + rio + ' With no strong three-card hand underneath to break to, fold.');
+      }
       if (opts.canRaise && fourBetRange(i)) return act('raise', '4-bet with ' + d + (i.kind === 'pat' ? '. Mastering Mixed Games: play every badugi the same way predraw, so raising doesn\'t give away which ones are strong.' : '.'), 'value');
       if (opts.canRaise && i.kind === 'three' && i.t <= lv('5') && R() < 0.5) return act('raise', '4-bet with ' + d + '. Mastering Mixed Games: with three wheel cards, cap or call at your discretion (mixed).', 'value');
       const inv = c.invested;
@@ -5203,6 +5266,12 @@ window.TD = window.TD || {};
         mem.snow = true; mem.snowSince = k + 1;
         return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, ' + nameOf(o) + ' drew ' + oDraw + ' and I have been betting; I hold ' + lowCards(hand) + ' of the low cards needed, so a pat hand is believable. Mastering Mixed Games: pat the second draw so the snow tells a story.', tag: 'snow' };
       }
+    }
+    // Chase (Nov 23): a queen or king badugi I called a raise and 3-bet with from the blinds, planning to break it
+    if (k === 0 && mem.breakFirst) {
+      const bf = cands.find((x) => x.n === 1 && keyOf(x.keep) === mem.breakFirst);
+      mem.breakFirst = null;
+      if (bf) return { discard: keepIdx(hand, bf.keep), reason: '1st draw: break the ' + hn.short + ' badugi and draw one to ' + hstr(bf.keep) + ', as planned when I called the 3-bet. Chase\'s rule: from the blinds against a raise and a 3-bet, a ' + TD.RANK_WORD[lvDesc(hand)[0]].toLowerCase() + ' badugi is too weak to stand pat; the strong three-card hand underneath is the better hand to play.', tag: '' };
     }
     const bestDraw = cands.find((x) => x.n > 0);
     const pat = cands.find((x) => x.n === 0);
@@ -5760,7 +5829,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 63;
+  TD.VERSION = 69;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6038,7 +6107,6 @@ window.TD = window.TD || {};
 
     bindChrome() {
       $('#tb-review').onclick = () => this.toggleDrawer('review');
-      $('#tb-log').onclick = () => this.toggleDrawer('log');
       $('#tb-history').onclick = () => this.toggleDrawer('history');
       $('#tb-stats').onclick = () => this.toggleDrawer('stats');
       $('#drawer-close').onclick = () => this.toggleDrawer(null);
@@ -6586,15 +6654,6 @@ window.TD = window.TD || {};
       log.appendChild(el);
       while (log.children.length > 220) log.removeChild(log.firstChild);
       log.scrollTop = log.scrollHeight;
-      if (this.drawerTab === 'log') {
-        const live = $('#drawer-body .log-live');
-        if (live) {
-          const d = el.cloneNode(true);
-          live.appendChild(d);
-          const body = $('#drawer-body');
-          body.scrollTop = body.scrollHeight;
-        }
-      }
     }
 
     /* ---------- human input ---------- */
@@ -6927,7 +6986,7 @@ window.TD = window.TD || {};
       this.markToolbar();
     }
     markToolbar() {
-      ['review', 'log', 'history', 'stats'].forEach((t) => $('#tb-' + t).classList.toggle('on', this.drawerTab === t));
+      ['review', 'history', 'stats'].forEach((t) => $('#tb-' + t).classList.toggle('on', this.drawerTab === t));
       $$('.tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === this.drawerTab));
     }
     renderDrawer() {
@@ -6936,12 +6995,7 @@ window.TD = window.TD || {};
       if (!g) return;
       if (this.drawerTab === 'history') body.innerHTML = this.historyHTML(g);
       else if (this.drawerTab === 'stats') body.innerHTML = this.statsHTML(g);
-      else if (this.drawerTab === 'log') {
-        // once a hand is over its lines name every player's cards and discards (Chase, Nov 22)
-        const shown = (l) => (l.entry && l.entry.done ? (l.entry.liveOnly ? '' : l.entry.full || l.entry.text) : l.text);
-        body.innerHTML = '<div class="log-live">' + this.logLines.map((l) => [l, shown(l)]).filter((x) => x[1]).map(([l, t]) => '<div class="' + (l.cls || '') + '">' + escapeHTML(t) + '</div>').join('') + '</div>';
-        body.scrollTop = body.scrollHeight;
-      } else body.innerHTML = this.reviewHTML(g);
+      else body.innerHTML = this.reviewHTML(g);
       $$('.hh-sum', body).forEach((el) => (el.onclick = () => el.parentElement.classList.toggle('open')));
       const sel = $('#rv-select', body);
       if (sel) sel.onchange = () => { this.reviewIndex = +sel.value; this.renderDrawer(); };
