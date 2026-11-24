@@ -1353,6 +1353,7 @@ window.TD = window.TD || {};
       this.hand = []; this.folded = false; this.allIn = false;
       this.roundBet = 0; this.totalBet = 0; this.acted = false; this.raiseLocked = false;
       this.draws = []; this.discards = []; this.startHand = null; this.handHistory = [];
+      this.sitOut = false; this.forcedPre = null; // seat training: not dealt in / the SB's kept opening decision
       this.shown = false; this.mucked = false; this.lastAction = '';
       this.bot = {}; // per-hand AI memory
       this.coach = {}; // shadow AI memory used to evaluate the user's decisions
@@ -1429,7 +1430,8 @@ window.TD = window.TD || {};
     // order 2-7, A-5, Badugi. Changes only between hands. Dropping the game being played moves on to the next
     // picked game at the next hand; adding or dropping another game keeps the current orbit going.
     gameForNextHand() {
-      const picked = TD.pickedGames(this.settings);
+      let picked = TD.pickedGames(this.settings);
+      if (this.trainPos() && picked.length > 1) picked = [picked.includes(TD.GAME) ? TD.GAME : picked[0]]; // seat training: one game
       if (picked.length === 1) { this.mixGame = null; this.mixLeft = 0; return TD.GAMES[picked[0]] ? picked[0] : '27'; }
       if (!this.mixGame) { this.mixGame = picked.includes(TD.GAME) ? TD.GAME : TD.nextPicked(TD.GAME, picked); this.mixLeft = 6; }
       else if (!picked.includes(this.mixGame)) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = 6; }
@@ -1451,11 +1453,17 @@ window.TD = window.TD || {};
       this.fastForward = false;
       // Play every seat (only with Zoom off): the user makes every player's decisions, one seat at a time.
       // Fixed for the whole hand; a change in Settings applies from the next hand.
-      this.allSeats = !!(this.settings && this.settings.everySeat && this.settings.zoom === false);
+      // Seat training (Chase, Nov 24): the user plays every hand from one seat, folded to them predraw.
+      // The seats in front are not dealt in; in the BB the SB always opens (with a hand from its opening range).
+      const train = this.trainPos();
+      this.trainSeat = train;
+      this.allSeats = !train && !!(this.settings && this.settings.everySeat && this.settings.zoom === false);
       // God mode (display only): remembered for the hand if it is on at any point, so the record is tagged
       // and the bots' read on the user's tendencies is not fed by hands played with every card visible
       this.godSeen = !!(this.settings && this.settings.godMode);
-      this.button = this.next(this.button);
+      const human0 = this.players.find((p) => p.isHuman);
+      if (train && human0) this.button = (human0.seat - POS6.indexOf(train) + 6) % 6;
+      else this.button = this.next(this.button);
       this.street = 0;
       this.actions = [];
       this.handLog = [];
@@ -1479,11 +1487,24 @@ window.TD = window.TD || {};
         }
       }
       const human = this.players.find((p) => p.isHuman);
+      const sitters = [];
+      if (train) {
+        const order = ['LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'], mine = order.indexOf(train);
+        for (const p of this.players) {
+          const pos = this.posName(p.seat);
+          if (order.indexOf(pos) < mine && pos !== 'SB') { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
+        }
+      }
       const btnP = this.players[this.button];
       this.handOver = false;
       this.ui.log('— Hand #' + this.handNo + ' — ' + (btnP.isHuman ? 'you have' : btnP.name + ' has') + ' the button', 'hand');
       this.handLog.push({ text: 'Hand #' + this.handNo + ' — button: ' + (btnP.isHuman ? 'You' : btnP.name), cls: 'hand' });
-      for (const p of this.players) p.stats.hands++;
+      for (const p of this.players) if (!p.sitOut) p.stats.hands++;
+      if (sitters.length) {
+        const ns = sitters.sort((a, b) => ['LJ', 'HJ', 'CO', 'BTN'].indexOf(this.posName(a.seat)) - ['LJ', 'HJ', 'CO', 'BTN'].indexOf(this.posName(b.seat))).map((p) => this.posName(p.seat));
+        const t = 'Seat training: folded to you in the ' + train + ' (' + (ns.length === 1 ? ns[0] : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]) + ' not dealt in).';
+        this.log(t, 'sys');
+      }
       this.startStacks = this.players.map((p) => p.stack);
       await this.ui.newHand(this);
 
@@ -1499,11 +1520,13 @@ window.TD = window.TD || {};
         let s = this.sbSeat();
         for (let k = 0; k < 6; k++) {
           const p = this.players[s];
+          if (p.sitOut) { s = this.next(s); continue; }
           p.hand.push(this.stub.pop());
           await this.ui.dealCard(this, s, p.hand.length - 1);
           s = this.next(s);
         }
       }
+      if (train === 'BB') this.sbMustOpen();
       for (const p of this.players) { p.startHand = p.hand.slice(); }
       for (let k = 0, s = this.sbSeat(); k < 6; k++, s = this.next(s)) {
         const p = this.players[s];
@@ -1527,6 +1550,34 @@ window.TD = window.TD || {};
       }
       await this.finishHand(winnerDecided);
       if (human && human.stack <= 0) await this.ui.onBust(this, human);
+    }
+
+    // the seat the user trains from (Settings: Seat training), or null
+    trainPos() {
+      const t = this.settings && this.settings.seatTrain;
+      return POS6.includes(t) ? t : null;
+    }
+    // Seat training from the BB: it folds to the SB, which always open-raises. Deal the SB random hands until
+    // its own strategy opens one, so its hand is a random pick from its opening range (each hand counted as
+    // often as the strategy opens it), and keep that decision for its turn.
+    sbMustOpen() {
+      const sb = this.players[this.sbSeat()], bb = this.players[this.bbSeat()];
+      if (sb.isHuman || sb.folded || bb.folded) return;
+      const save = { street: this.street, unit: this.unit, currentBet: this.currentBet, betLevel: this.betLevel, lastAggressor: this.lastAggressor, roundAggressor: this.roundAggressor };
+      this.street = 0; this.unit = this.stakes.small; this.currentBet = this.stakes.bb; this.betLevel = 1;
+      this.lastAggressor = bb.seat; this.roundAggressor = -1;
+      for (let tries = 0; tries < 600; tries++) {
+        const opts = this.options(sb);
+        sb.bot = {};
+        let act = null;
+        try { act = TD.AI.decideBet(this, sb, opts); } catch (e) { console.error(e); }
+        if (act && (act.type === 'raise' || act.type === 'bet')) { sb.forcedPre = act; break; }
+        // not in its opening range: put the hand back and deal it a new one
+        this.stub.push(...sb.hand); sb.hand = [];
+        TD.shuffle(this.stub, this.rng);
+        for (let r = 0; r < TD.HAND_SIZE; r++) sb.hand.push(this.stub.pop());
+      }
+      Object.assign(this, save);
     }
 
     postBlind(p, amt, label) {
@@ -1584,7 +1635,8 @@ window.TD = window.TD || {};
             if (timer !== null) { clearTimeout(timer); run(); this.coachNoteBet(p, opts, act, coach.res); }
           } else {
             await this.ui.wait(this.ui.botDelay ? this.ui.botDelay() : 700);
-            act = TD.AI.decideBet(this, p, opts);
+            if (p.forcedPre && street === 0 && !p.acted) { act = p.forcedPre; p.forcedPre = null; }
+            else act = TD.AI.decideBet(this, p, opts);
           }
           this.applyAction(p, act, opts);
           this.ui.setTurn(this, -1);
@@ -1989,9 +2041,9 @@ window.TD = window.TD || {};
       for (const e of this.handLog) e.done = true;
       // build record for history/review
       const rec = {
-        handNo: this.handNo, button: this.button, game: this.gameKey, allSeats: !!this.allSeats, god: !!this.godSeen,
+        handNo: this.handNo, button: this.button, game: this.gameKey, allSeats: !!this.allSeats, god: !!this.godSeen, train: this.trainSeat || null,
         players: this.players.map((p) => ({
-          seat: p.seat, name: p.name, pos: this.posName(p.seat), start: p.startHand, final: p.hand.slice(),
+          seat: p.seat, name: p.name, pos: this.posName(p.seat), start: p.startHand, final: p.hand.slice(), sitOut: !!p.sitOut,
           draws: p.draws.slice(), folded: p.folded, shown: p.shown, isHuman: p.isHuman,
           net: p.stack - this.startStacks[p.seat], history: p.handHistory
         })),
@@ -5949,7 +6001,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 72;
+  TD.VERSION = 73;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6090,12 +6142,15 @@ window.TD = window.TD || {};
   class UI {
     constructor() {
       const saved = (() => { try { return JSON.parse(store.get('lago27.settings') || '{}'); } catch (e) { return {}; } })();
-      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', stakes: null }, saved);
+      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', stakes: null, seatTrain: null }, saved);
+      if (!['LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'].includes(this.settings.seatTrain)) this.settings.seatTrain = null;
+      if (this.settings.seatTrain) this.settings.everySeat = false; // seat training and play every seat don't mix
       if (this.settings.zoom !== false) this.settings.everySeat = false; // play every seat needs Zoom off
       if (!['rotate', 'fixed'].includes(this.settings.seatView)) this.settings.seatView = 'rotate';
       if (!['classic', 'light', 'dark'].includes(this.settings.theme)) this.settings.theme = 'classic';
       this.settings.game = TD.GAME; // the game being played now
       this.settings.games = TD.pickedGames(this.settings); // the games the player picked (older saves: gameMode)
+      if (this.settings.seatTrain && this.settings.games.length > 1) this.settings.games = [this.settings.games.includes(TD.GAME) ? TD.GAME : this.settings.games[0]]; // seat training: one game
       this.settings.gameMode = undefined;
       if (!this.settings.games.includes(TD.GAME)) { TD.setGame(this.settings.games[0]); this.settings.game = TD.GAME; }
       this.slots = [[], [], [], [], [], []];
@@ -6269,7 +6324,9 @@ window.TD = window.TD || {};
       const s = this.settings;
       if (!TD.GAME_KEYS.includes(k)) return false;
       const cur = TD.pickedGames(s);
-      const next = cur.includes(k) ? cur.filter((x) => x !== k) : TD.GAME_KEYS.filter((x) => x === k || cur.includes(x));
+      // seat training plays one game at a time: tapping a game switches to it
+      if (s.seatTrain && cur.length === 1 && cur[0] === k) { this.toast('Seat training plays one game at a time'); return false; }
+      const next = s.seatTrain ? [k] : cur.includes(k) ? cur.filter((x) => x !== k) : TD.GAME_KEYS.filter((x) => x === k || cur.includes(x));
       if (!next.length) { this.toast('Pick at least one game'); return false; }
       s.games = next;
       const g = this.game;
@@ -6442,7 +6499,7 @@ window.TD = window.TD || {};
       const picked = TD.pickedGames(this.settings);
       const nextG = picked.length > 1 && game.mixGame ? TD.GAME_INFO[TD.nextPicked(game.mixGame, picked)].short : '';
       const mixTxt = nextG ? (picked.includes(game.mixGame) && game.mixLeft > 0 ? ' · ' + game.mixLeft + ' more, then ' + nextG : ' · ' + nextG + ' next hand') : '';
-      $('#hand-no').textContent = (game.handNo ? 'Hand #' + game.handNo + ' · ' : '') + TD.gameInfo.short + mixTxt + ' · ' + money(st.small) + '/' + money(st.big) + ' limit';
+      $('#hand-no').textContent = (game.handNo ? 'Hand #' + game.handNo + ' · ' : '') + TD.gameInfo.short + mixTxt + (game.trainSeat ? ' · ' + game.trainSeat + ' training' : '') + ' · ' + money(st.small) + '/' + money(st.big) + ' limit';
       $('#session-net').innerHTML = 'Session <b class="' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</b>';
       const canTop = human.stack + human.totalBet < st.buyin;
       $('#tb-chips').style.display = canTop ? '' : 'none';
@@ -7130,7 +7187,7 @@ window.TD = window.TD || {};
         const winners = Object.keys(h.results.winners).map((s) => (+s === 0 ? 'You' : h.players[s].name));
         const net = me.net;
         const lines = h.log.filter((l) => !l.liveOnly && (l.full || l.text)).map((l) => '<div class="' + (l.cls || '') + '">' + escapeHTML(l.full || l.text) + '</div>').join('');
-        return '<div class="hh-item"><div class="hh-sum"><span><span class="n">#' + h.handNo + '</span> · ' + (h.game ? TD.GAME_INFO[h.game].short + ' · ' : '') + (h.allSeats ? 'every seat · ' : '') + (h.god ? 'God mode · ' : '') + me.pos + ' · ' + miniCards(me.start) + ' → ' + (me.folded ? '<span class="muted">folded</span>' : miniCards(me.final)) +
+        return '<div class="hh-item"><div class="hh-sum"><span><span class="n">#' + h.handNo + '</span> · ' + (h.game ? TD.GAME_INFO[h.game].short + ' · ' : '') + (h.allSeats ? 'every seat · ' : '') + (h.train ? h.train + ' training · ' : '') + (h.god ? 'God mode · ' : '') + me.pos + ' · ' + miniCards(me.start) + ' → ' + (me.folded ? '<span class="muted">folded</span>' : miniCards(me.final)) +
           '</span><span class="r ' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</span></div>' +
           '<div class="hh-log"><div class="muted">Won by ' + escapeHTML(winners.join(' & ')) + '</div>' + lines + '</div></div>';
       }).join('');
@@ -7153,6 +7210,7 @@ window.TD = window.TD || {};
       const folds = [];
       for (const pl of order) {
         const notes = h.review.filter((n) => n.seat === pl.seat);
+        if (pl.sitOut) { folds.push('<div class="rv-line"><span class="st">' + pl.pos + '</span><b>' + escapeHTML(pl.name) + '</b> <span class="muted">— not dealt in (seat training)</span></div>'); continue; }
         if (!saw(pl) && pl.folded) {
           folds.push('<div class="rv-line"><span class="st">' + pl.pos + '</span><b>' + (pl.isHuman ? 'You' : escapeHTML(pl.name)) + '</b> ' + miniCards(pl.start) + (notes[0] ? ' <span class="muted">— ' + escapeHTML(notes[notes.length - 1].reason) + '</span>' : ' <span class="muted">— folded</span>') + '</div>');
           continue;
@@ -7288,6 +7346,8 @@ window.TD = window.TD || {};
         '<div class="set-group">Table</div>' +
         '<div class="setting"><div class="lbl">Games<small>Select which games you would like to play. Tap a game to add or remove it; with more than one, the game changes every 6 hands (one orbit). A change during a hand starts with the next hand.</small></div><div class="seg" id="set-game">' +
         this.gameButtons() + '</div></div>' +
+        '<div class="setting"><div class="lbl">Seat training<small>Play every hand from one seat, with the action folded to you predraw. The seats in front of you are not dealt in (from the LJ, everyone is dealt in as usual). In the big blind, the small blind always opens with a random hand from its opening range. One game at a time; changes apply from the next hand.</small></div><div class="seg" id="set-train">' +
+        [['off', 'Off'], ['LJ', 'LJ'], ['HJ', 'HJ'], ['CO', 'CO'], ['BTN', 'BTN'], ['SB', 'SB'], ['BB', 'BB']].map(([k, l]) => '<button data-k="' + k + '" class="' + ((s.seatTrain || 'off') === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
         '<div class="setting"><div class="lbl">Stakes &amp; stacks<small>' + money(st.sb) + '/' + money(st.bb) + ' blinds · ' + money(st.small) + '/' + money(st.big) + ' limit · ' + money(st.buyin) + ' stacks</small></div><button class="mbtn ghost" id="btn-stakes" style="min-width:0;min-height:42px">Change</button></div>' +
         '<div class="setting"><div class="lbl">Game speed</div><div class="seg" id="set-speed">' + speeds.map(([k, l]) => '<button data-k="' + k + '" class="' + (s.speed === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
         '<div class="setting"><div class="lbl">Zoom<small>When you fold, the next hand is dealt at once (the rest plays out instantly and still shows in History and Review). Before your turn, Fold now folds straight away.</small></div>' + sw('zoom', s.zoom !== false) + '</div>' +
@@ -7314,6 +7374,20 @@ window.TD = window.TD || {};
         $('#set-every .switch', m).classList.toggle('on', !!s.everySeat && !zoomOn);
         $('#set-tap .switch', m).classList.toggle('on', !!s.tapToShow);
       };
+      const markTrain = () => $$('#set-train button', m).forEach((x) => x.classList.toggle('on', x.dataset.k === (s.seatTrain || 'off')));
+      $$('#set-train button', m).forEach((b) => (b.onclick = () => {
+        const v = b.dataset.k === 'off' ? null : b.dataset.k;
+        if ((s.seatTrain || null) === v) return;
+        s.seatTrain = v;
+        if (v) {
+          s.everySeat = false; syncEvery();
+          const cur = TD.pickedGames(s);
+          if (cur.length > 1) { const one = cur.includes(TD.GAME) ? TD.GAME : cur[0]; s.games = [one]; if (this.game) { this.game.mixGame = null; this.game.mixLeft = 0; } this.markGameButtons($$('#set-game button', m)); }
+        }
+        this.saveSettings(); markTrain();
+        if (this.game) this.update(this.game, {});
+        this.toast(v ? 'Seat training from the ' + v + (live() ? ', from the next hand' : '') + ' · ' + TD.GAME_INFO[TD.pickedGames(s)[0]].name + ' only' : 'Seat training off' + (live() ? ' from the next hand' : ''));
+      }));
       $$('#set-seatview button', m).forEach((b) => (b.onclick = () => {
         if (s.zoom !== false || !s.everySeat || s.seatView === b.dataset.k) return;
         s.seatView = b.dataset.k;
@@ -7325,6 +7399,7 @@ window.TD = window.TD || {};
         const k = el.dataset.k;
         if (k === 'godMode') { this.setGodMode(!s.godMode, true); el.classList.toggle('on', !!s.godMode); return; }
         if (k === 'everySeat' && s.zoom !== false) { this.toast('Turn Zoom off to play every seat'); return; }
+        if (k === 'everySeat' && !s.everySeat && s.seatTrain) { s.seatTrain = null; markTrain(); } // play every seat ends seat training
         if (k === 'tapToShow' && (s.zoom !== false || !s.everySeat)) return;
         const cur = (k === 'zoom' || k === 'coach') ? s[k] !== false : !!s[k];
         const wasEvery = !!s.everySeat && s.zoom === false;
