@@ -969,6 +969,41 @@ window.TD = window.TD || {};
   buildDP();
   TD.dpBuildMs = Math.round(performance.now() - t0);
 
+  /* Draw value with dead cards (Chase, Nov 23: SS2 "Dead cards", Greenstein "Remembering discards"): the same
+     as V[d][K], but the cards of each rank I have seen (my discards, and the cards I throw now) are out of the
+     deck for this draw. dead[bit] = how many cards of that rank (bit as in rankMaskOf) are out, not counting the
+     kept cards. Later draws use the ordinary tables. */
+  const _davail = new Uint8Array(13), _dcache = new Map();
+  function deadV(K, d, dead) {
+    const key = d + ':' + K + ':' + dead.join('');
+    if (_dcache.has(key)) return _dcache.get(key);
+    const pc = POP[K];
+    if (pc > 4) return -1;
+    const n = 5 - pc;
+    let N = 0;
+    for (let r = 0; r < 13; r++) { _davail[r] = Math.max(0, ((K & (1 << r)) ? 3 : 4) - (dead[r] || 0)); N += _davail[r]; }
+    const avail = Array.from(_davail);
+    const total = CHOOSE[N][n];
+    let acc = 0;
+    const rec = (r, left, ways, mMask, paired) => {
+      if (left === 0) {
+        const D = K | mMask;
+        const val = !paired ? (d === 1 ? Q5[D] : Math.max(PATV[d - 1][D], bestSub[d - 1][D])) : (d === 1 ? (POP[D] === 4 ? PAIR_Q : WORSE_Q) : bestSub[d - 1][D]);
+        acc += ways * val;
+        return;
+      }
+      if (r >= 13) return;
+      for (let m = 0; m <= Math.min(left, avail[r]); m++) {
+        if (m === 0) { rec(r + 1, left, ways, mMask, paired); continue; }
+        rec(r + 1, left - m, ways * CHOOSE[avail[r]][m], mMask | (1 << r), paired || m > 1 || (K & (1 << r)) !== 0);
+      }
+    };
+    rec(0, n, 1, 0, false);
+    const v = total > 0 ? acc / total : V[d][K];
+    if (_dcache.size > 4000) _dcache.clear();
+    _dcache.set(key, v);
+    return v;
+  }
   // best sub-mask of m with exactly k bits, by V[d]
   function bestOfSize(m, k, d) {
     let best = -1, arg = -1;
@@ -1246,7 +1281,7 @@ window.TD = window.TD || {};
     RANK_CH, RANK_WORD, RANK_PLURAL, SUIT_CH, CAT, POP,
     rankOf, suitOf, rch, cardStr, rankMaskOf, maskRanksAsc, maskStr, patternMask, isStraightMask,
     eval27, evalCat, handName, sortForDisplay, qualityOf, isMadeLow, Q5, PATV,
-    V, bestSub, bestArg, bestOfSize, weakFirstOne, cardsForMask, policyKeep, policyDrawCount, strengthNow,
+    V, bestSub, bestArg, bestOfSize, deadV, weakFirstOne, cardsForMask, policyKeep, policyDrawCount, strengthNow,
     PSCORE, PKIND, PBEST, predrawInfo, predrawScoreFast, patScoreOf, newDeck, shuffle, STRAIGHTISH
   });
  }
@@ -2834,18 +2869,41 @@ window.TD = window.TD || {};
   }
 
   /* ---------------- draw decisions ---------------- */
-  function candidates(hand, d) {
+  // dead-card counts by rank bit: my earlier discards plus the hand's cards outside the keep (Chase, Nov 23)
+  function deadCounts(discards, hand, keepMask) {
+    const dead = new Array(13).fill(0), keptSeen = new Array(13).fill(0);
+    for (const c of discards || []) dead[31 - Math.clz32(TD.rankMaskOf([c]))]++;
+    for (const c of hand) { const b = 31 - Math.clz32(TD.rankMaskOf([c])); if ((keepMask & (1 << b)) && !keptSeen[b]) keptSeen[b] = 1; else dead[b]++; }
+    return dead;
+  }
+  // best keep of each size; with p given, draw values count the cards I have seen as dead (SS2 "Dead cards")
+  // a one-card draw to a nine or worse (four cards kept)
+  function rough98(keep) { const r = keep.map(TD.rankOf).sort((a, b) => b - a); return r[0] >= 9; }
+  function candidates(hand, d, p) {
     const D = TD.rankMaskOf(hand);
     const out = [];
+    const useDead = !!(p && TD.deadV);
     if (POP[D] === 5 && TD.isMadeLow(hand)) out.push({ n: 0, keep: hand.slice(), val: TD.PATV[d - 1][D], kind: 'pat' });
     for (let k = 4; k >= 0; k--) {
       if (k > POP[D]) continue;
-      const r = TD.bestOfSize(D, k, d);
+      let r = TD.bestOfSize(D, k, d);
       if (r.mask < 0) continue;
+      let plain = r.mask;
+      if (useDead && k >= 1) {
+        // every keep of this size, valued with the dead cards
+        const bits = []; for (let i = 0; i < 13; i++) if (D & (1 << i)) bits.push(1 << i);
+        let best = -1, arg = -1;
+        const pick = (st, left, cur) => {
+          if (!left) { const v = TD.deadV(cur, d, deadCounts(p.discards, hand, cur)); if (v > best) { best = v; arg = cur; } return; }
+          for (let i = st; i <= bits.length - left; i++) pick(i + 1, left - 1, cur | bits[i]);
+        };
+        pick(0, k, 0);
+        if (arg >= 0) r = { mask: arg, val: best };
+      }
       const keep = TD.cardsForMask(hand, r.mask);
       let v = r.val;
       if (!A5 && k === 4 && keep.every((c) => TD.suitOf(c) === TD.suitOf(keep[0]))) v *= 0.85; // flush risk (2-7 only)
-      out.push({ n: 5 - k, keep, val: v, kind: 'draw', mask: r.mask });
+      out.push({ n: 5 - k, keep, val: v, kind: 'draw', mask: r.mask, plainMask: plain });
     }
     return out.sort((a, b) => b.val - a.val);
   }
@@ -2937,7 +2995,7 @@ window.TD = window.TD || {};
       mem.snow = true; mem.snowSince = 1;
       return { discard: [worst], reason: 'Snow set-up with ' + hstr(hand) + ': draw one now and stand pat from the next draw. SS2: holding three of the key low cards makes a snow credible, and drawing one first looks less suspicious than patting right away.', tag: 'snow' };
     }
-    let cands = candidates(hand, d);
+    let cands = candidates(hand, d, p);
     if (!cands.length) return { discard: [0, 1, 2, 3, 4], reason: 'Draw five.' };
     // Chase's notes: the plan after 3-betting his check-raise with a two-way hand on the first betting round
     if (k === 1 && (mem.twoWayBreak || mem.twoWayPat)) {
@@ -2993,6 +3051,17 @@ window.TD = window.TD || {};
             : top <= 7 ? ' Not drawing one to ' + hstr(contender.keep) + ': with no deuce it is a weak draw. Only a deuce makes a good seven, and the missing card makes a straight. Chase\'s rule (SS2: the deuce is the key card, and most hands you play should contain one): draw two, hoping to catch a deuce or make a hand worth patting.'
             : ' Not drawing one to ' + hstr(contender.keep) + ': on the first draw, drawing one to a ' + (top === 9 ? 'nine is a marginal play at best' : TD.RANK_WORD[top].toLowerCase() + ' is never right') + '. With three draws to come, the two-card draw ends up with a better hand too often.';
         }
+      }
+    }
+    // Chase (Nov 24): never draw one to a nine or worse on the second draw. A 9-8 draw is too rough, and a
+    // smoother nine (9-7-4-2) draws two to its premium two-card draw for the implied odds of a wheel.
+    if (!A5 && k === 1 && cands.some((c) => c.n === 2)) {
+      const rough = cands.filter((c) => c.n === 1 && rough98(c.keep));
+      const wasTop = rough.find((c) => c === cands[0] || c.val >= cands[0].val - 0.09) || null; // it was the pick, or close enough to be
+      cands = cands.filter((c) => !rough.includes(c));
+      if (wasTop) {
+        const r0 = wasTop, r = r0.keep.map(TD.rankOf).sort((a, b) => b - a);
+        firstNote = ' Not drawing one to ' + hstr(r0.keep) + '. Chase\'s rule: never draw one to a nine or worse on the second draw. ' + (r[0] === 9 && r[1] === 8 ? 'A 9-8 draw is too rough' : r[0] >= 10 ? 'A ' + TD.RANK_WORD[r[0]].toLowerCase() + ' draw is too rough' : 'Drawing two to ' + hstr(cands.find((c) => c.n === 2).keep) + ' has the implied odds of making a wheel or another very strong hand') + ', so throw the ' + TD.RANK_WORD[r[0]].toLowerCase() + ' and draw two again.';
       }
     }
     let choice = cands[0];
@@ -3095,6 +3164,7 @@ window.TD = window.TD || {};
           let adj = e;
           if (opps.length === 1 && ip && c.n >= 1) adj += 0.02; // implied odds on the river in position
           if (opps.length >= 2 && c.n === 0) adj += 0.015;
+          if (c.n === 0 && deadWheel >= 3) adj += 0.02; // SS2: valuable discards make his draw harder: stay pat with a weaker hand
           if (mx(c.keep) === 8 && c.n >= 1) {
             if (opps.length >= 2) adj -= 0.025;                                   // more opponents: go for the wheel
             if (lastOpp.length && lastOpp.every((n) => n >= 3)) adj += 0.04;     // they need lots of help: keep the 8
@@ -3111,7 +3181,13 @@ window.TD = window.TD || {};
         reason = buildDrawReason(game, p, choice, sec, hand, hn, k, opps, ip);
       }
     }
-    return { discard: keepIdx(hand, choice.keep), reason: reason + (choice.n >= 2 ? firstNote : ''), tag };
+    // say so when the cards I have seen changed which cards to keep (SS2 "Dead cards")
+    let deadNote = '';
+    if (choice.plainMask !== undefined && choice.mask !== choice.plainMask) {
+      const plainKeep = TD.cardsForMask(hand, choice.plainMask);
+      deadNote = ' Dead cards: counting the cards I have already thrown (they can\'t come), ' + hstr(choice.keep) + ' has more live outs than ' + hstr(plainKeep) + '.';
+    }
+    return { discard: keepIdx(hand, choice.keep), reason: reason + (choice.n >= 2 ? firstNote : '') + deadNote, tag };
   }
 
   function buildDrawReason(game, p, choice, alt, hand, hn, k, opps, ip) {
@@ -3226,6 +3302,10 @@ window.TD = window.TD || {};
     for (const r in cnt) if (cnt[r] >= 3) return +r;
     return 0;
   }
+  // blockers I have seen: paired low cards in my hand plus the low cards I have thrown (Chase, Nov 23; SS2 "Dead
+  // cards": the cards I burned are cards he needs)
+  function blockersSeen(p, hand) { return hasBlockers(hand || p.hand) + (p.discards || []).filter((x) => TD.rankOf(x) <= 7).length; }
+  const blockTxt = (p, hand) => { const h = hasBlockers(hand || p.hand), d = (p.discards || []).filter((x) => TD.rankOf(x) <= 7).length; return d ? (h ? 'paired wheel cards in my hand and ' : '') + d + ' wheel cards in my discards' : 'paired wheel cards'; };
   function hasBlockers(hand) {
     // paired low cards = we hold extra low cards our opponent needs
     const cnt = {};
@@ -3410,6 +3490,10 @@ window.TD = window.TD || {};
     c.cardBehind = c.oppsLast.some((n) => n < nextDraw);
     c.improved = c.myLast >= 1 && nextDraw < c.myLast;
     c.keepNow = drawing ? TD.policyKeep(hand, dRem) : hand;
+    // Chase (Nov 24): with two draws left, never draw one to a nine or worse, so the plan is to draw two
+    if (!A5 && drawing && dRem === 2 && c.keepNow.length === 4 && rough98(c.keepNow)) {
+      const two = candidates(hand, 2).find((x) => x.n === 2); if (two) c.keepNow = two.keep;
+    }
     c.premiumDraw = drawing && c.keepNow.some((x) => TD.rankOf(x) === 2) && Math.max(...c.keepNow.map(TD.rankOf)) <= 7;
     c.deadWheel = p.discards.filter((x) => TD.rankOf(x) <= 7).length + hasBlockers(hand);
     c.allInOpp = opps.some((o) => o.allIn);
@@ -3592,10 +3676,10 @@ window.TD = window.TD || {};
       return act('call', 'Improved to a one-card draw heads-up with position: just call the bet. Notes: heads-up in position, call rather than raise.');
     }
     // snow spot
-    if (opp && ip && toCall === 0 && c.oppLast >= 2 && myLast >= 2 && nextDraw >= 2 && hasBlockers(c.hand) >= 2 && bestSub[c.dRem][TD.rankMaskOf(c.hand)] < 0.45 && !isCallingStation(c.game, opp)) {
+    if (opp && ip && toCall === 0 && c.oppLast >= 2 && myLast >= 2 && nextDraw >= 2 && blockersSeen(c.p, c.hand) >= 2 && bestSub[c.dRem][TD.rankMaskOf(c.hand)] < 0.45 && !isCallingStation(c.game, opp)) {
       if (R() < 0.5 * SNOW_F) {
         c.p.bot.snow = true; c.p.bot.snowSince = 1;
-        return act('bet', 'Snow spot: heads-up in position, he checked, my draw is poor but I caught ' + hasBlockers(c.hand) + ' blockers (' + hstr(c.hand) + '). Notes: "a pretty ideal snow spot". I will stand pat from here.', 'snow');
+        return act('bet', 'Snow spot: heads-up in position, he checked, my draw is poor but I have ' + blockersSeen(c.p, c.hand) + ' blockers (' + blockTxt(c.p, c.hand) + ', ' + hstr(c.hand) + '): cards he needs are dead. Notes: "a pretty ideal snow spot". I will stand pat from here.', 'snow');
       }
     }
     // SS2: trash/trouble hands (no deuce) — abort the mission if they don't improve quickly
@@ -3699,9 +3783,9 @@ window.TD = window.TD || {};
       return act('bet', 'Snow: both drew one, he checked (probably still drawing) and I paired a wheel card (' + hstr(c.hand) + '). SS2: bet and stand pat — if he misses, keep bluffing; he will fold most hands that miss.', 'snow');
     }
     // SS2 snow: drawing two vs his one, he bets, I catch pairs of wheel cards — raise and stand pat
-    if (opp && ip && toCall > 0 && c.lvl === 1 && c.canRaise && c.oppLast === 1 && myLast === 2 && nextDraw >= 2 && hasBlockers(c.hand) >= 2 && !isCallingStation(game, opp) && R() < 0.2 * SNOW_F) {
+    if (opp && ip && toCall > 0 && c.lvl === 1 && c.canRaise && c.oppLast === 1 && myLast === 2 && nextDraw >= 2 && blockersSeen(p, c.hand) >= 2 && !isCallingStation(game, opp) && R() < 0.2 * SNOW_F * Math.min(1.6, 1 + 0.15 * (blockersSeen(p, c.hand) - 2))) {
       p.bot.snow = true; p.bot.snowSince = 2;
-      return act('raise', 'Snow: drawing two vs his one, I caught paired wheel cards (' + hstr(c.hand) + '). SS2: rather than call and draw two as an underdog, raise and stand pat; abort if he stands pat too.', 'snow');
+      return act('raise', 'Snow: drawing two vs his one, I hold ' + blockTxt(p, c.hand) + ' (' + hstr(c.hand) + '), so cards he needs are dead. SS2: rather than call and draw two as an underdog, raise and stand pat; abort if he stands pat too.', 'snow');
     }
     // SS2: always check to an opponent who is a card ahead (he bets automatically)
     if (opp && toCall === 0 && c.cardBehind && !c.made) {
@@ -4393,9 +4477,29 @@ window.TD = window.TD || {};
 
   /* ---------- draw choices for a hand ----------
      Every keep worth considering: pat (a badugi), and for each size the best playing subset. */
-  function keepOptions(cards, d) {
+  /* Draw value with dead cards (Chase, Nov 23; Greenstein "Remembering discards", SS2 "Dead cards"): the exact
+     value of drawing to keep when every card in my hand and every card I have thrown is out of the deck.
+     One- and two-card draws only (three- and four-card draws use the table). */
+  const _kdCache = new Map();
+  function deadKeepVal(keep, cards, dead, d) {
+    const key = d + '|' + keep.join(',') + '|' + cards.slice().sort((a, b) => a - b).join(',') + '|' + dead.slice().sort((a, b) => a - b).join(',');
+    if (_kdCache.has(key)) return _kdCache.get(key);
+    const out = new Set(cards.concat(dead)), rest = [];
+    for (let c = 0; c < 52; c++) if (!out.has(c)) rest.push(c);
+    const k = keep.length, n = 4 - k, L = rest.length, tmp = keep.concat([0, 0, 0, 0]).slice(0, 4);
+    let acc = 0, cnt = 0;
+    const ev = () => { acc += d === 1 ? qOfValue(evalHand(tmp)) : bestChoiceVal(tmp, d - 1); cnt++; };
+    if (n === 1) for (let a = 0; a < L; a++) { tmp[k] = rest[a]; ev(); }
+    else for (let a = 0; a < L; a++) for (let b2 = a + 1; b2 < L; b2++) { tmp[k] = rest[a]; tmp[k + 1] = rest[b2]; ev(); }
+    const v = cnt ? acc / cnt : 0;
+    if (_kdCache.size > 3000) _kdCache.clear();
+    _kdCache.set(key, v);
+    return v;
+  }
+  function keepOptions(cards, d, dead) {
     buildDP();
     const out = [];
+    const useDead = Array.isArray(dead);
     const lv = cards.map((c) => LEVEL[c]), su = cards.map((c) => c & 3);
     const bySize = [null, null, null, null];
     for (let s = 1; s < 16; s++) {
@@ -4409,8 +4513,9 @@ window.TD = window.TD || {};
       if (!ok) continue;
       const k = POP[s];
       if (k === 4) { out.push({ n: 0, keep: cards.slice(), val: patVal(evalHand(cards), d - 1), kind: 'pat', mask: rm }); continue; }
-      const val = V[d][rm];
-      if (!bySize[k] || val > bySize[k].val) bySize[k] = { n: 4 - k, keep: cards.filter((c, i) => s & (1 << i)), val, kind: 'draw', mask: rm };
+      const keepC = cards.filter((c, i) => s & (1 << i));
+      const val = useDead && k >= 2 ? deadKeepVal(keepC, cards, dead, d) : V[d][rm];
+      if (!bySize[k] || val > bySize[k].val + 1e-9) bySize[k] = { n: 4 - k, keep: keepC, val, kind: 'draw', mask: rm, plainVal: V[d][rm] };
     }
     for (let k = 3; k >= 1; k--) if (bySize[k]) out.push(bySize[k]);
     out.push({ n: 4, keep: [], val: V[d][0], kind: 'draw', mask: 0 });
@@ -5131,6 +5236,10 @@ window.TD = window.TD || {};
   function leadInto(game, st) { let last = null; for (const a of game.actions) if (a.street < st && (a.type === 'bet' || a.type === 'raise')) last = a; return last; }
   function lastAgg(game, st) { let last = null; for (const a of game.actions) if (a.street === st && (a.type === 'bet' || a.type === 'raise')) last = a; return last; }
   function lowCards(hand, top) { const m = top || lv('4'); return hand.filter((c) => TD.rankOf(c) <= m).length; }
+  // low cards I hold or have thrown: blockers to the others' draws (Chase, Nov 23: the removal effect in Badugi,
+  // like SS2's dead cards in 2-7: my low discards are likely outs for the opponent)
+  const seenLow = (p, top) => lowCards(p.hand, top) + lowCards(p.discards || [], top);
+  const seenTxt = (p, top) => { const h = lowCards(p.hand, top), d = lowCards(p.discards || [], top); return d ? h + ' low cards in my hand and ' + d + ' more I threw' : h + ' low cards'; };
   const nameOf = (o) => (o.isHuman ? 'you' : o.name);
 
   const keyOf = (cs) => cs.slice().sort((x, y) => x - y).join(',');
@@ -5225,7 +5334,7 @@ window.TD = window.TD || {};
   function planNextDraw(game, p, st) {
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
-    let cands = TD.keepOptions(p.hand, 3 - st);
+    let cands = TD.keepOptions(p.hand, 3 - st, p.discards);
     const fr = st === 0 ? firstDrawRough(cands, p.bot) : null;
     if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
     const bk = fr || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
@@ -5241,7 +5350,7 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
     const hn = TD.handName(hand);
-    let cands = TD.keepOptions(hand, d);
+    let cands = TD.keepOptions(hand, d, p.discards);
     const drewThis = opps.filter((o) => o.draws.length > k).map((o) => o.draws[k]);
     const oppPat = opps.some((o) => (o.draws.length > k ? o.draws[k] : o.draws[k - 1]) === 0 && o.draws.length > 0);
     const desc = (cd) => (cd.n === 0 ? 'stand pat with ' + hn.short : cd.keep.length ? 'draw ' + cd.n + ' to ' + hstr(cd.keep) : 'draw four');
@@ -5262,9 +5371,9 @@ window.TD = window.TD || {};
       const agg = lastAgg(game, game.street);
       const iAgg = agg && agg.seat === p.seat;
       const weak = cands[0].keep.length <= 2 || (cands[0].n >= 1 && Math.max(...cands[0].keep.map(TD.rankOf)) >= lv('9'));
-      if (iAgg && oDraw !== null && oDraw >= 2 && weak && lowCards(hand) >= 2 && R() < 0.15) {
+      if (iAgg && oDraw !== null && oDraw >= 2 && weak && seenLow(p) >= 2 && R() < 0.15 * Math.min(1.6, 1 + 0.15 * (seenLow(p) - 2))) {
         mem.snow = true; mem.snowSince = k + 1;
-        return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, ' + nameOf(o) + ' drew ' + oDraw + ' and I have been betting; I hold ' + lowCards(hand) + ' of the low cards needed, so a pat hand is believable. Mastering Mixed Games: pat the second draw so the snow tells a story.', tag: 'snow' };
+        return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, ' + nameOf(o) + ' drew ' + oDraw + ' and I have been betting; I hold or threw ' + seenTxt(p) + ' he needs, so a pat hand is believable and his draw is harder. Mastering Mixed Games: pat the second draw so the snow tells a story.', tag: 'snow' };
       }
     }
     // Chase (Nov 23): a queen or king badugi I called a raise and 3-bet with from the blinds, planning to break it
@@ -5421,18 +5530,18 @@ window.TD = window.TD || {};
     if (!c.drawing || c.N > 2 || c.st > 2 || c.opps.some((o) => o.allIn || isCallingStation(game, o))) return null;
     if (c.oppsLast.some((n) => n === 0)) return null; // someone is pat already
     const ls = lvDesc(c.keepNow);
-    const rough = c.keepNow.length === 3 ? (ls[0] >= lv('8') || (ls[0] === lv('7') && ls[1] >= lv('5')) || (ls[0] === lv('6') && ls[1] >= lv('4'))) && lowCards(c.hand, lv('5')) >= 2
-      : c.st === 1 && lowCards(c.hand) >= 2;
+    const rough = c.keepNow.length === 3 ? (ls[0] >= lv('8') || (ls[0] === lv('7') && ls[1] >= lv('5')) || (ls[0] === lv('6') && ls[1] >= lv('4'))) && seenLow(p, lv('5')) >= 2
+      : c.st === 1 && seenLow(p) >= 2;
     if (!rough) return null;
     const prev = lastAgg(game, c.st - 1);
     const raiseIt = c.toCall > 0 && c.lvl === 1 && c.canRaise;
     const betIt = c.toCall === 0 && c.st === 1 && c.ip && prev && prev.seat === p.seat;
     if (!raiseIt && !betIt) return null;
-    let f = (c.ip ? 0.1 : 0.22) * (c.N === 2 ? 0.7 : 1) * (betIt ? 0.6 : 1);
+    let f = (c.ip ? 0.1 : 0.22) * (c.N === 2 ? 0.7 : 1) * (betIt ? 0.6 : 1) * Math.min(1.6, 1 + 0.15 * (seenLow(p, lv('5')) - 2));
     if (R() >= f) return null;
     p.bot.snow = true; p.bot.snowSince = c.st + 1;
     const others = c.opps.map((o) => nameOf(o) + ' drew ' + o.draws[c.st - 1]).join(', ');
-    p.bot.snowWhy = 'Mastering Mixed Games: ' + (c.keepNow.length === 3 ? 'snow the worst three-card draws like ' + hstr(c.keepNow) + ', not the best ones' : 'a weak two-card draw holding low cards is a snow candidate') + (c.ip ? '' : ', and snow more out of position') + '; my ' + lowCards(c.hand, lv('5')) + ' low cards are cards the others need, and they are still drawing (' + others + ').';
+    p.bot.snowWhy = 'Mastering Mixed Games: ' + (c.keepNow.length === 3 ? 'snow the worst three-card draws like ' + hstr(c.keepNow) + ', not the best ones' : 'a weak two-card draw holding low cards is a snow candidate') + (c.ip ? '' : ', and snow more out of position') + '; my ' + seenTxt(p, lv('5')) + ' are cards the others need, and they are still drawing (' + others + ').';
     return act(raiseIt ? 'raise' : 'bet', (raiseIt ? (c.iChecked ? 'Check-raise' : 'Raise') : 'Bet') + ' with ' + hstr(c.hand) + ', planning to snow (stand pat at the next draw). ' + p.bot.snowWhy, 'snow');
   }
   // betting before the last draw: Greenstein's rules for who does the betting, with Mastering Mixed Games' rhythm
@@ -5744,7 +5853,18 @@ window.TD = window.TD || {};
     catch (e) { console.error('Badugi AI error', e); return { type: opts.canCheck ? 'check' : 'fold' }; }
   }
   function decideDrawSafe(game, p) {
-    try { return decideDraw(game, p); }
+    try {
+      const r = decideDraw(game, p);
+      // Greenstein, "Remembering discards": say so when my discards decided which suit (which paired card) to keep
+      if (r && r.discard && r.discard.length && r.discard.length < 4 && p.discards && p.discards.length && typeof r.reason === 'string') {
+        const keep = p.hand.filter((c, i) => !r.discard.includes(i)), d = 3 - game.drawRound;
+        const plain = TD.keepOptions(p.hand, d).find((x) => x.keep.length === keep.length);
+        if (plain && plain.mask === TD.keepOptions(p.hand, d, p.discards).find((x) => x.keep.length === keep.length).mask && plain.keep.some((c) => !keep.includes(c))) {
+          r.reason += ' Greenstein (remembering discards): of my paired cards I keep the one whose suit still has the most live outs, given the cards I threw (' + p.discards.map(TD.cardStr).join(' ') + ').';
+        }
+      }
+      return r;
+    }
     catch (e) { console.error('Badugi AI draw error', e); return { discard: keepIdx(p.hand, TD.policyKeep(p.hand, 3 - game.drawRound)) }; }
   }
   function normType(t, opts) {
@@ -5829,7 +5949,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 69;
+  TD.VERSION = 72;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
