@@ -3795,32 +3795,57 @@ window.TD = window.TD || {};
     return freezeRule(c);
   }
 
+  // Chase's freeze ranges (Nov 24): 2-7 the best 8-7s to the 8-6s, A-5 7-6-4-2-A to 7-5-3-2-A. Hands better than
+  // the range raise. 'rough' marks the weaker end (2-7 8-7-5-4, A-5 the 7-6s), which mixes its river bet after a freeze.
+  function printedRanks(hand) { return hand.map((x) => { const r = TD.trueRank(x); return A5 && r === 14 ? 1 : r; }).sort((a, b) => b - a); }
+  function lexCmp(a, b) { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; }
+  function freezeClass(c) {
+    if (!c.made || c.hn.cat !== 0) return null;
+    const r = printedRanks(c.hand);
+    if (A5) {
+      if (lexCmp(r, [7, 5, 3, 2, 1]) < 0) return 'better';
+      if (lexCmp(r, [7, 6, 4, 2, 1]) <= 0) return r[1] === 6 ? 'rough' : 'freeze';
+      return null;
+    }
+    if (r[0] <= 7 || (r[0] === 8 && r[1] <= 5)) return 'better';
+    // Chase (Nov 24, his notes): a good player puts a freeze on "something like 9-5-4-3-2 to 8-6-4-3-2"
+    if (r[0] === 8 && r[1] === 6) return 'freeze';
+    if (r[0] === 8 && r[1] === 7) return r[2] === 6 || (r[2] === 5 && r[3] === 4) ? 'rough' : 'freeze';
+    if (r[0] === 9 && r[1] === 5 && r[2] === 4) return 'rough';
+    return null;
+  }
+  const FREEZE_RANGE = A5 ? mk('7-6-4-2-A') + ' to ' + mk('7-5-3-2-A') : '9-5-4-3-2 to 8-6-4-3-2';
+
   function freezeRule(c) {
     const { hn, ip, toCall, made, nextDraw } = c;
     if (!(ip && toCall > 0 && c.lvl === 1 && made && nextDraw === 0)) return null;
-    const rs = c.hand.map(TD.rankOf).sort((a, b) => b - a);
-    const strong = hn.top <= 7 || (hn.top === 8 && hn.second <= 5);
-    // "decent-to-strong eights" / roughly 9-5-4-3-2 to 8-6-4-3-2 (not the rough 8-7-6s)
-    const decent = (rs[0] === 8 && rs[1] === 6) || (rs[0] === 8 && rs[1] === 7 && rs[2] <= 5) || (rs[0] === 9 && rs[1] <= 5);
-    if (strong && c.canRaise) return act('raise', 'Pat ' + mk(hn.short) + ' — a premium hand: raise for value.', 'value');
-    if (decent) {
-      // ToP ch. 8: disguising a hand gains little multiway or against players who don't fold (no freeze there)
-      if (c.N > 1) return null;
-      // Freezing only works with one draw left: the flat call makes him think I'll draw, he pats a worse hand
-      // and is drawing dead. With two draws to come he still gets another draw to break, so no freeze —
-      // raise to charge his draw (and leave a pat bettor to the general rules)
-      if (c.st < 2) {
-        if (c.oppLast > 0 && c.canRaise) return act('raise', 'Raise with ' + mk(hn.short) + ' — no freeze with two draws to come. Freezing only works on the last draw, where a worse pat hand stays pat and is drawing dead; here he would still get another draw to break and outdraw me, so charge his draw instead.', 'value');
-        return null;
-      }
-      // MMG: with one draw left, in position with a very good but beatable hand (8-7-4-3-2, 8-6-5-4-3) and a pat
-      // opponent betting, just call: a raise lets him break and draw; calling keeps him pat, and dead when I'm ahead
-      if (c.st === 2 && c.oppLast === 0 && rs[0] === 8 && rs[1] >= 6) return act('call', 'Just call with ' + mk(hn.short) + ' — he is pat and bets. MMG: with a very good but beatable hand in position, don\'t raise and give him the chance to break; if I\'m ahead, he stays drawing dead.', 'freeze');
-      if (isCallingStation(c.game, c.opp) && c.canRaise) return act('raise', 'Raise ' + mk(hn.short) + ' for value instead of freezing. ToP (Sklansky): don\'t slowplay against a player who rarely folds a fair hand — bet decent hands for value.', 'value');
-      if (R() < 0.75) return act('call', 'Freeze: flat call in position with ' + mk(hn.short) + ' — a good, but not best, pat hand. Notes: freezing represents a narrow range (roughly 9-5-4-3-2 to 8-6-4-3-2), so expect a leveling war on the river.', 'freeze');
-      if (c.canRaise) return act('raise', 'Raise with ' + mk(hn.short) + ' (mixed with freezing for balance).', 'balance');
+    const fz = freezeClass(c);
+    if (fz === 'better' && c.canRaise) return act('raise', 'Pat ' + mk(hn.short) + ' — a premium hand: raise for value.', 'value');
+    if (fz !== 'freeze' && fz !== 'rough') return null;
+    // ToP ch. 8: disguising a hand gains little multiway or against players who don't fold (no freeze there)
+    if (c.N > 1) return null;
+    // Freezing only works with one draw left: the flat call makes him think I'll draw, he pats a worse hand
+    // and is drawing dead. With two draws to come he still gets another draw to break, so no freeze —
+    // raise to charge his draw (and leave a pat bettor to the general rules)
+    if (c.st < 2) {
+      if (c.oppLast > 0 && c.canRaise) return act('raise', 'Raise with ' + mk(hn.short) + ' — no freeze with two draws to come. Freezing only works on the last draw, where a worse pat hand stays pat and is drawing dead; here he would still get another draw to break and outdraw me, so charge his draw instead.', 'value');
+      return null;
     }
-    return null;
+    if (c.st !== 2) return null;
+    // Chase's rule (Nov 24), 2-7: against a player who stood pat on the 2nd draw, calling to stand pat isn't a freeze.
+    // Whether 9-5-4-3-2 to 8-6-4-3-2 raises depends on the situation: raise when the hand has enough robust equity
+    // against the pat hands that would continue (sometimes even 8-7-4-3-2 or 8-7-5-3-2), otherwise just call.
+    if (!A5 && c.oppLast === 0) {
+      const b = betEV(c);
+      // a raise into a pat hand can be 3-bet and shows him I'm pat, so it needs a clear edge: about 76% against the
+      // hands that would continue, mixed near that line
+      if (c.canRaise && b.gain > 0 && R() < sig((b.Ec - 0.76) / 0.025)) return act('raise', 'Raise with ' + mk(hn.short) + ' — he stood pat on the 2nd draw and bets. Chase\'s rule: against a pat hand, raise when the hand has enough robust equity against the pat hands that would continue, and that depends on the situation; here it does.', 'robust');
+      return act('call', 'Just call with ' + mk(hn.short) + ', planning to stand pat — he stood pat on the 2nd draw and bets. Chase\'s rule: against a pat hand, just call when the hand isn\'t strong enough to raise; here it doesn\'t have enough robust equity against the pat hands that would continue. (This isn\'t a freeze; freezing is against a player who drew on the 2nd draw.)' + robustTxt(b, 1).replace('Before the river a bet builds', 'Before the river a raise would build'), 'standard');
+    }
+    if (isCallingStation(c.game, c.opp) && c.canRaise) return act('raise', 'Raise ' + mk(hn.short) + ' for value instead of freezing. ToP (Sklansky): don\'t slowplay against a player who rarely folds a fair hand — bet decent hands for value.', 'value');
+    // Chase's rule (Nov 24): the freezing range is raised half the time and frozen half the time
+    if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with ' + mk(hn.short) + (c.oppLast === 0 ? ' — he is pat and bets' : '') + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break (MMG). Chase\'s rule: freeze with ' + FREEZE_RANGE + ', mixed half and half with raising.', 'freeze');
+    return act('raise', 'Raise with ' + mk(hn.short) + '. Chase\'s rule: the hands I freeze with (' + FREEZE_RANGE + ') raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
   }
 
   function turnRules(c) {
@@ -4151,6 +4176,22 @@ window.TD = window.TD || {};
       return act('fold', 'He drew and bets into my pat ' + mk(hn.long) + '; fold.');
     }
     // both pat
+    // Chase's rule (Nov 24, hand #7): after a freeze play (he bet after the 2nd draw, I just called with a pat
+    // hand in position, then we both stood pat), the point was to get him to stand pat drawing dead, so when he
+    // checks the river I bet almost every hand I froze with. The rougher ones check back about half the time,
+    // so he can't count on a check-raise getting in.
+    if (toCall === 0 && c.ip && c.st === 3 && mePat && oppPat && calledHimLastStreet(c) === 'bet') {
+      const fz = freezeClass(c);
+      if (fz) {
+        const patLine = !A5 && c.opp.draws[1] === 0;
+        const why = patLine
+          ? 'He stood pat on the 2nd draw and bet, I just called with ' + mk(hn.short) + ' in position (not strong enough to raise a pat hand), and we both stood pat. Chase\'s rule (hand #7): when he checks the river, bet almost every hand I played this way'
+          : 'I froze him: he bet after the 2nd draw, I just called with ' + mk(hn.short) + ' in position, and we both stood pat. Chase\'s rule: the point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
+        if (fz !== 'rough') return act('bet', why + '.', 'value');
+        if (R() < 0.5) return act('bet', why + '. ' + mk(hn.short) + ' is one of the rougher hands I play this way, which check back about half the time so he can\'t count on a check-raise working; this time I bet.', 'value');
+        return act('check', 'Check back ' + mk(hn.short) + ' (mixed, about half the time). ' + why + ', but the rougher ones like this check back about half the time, so he can\'t count on a check-raise working.', 'balance');
+      }
+    }
     if (toCall > 0 && c.canRaise && c.lvl === 1 && strong && c.E > 0.6) return act('raise', 'Both pat: raise with ' + mk(hn.short) + ' (strong eight or seven).', 'value');
     // facing one bet in a big pot with a made eight or better. MDF binds only if he led out of position into
     // the stronger range; against a bettor with position and the stronger range the call rests on the price
@@ -5714,6 +5755,13 @@ window.TD = window.TD || {};
     if (c.drawing && c.nextDraw >= 2 && ((c.st === 1 && myLast >= 2) || c.st === 2)) {
       return act('fold', 'Fold, ' + c.txt + ' — Mastering Mixed Games: ' + (c.st === 1 ? 'between the first and second draw, fold all unimproved two-card draws.' : 'never draw two at the third draw.'));
     }
+    // Chase's rule (Nov 24): freeze with a pat 8 or 9 badugi. In position after the 2nd draw, facing one bet heads-up,
+    // just call half the time (he thinks I'm drawing, so a worse pat hand stays pat, drawing dead) and raise half the time.
+    if (c.st === 2 && c.ip && c.N === 1 && c.lvl === 1 && c.made && !c.drawing && c.hn.top >= lv('8') && c.hn.top <= lv('9')) {
+      if (isCallingStation(game, c.opp) && c.canRaise) return act('raise', 'Raise the pat ' + c.txt + ' for value instead of freezing: this player rarely folds a fair hand.', 'value');
+      if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with the pat ' + c.txt + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break. Chase\'s rule: freeze with a pat 8 or 9 badugi, mixed half and half with raising.', 'freeze');
+      return act('raise', 'Raise with the pat ' + c.txt + '. Chase\'s rule: the hands I freeze with (pat 8 and 9 badugis) raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
+    }
     const raiseThr = c.N === 1 ? 0.62 : fair + 0.22;
     if (c.canRaise && c.made && !c.drawing && c.E >= raiseThr) return act('raise', 'Raise with the pat ' + c.txt + ' — well ahead of the betting range.', 'value');
     // (no check-raising with draws: MMG — out of position, check-call the one-card draws)
@@ -5793,11 +5841,27 @@ window.TD = window.TD || {};
   // value bets); the share of my missed draws that bluff is a different, smaller number, because most of the range missed.
   const gtoTxt = (X, what, f, act) => 'Bluff at GTO frequency so the opponent is indifferent to bluff-catching. The chance we are bluffing is exactly the same as the odds the opponent is getting to call: at ' + X.toFixed(1) + '-to-1, 1 bluff per ' + X.toFixed(1) + ' value ' + what + 's, so ' + Math.round(100 / (X + 1)) + '% of my ' + what + 's here are bluffs. Most of my draws missed, so that takes only about ' + Math.max(1, Math.round(f * 100)) + '% of my missed draws' + (act === 'bluff' ? ', and this is one of them.' : ', and this one ' + act + '.');
   const patBluffOK = (c, p) => c.N === 1 && p.draws[2] > 0 && c.opp.draws[2] === 0 && !c.opp.allIn && !isCallingStation(c.game, c.opp);
+  // after the 2nd draw, did he make the last bet (a bet, not a raise) and I just called it?
+  function frozeHim(game, p, opp) {
+    const acts = game.actions.filter((a) => a.street === 2 && (a.type === 'bet' || a.type === 'raise' || a.type === 'call'));
+    let last = -1;
+    acts.forEach((a, i) => { if (a.type === 'bet' || a.type === 'raise') last = i; });
+    return last >= 0 && acts[last].seat === opp.seat && acts[last].type === 'bet' && acts.slice(last + 1).some((a) => a.seat === p.seat && a.type === 'call');
+  }
   function river(c, fair) {
     const { game, p, hn } = c;
     const t = hn.top;
     const tier = c.made ? (t <= lv('5') ? 5 : t <= lv('6') ? 6 : t <= lv('7') ? 7 : 8) : 9;
     if (c.toCall === 0) {
+      // Chase's rule (Nov 24): after a freeze play (he bet after the 2nd draw, I just called with a pat badugi in position,
+      // then we both stood pat), bet almost every hand I froze with when he checks; the rougher ones (9 badugis) check
+      // back about half the time, so he can't count on a check-raise getting in.
+      if (c.made && c.N === 1 && c.ip && p.draws[2] === 0 && c.opp.draws[2] === 0 && t <= lv('9') && frozeHim(game, p, c.opp)) {
+        const why = 'I froze him: he bet after the 2nd draw, I just called with the pat ' + c.txt + ' in position, and we both stood pat. Chase\'s rule: the point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
+        if (t <= lv('8')) return act('bet', why + '.', 'value');
+        if (R() < 0.5) return act('bet', why + '. A 9 badugi is one of the rougher hands I freeze with, which check back about half the time so he can\'t count on a check-raise working; this time I bet.', 'value');
+        return act('check', 'Check back the ' + c.txt + ' (mixed, about half the time). ' + why + ', but the rougher ones like a 9 badugi check back about half the time, so he can\'t count on a check-raise working.', 'balance');
+      }
       if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. Chase\'s notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.', 'value');
       // Chase (Nov 21): out of position after we both drew on the last draw (1,1). He calls one bet with any badugi he
       // made and bluff-catches with good three-card hands, so bet every badugi for value, but keep a check-raising range
@@ -6014,7 +6078,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 76;
+  TD.VERSION = 79;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -7086,44 +7150,12 @@ window.TD = window.TD || {};
 
     /* ---------- between hands ---------- */
     async betweenHands(game) {
+      // Chase's ask: no Pause / Deal buttons between hands; the next hand deals at once
+      // (the loop still waits while a dialog such as History or Review is open)
       this.flushTopUp(game);
-      if (this.ff) return; // Zoom: deal the next hand immediately
-      const autoMs = 2600;
-      return new Promise((resolve) => {
-        let finished = false;
-        let t = null;
-        const go = () => { if (finished) return; finished = true; this.clearButtons(); clearTimeout(t); resolve(); };
-        // auto-deal never fires behind an open dialog: it waits, then starts a fresh countdown once it closes
-        const autoGo = () => {
-          if (finished) return;
-          if (this.dialogOpen()) { this.whenNoDialog().then(() => { if (!finished) setAuto(); }); return; }
-          go();
-        };
-        const box = $('#action-btns');
-        box.innerHTML = '';
-        $('#pre-actions').innerHTML = '';
-        const pause = document.createElement('button');
-        pause.className = 'abtn neutral';
-        const b = document.createElement('button');
-        b.className = 'abtn deal';
-        b.innerHTML = 'Deal<small>next hand</small><kbd>Space</kbd>';
-        b.onclick = go;
-        box.appendChild(pause); box.appendChild(b);
-        const setAuto = () => {
-          clearTimeout(t);
-          if (this.settings.autoDeal) {
-            t = setTimeout(autoGo, Math.max(1100, autoMs * this.f));
-            pause.innerHTML = 'Pause<small>stop auto-deal</small>';
-            $('#action-msg').textContent = 'Next hand deals automatically…';
-          } else {
-            pause.innerHTML = 'Auto-deal<small>is off</small>';
-            $('#action-msg').textContent = 'Tap Deal when ready.';
-          }
-        };
-        pause.onclick = () => { this.settings.autoDeal = !this.settings.autoDeal; this.saveSettings(); setAuto(); };
-        setAuto();
-        this.keyHandler = (k) => { if (k === ' ' || k === 'enter' || k === 'd') go(); };
-      });
+      this.clearButtons();
+      $('#pre-actions').innerHTML = '';
+      $('#action-msg').textContent = '';
     }
 
     flushTopUp(game) {
@@ -7369,7 +7401,6 @@ window.TD = window.TD || {};
         '<div class="setting' + (s.zoom !== false || !s.everySeat ? ' off' : '') + '" id="set-view"><div class="lbl">Seat view<small>Rotate: the table turns so the seat you\'re playing is at the bottom. Fixed: seats stay put, a glowing yellow ring marks the seat you\'re playing and its cards show at the bottom. Changes apply from the next hand.</small></div><div class="seg" id="set-seatview">' +
         [['rotate', 'Rotate'], ['fixed', 'Fixed']].map(([k, l]) => '<button data-k="' + k + '" class="' + (s.seatView === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>' +
         '<div class="setting"><div class="lbl">God mode<small>See every player\'s cards face up, and the cards each one throws away. The computer players still see only their own cards, and these hands don\'t teach them about your play. Works in every game and with Play every seat (all hands stay up, no hiding between turns). Applies at once; shortcut G.</small></div>' + sw('godMode', !!s.godMode) + '</div>' +
-        '<div class="setting"><div class="lbl">Auto-deal next hand</div>' + sw('autoDeal', s.autoDeal) + '</div>' +
         '<div class="setting"><div class="lbl">Auto-muck losing hands<small>At showdown, muck when beaten by a hand already shown</small></div>' + sw('autoMuck', s.autoMuck) + '</div>' +
         '<div class="setting"><div class="lbl">Coach my decisions<small>Compare your actions and draws with the AI strategy (in Review)</small></div>' + sw('coach', s.coach !== false) + '</div>' +
         '<div class="setting"><div class="lbl">Sound effects</div>' + sw('sound', s.sound) + '</div>' +
