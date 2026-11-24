@@ -3579,6 +3579,11 @@ window.TD = window.TD || {};
         r = act('raise', '3-bet the check-raise with ' + mk(hn.short) + ', a two-way hand (pat, or break to ' + hstr(tw.keep) + '). Chase\'s notes: rather than calling and patting behind, 3-bet; if he calls and draws I pat behind him, and if he 4-bets I call and break for two chances at the draw.', 'two-way');
       }
     }
+    // Chase (Nov 24): standard play after equal draws (both drew one or both drew two) is to check when
+    // unimproved, in or out of position (before the river)
+    if (!r && c.opp && c.toCall === 0 && st <= 2 && c.myLast > 0 && c.oppLast === c.myLast && c.drawing && !c.improved) {
+      r = act('check', 'Equal draws and I didn\'t improve: check' + (c.ip ? ' back' : '') + ' (drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) + '). Chase\'s rule: standard play is to check unimproved after an even draw, in or out of position' + (c.ip ? '' : ', even with the betting lead') + '. MMG: unimproved, you are barely ahead at best, and ' + (c.ip ? 'getting check-raised would be a disaster.' : 'if he improved a bet gets raised.'), 'standard');
+    }
     if (!r) {
       if (st === 1) r = flopRules(c);
       else if (st === 2) r = turnRules(c);
@@ -6009,7 +6014,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 74;
+  TD.VERSION = 76;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
