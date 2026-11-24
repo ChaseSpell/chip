@@ -4917,6 +4917,11 @@ window.TD = window.TD || {};
     }
     return false;
   }
+  // blinds facing a single open with an unbreakable pat king badugi: the share of the time it 3-bets (else it folds).
+  // From simulations with these bots (Nov 24; the blind 3-bets and stands pat, vs folding): against an LJ open the
+  // 3-bet loses about 1.6 small bets, against the HJ about 0.3 (close to even, so a small mix), against the button
+  // it wins about 1 small bet. The opener's range gets wider and has fewer better badugis the later it opens.
+  const KING_3BET = { LJ: 0, HJ: 0.25, CO: 1, BTN: 1, SB: 1 };
   const LOOSER = { LJ: 'HJ', HJ: 'CO', CO: 'BTN', BTN: 'WIDE', SB: 'WIDE' }; // the next seat's range: mixed in some of the time
   // facing a single raise
   // MMG: pat badugis never cold-call a raise (3-bet them); two-card draws never 3-bet; one-card draws are
@@ -5406,6 +5411,23 @@ window.TD = window.TD || {};
     if (c.level === 2) {
       const op = c.openerPos || 'CO';
       const multi = c.callers > 0;
+      // the blinds facing an open with a pat queen or king badugi: 3-bet or fold, never flat-call (a flat call out of
+      // position leaves the badugi to stand pat with reverse implied odds, or to break later into a rough draw).
+      // Queen badugis and better 3-bet planning to stand pat. A king badugi with a strong three-card hand under it
+      // (a six or better) 3-bets too. An unbreakable king badugi can only stand pat: against an early open it 3-bets
+      // some of the time (planning to stand pat) and folds the rest; with a cold-caller in already it folds.
+      if ((pos === 'BB' || pos === 'SB') && i.kind === 'pat' && i.t >= lv('Q') && opts.canRaise) {
+        const uTop = Math.max(...lvSortAscCards(i.keep).slice(0, 3).map(TD.rankOf));
+        const breakable = uTop <= lv('6');
+        const where = pos === 'BB' ? 'the big blind' : 'the small blind';
+        if (i.t === lv('Q') || breakable) return act('raise', '3-bet the ' + op + ' raise from ' + where + ' with ' + d + (breakable ? ', with ' + hstr(lvSortAscCards(i.keep).slice(0, 3)) + ' underneath to break to if a better pat hand shows up' : ', planning to stand pat') + '. From the blinds a pat queen or king badugi is 3-bet or folded, never flat-called: calling out of position leaves it to stand pat with reverse implied odds or to break later into a rough draw. Mastering Mixed Games: pat badugis never cold-call.', 'value');
+        const unbr = 'An unbreakable king badugi (no strong three-card hand under it) can only stand pat, so from the blinds it is 3-bet or folded, never flat-called and broken later.';
+        if (multi) return act('fold', 'Fold ' + d + ' from ' + where + ' to the ' + op + ' raise and the call. ' + unbr + ' Against an open and a cold-caller it is too often already beaten.');
+        const kr = op in KING_3BET ? KING_3BET[op] : 1;
+        const vsWhat = kr >= 0.999 ? ' Against a ' + op + ' open, a wide range with many draws, it 3-bets.' : ' Against ' + (op === 'LJ' ? 'an LJ' : 'an ' + op) + ' open, a tight range with many better badugis,';
+        if (R() < kr) return act('raise', '3-bet the ' + op + ' raise from ' + where + ' with ' + d + ', planning to stand pat. ' + unbr + (kr >= 0.999 ? vsWhat : vsWhat + ' it mixes: 3-bet ' + Math.round(kr * 100) + '% of the time, fold the rest.'), 'value');
+        return act('fold', 'Fold ' + d + ' from ' + where + ' to the ' + op + ' raise. ' + unbr + vsWhat + (kr <= 0.001 ? ' it folds.' : ' it mixes: fold ' + Math.round((1 - kr) * 100) + '% of the time, 3-bet the rest.'));
+      }
       if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('K'))) {
         if (pos !== 'SB' && pos !== 'BB' && i.kind !== 'pat' && smooth(i) && R() < 0.12) return act('call', 'Flat the ' + op + ' raise with ' + d + ' in position — a strong hand in the calling range keeps it from being easy to play against (Mastering Mixed Games: one-card draws are 3-bet or sometimes cold-called).');
         return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Notes: 3-bet rather than flat a one-card draw).'), 'value');
@@ -5588,9 +5610,21 @@ window.TD = window.TD || {};
     const ok = cands.filter((x) => x.n <= max);
     return ok.length ? ok : cands;
   }
+  // A pat badugi I 3-bet (or 4-bet) before the first draw with no strong three-card hand under it (a seven or
+  // worse) was raised planning to stand pat: keep to that plan at every draw. Breaking it later (K-J-T-6 to J-T-6)
+  // leaves a rough three-card draw hardly better than the badugi it broke.
+  function patPlanned(game, p) {
+    if (TD.handName(p.hand).cat !== 0 || p.draws.some((n) => n > 0)) return false;
+    if (!game.actions.some((a) => a.street === 0 && a.seat === p.seat && a.type === 'raise' && a.level >= 3)) return false;
+    return Math.max(...lvSortAscCards(p.hand).slice(0, 3).map(TD.rankOf)) > lv('6');
+  }
   function planNextDraw(game, p, st) {
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
+    if (patPlanned(game, p)) {
+      const pc = TD.keepOptions(p.hand, 3 - st, p.discards).find((x) => x.n === 0);
+      if (pc) return { k: st, key: keyOf(pc.keep), altKey: null, keep: pc.keep, alt: null, n: 0, oppDraws: Object.fromEntries(opps.map((o) => [o.seat, o.draws.length])) };
+    }
     let cands = badugiKeeps(game, p, TD.keepOptions(p.hand, 3 - st, p.discards));
     const fr = st === 0 ? firstDrawRough(cands, p.bot) : null;
     if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
@@ -5632,6 +5666,11 @@ window.TD = window.TD || {};
         mem.snow = true; mem.snowSince = k + 1;
         return { discard: [], reason: 'Snow: stand pat with ' + hstr(hand) + '. Heads-up in position, ' + nameOf(o) + ' drew ' + oDraw + ' and I have been betting; I hold or threw ' + seenTxt(p) + ' he needs, so a pat hand is believable and his draw is harder. Mastering Mixed Games: pat the second draw so the snow tells a story.', tag: 'snow' };
       }
+    }
+    // a pat badugi I 3-bet or 4-bet predraw with nothing strong under it: stand pat, as planned when I raised
+    if (patPlanned(game, p) && cands.some((x) => x.n === 0)) {
+      mem.drawPlan = null;
+      return { discard: [], reason: WHICH[k] + ' draw: stand pat with ' + hn.short + ', as planned when I re-raised before the first draw. With no strong three-card hand under it, breaking it would leave a rough three-card draw hardly better than the badugi itself.', tag: '' };
     }
     // Chase (Nov 23): a queen or king badugi I called a raise and 3-bet with from the blinds, planning to break it
     if (k === 0 && mem.breakFirst) {
@@ -6074,7 +6113,7 @@ window.TD = window.TD || {};
       // so value bet strong three-card hands more with the lead and less without it (a bet without it reads as a badugi)
       const triBet = hn.cat === 1 ? Math.min(0.95, (t <= lv('3') ? 0.8 : t <= lv('4') ? 0.6 : t <= lv('5') ? 0.3 : 0) * (hasLead ? 1.2 : 0.6)) : 0;
       if (c.N === 1 && triBet > 0 && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < triBet) {
-        return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead, since a bet can look like a three-card value bet and weaker three-card hands call' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
+        return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
       }
       if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
       // Chase (Nov 23): leading into, or betting behind the check of, a player who stood pat on the last draw after I
@@ -6259,7 +6298,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 85;
+  TD.VERSION = 87;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
