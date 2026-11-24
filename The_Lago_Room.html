@@ -1116,6 +1116,14 @@ window.TD = window.TD || {};
     for (let b = 0; b < 13; b++) if (m & (1 << b)) best3 = Math.max(best3, PSCORE[m ^ (1 << b)]);
     if (PSCORE[m] >= best3) PSCORE[m] = Math.max(1, best3 - 1);
   }
+  // Chase (Nov 24): we never draw one to a ten or a nine on the first draw, so predraw a hand like T-9-6-2-2
+  // is never read as a T-9-6-2 one-card draw: it plays as the best draw under it (here three cards to 6-2).
+  if (!A5) for (let m = 1; m < 8192; m++) {
+    if (POP[m] !== 4 || 31 - Math.clz32(m) + 2 < 9) continue;
+    let best = 0;
+    for (let sub = (m - 1) & m; sub > 0; sub = (sub - 1) & m) if (POP[sub] >= 2 && POP[sub] <= 3) best = Math.max(best, PSCORE[sub]);
+    if (PSCORE[m] >= best) PSCORE[m] = Math.max(1, best - 1);
+  }
   /* A-5 predraw scores: Super System 2's A-5 section (notes/a5-ss2-notes.md, sent by the user
      2026-11-19), written on the same score scale as the 2-7 notes so the position ranges carry over.
      - One-card draws, strongest first: A-2-3-4 ... 2-3-5-6. No one-card draws to a seven: with
@@ -6001,7 +6009,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 73;
+  TD.VERSION = 74;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
