@@ -1839,7 +1839,10 @@ window.TD = window.TD || {};
       if (!res || !res.top) return;
       const ut = TD.AI.normType(act.type, opts);
       const pu = res.dist[ut] || 0;
-      const verdict = (ut === res.top || pu >= 0.5) ? 'agree' : pu >= 0.12 ? 'mixed' : 'differs';
+      // (Nov 24, A-5 report) "Same as AI" only when the AI's main action is the user's and it is close to pure;
+      // when the AI mixes and the user's action is part of the mix, the note says so and shows the mix
+      const verdict = ut === res.top && pu >= 0.8 ? 'agree' : pu >= 0.12 ? 'mixed' : 'differs';
+      const alt = ut === res.top ? Object.keys(res.dist).filter((k) => k !== ut).sort((a, b) => res.dist[b] - res.dist[a])[0] : null;
       const capping = opts.betLevel + 1 >= CAP_BETS;
       const label = (t) => (t === 'raise' ? (opts.isBet ? 'bet' : capping ? 'cap' : 'raise') : t);
       const dist = Object.keys(res.dist).sort((a, b) => res.dist[b] - res.dist[a]).map((k) => label(k) + ' ' + Math.round(res.dist[k] * 100) + '%').join(' · ');
@@ -1847,6 +1850,7 @@ window.TD = window.TD || {};
         seat: p.seat, street: this.street, phase: 'bet', user: label(ut), ai: label(res.top), dist, verdict,
         why: res.samples[res.top] ? res.samples[res.top].reason : '',
         userWhy: ut !== res.top && res.samples[ut] ? res.samples[ut].reason : '',
+        alt: alt && verdict === 'mixed' ? label(alt) : '', altWhy: alt && verdict === 'mixed' && res.samples[alt] ? res.samples[alt].reason : '',
         eq: res.eq, potOdds: opts.toCall ? opts.toCall / (opts.pot + opts.toCall) : 0, toCall: opts.toCall
       });
       this.coachStats[verdict]++;
@@ -2837,7 +2841,7 @@ window.TD = window.TD || {};
         // ToP ch. 4: big blind defence follows the ante structure too (the openers' ranges and the price both move)
         if (c.openerPos === 'SB' && c.opps === 1) {
           const s48 = anteShift(game, 'BB', 48);
-          if ((agg || (info.kind === 'one' && mem.flexAgg !== false && sc >= 48 + s48)) && opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet — Chase\'s notes: when continuing with a one-card draw facing an open, always 3-bet rather than flat.', 'value');
+          if ((agg || (info.kind === 'one' && mem.flexAgg !== false && sc >= 48 + s48)) && opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet — Notes: when continuing with a one-card draw facing an open, always 3-bet rather than flat.', 'value');
           if (sc >= 48 + s48) return act('call', 'BB vs SB heads-up with ' + d + '. Notes: call one more bet with anything remotely playable (even a 3-card draw to 3-4) — position plus 3-to-1 odds.' + (sc < 48 ? anteNote(game, 'BB', s48) : ''));
           return act('fold', 'BB vs SB: ' + d + ' is not even remotely playable.' + (sc >= 48 ? anteNote(game, 'BB', s48) : ''));
         }
@@ -2854,7 +2858,7 @@ window.TD = window.TD || {};
         // some premium ones (so a flat call doesn't announce a weak draw)
         if (['LJ', 'HJ'].includes(c.openerPos) && info.kind === 'one' && mem.flexAgg !== false && (agg || inBB) && R() < 0.35) {
           mem.rastFlat = true;
-          return act('call', 'BB vs the ' + c.openerPos + ' open with ' + d + ': flat-call and draw one (mixed). Chase\'s notes (Brian Rast): against an early-position open, the big blind keeps a balanced range of flat-called one-card draws, including some premium ones, instead of 3-betting all of them.', 'balance');
+          return act('call', 'BB vs the ' + c.openerPos + ' open with ' + d + ': flat-call and draw one (mixed). Notes (Brian Rast): against an early-position open, the big blind keeps a balanced range of flat-called one-card draws, including some premium ones, instead of 3-betting all of them.', 'balance');
         }
         if ((agg || (oneOrPat && inBB)) && opts.canRaise) return act('raise', 'BB with ' + d + ': 3-bet. ' + (agg ? aggWhy : 'MMG: from the blinds, 3-bet the one-card draws and pat hands you play rather than flat-calling them.') + bbNote, 'value');
         // SS2: with a really strong draw in the BB against a late-position raiser, punish him by reraising — kept
@@ -3076,6 +3080,7 @@ window.TD = window.TD || {};
     const raises = acts.filter((a) => a.type === 'raise' || a.type === 'bet');
     return raises.some((a, i) => a.seat === o.seat && (i > 0 || ['LJ', 'HJ'].includes(game.posName(o.seat))));
   }
+  const cardsKey = (cs) => cs.slice().sort((a, b) => a - b).join(',');
   function decideDraw(game, p) {
     const k = game.drawRound, d = 3 - k;
     const hand = p.hand, mem = p.bot;
@@ -3142,9 +3147,9 @@ window.TD = window.TD || {};
     if (k === 1 && (mem.twoWayBreak || mem.twoWayPat)) {
       const brk = cands.find((c) => c.n === 1), pat = cands.find((c) => c.n === 0);
       const o = opps.length === 1 ? opps[0] : null;
-      if (mem.twoWayBreak && brk) { mem.twoWayBreak = false; mem.breakNext = false; return { discard: keepIdx(hand, brk.keep), reason: '2nd draw: break to ' + hstr(brk.keep) + ' as planned — he 4-bet my 3-bet, so my rough pat hand is likely behind, and the draw gets two chances. Chase\'s notes: with a two-way hand, if he 4-bets, call and break.', tag: 'two-way' }; }
+      if (mem.twoWayBreak && brk) { mem.twoWayBreak = false; mem.breakNext = false; return { discard: keepIdx(hand, brk.keep), reason: '2nd draw: break to ' + hstr(brk.keep) + ' as planned — he 4-bet my 3-bet, so my rough pat hand is likely behind, and the draw gets two chances. Notes: with a two-way hand, if he 4-bets, call and break.', tag: 'two-way' }; }
       mem.twoWayPat = false;
-      if (o && pat && o.draws.length > k && o.draws[k] > 0) return { discard: [], reason: '2nd draw: stand pat with ' + mk(hn.short) + ' behind his draw, as planned. Chase\'s notes: after 3-betting his check-raise with a two-way hand, pat behind him if he calls and draws.', tag: 'two-way' };
+      if (o && pat && o.draws.length > k && o.draws[k] > 0) return { discard: [], reason: '2nd draw: stand pat with ' + mk(hn.short) + ' behind his draw, as planned. Notes: after 3-betting his check-raise with a two-way hand, pat behind him if he calls and draws.', tag: 'two-way' };
     }
     // first draw: no one-card draws to a nine or worse (2-7, Chase's rule); A-5 (SS2): none to a seven or worse.
     // With three draws to come, a two-card draw makes a better hand than that too often.
@@ -3170,12 +3175,12 @@ window.TD = window.TD || {};
           ctxTxt = mem.keepSixCtx === 'multi' ? 'This pot is multiway, so I draw one less often here.'
             : mem.keepSixCtx === 'strong' ? 'Heads-up against a strong range (an early open or a reraise), so I draw one about half the time.'
               : 'Heads-up against a relatively weaker range, so I usually draw one.';
-          why = ' Chase\'s rule: 7-5-4-3 is a stronger one-card draw than the deuce-less seven draws with a six, so it draws one more often than they do; still more often heads-up against weaker ranges, and less often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
+          why = ' 7-5-4-3 is a stronger one-card draw than the deuce-less seven draws with a six, so it draws one more often than they do; still more often heads-up against weaker ranges, and less often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
         } else {
           ctxTxt = mem.keepSixCtx === 'multi' ? 'This pot is multiway, so I usually pitch the six and draw two.'
             : mem.keepSixCtx === 'strong' ? 'Heads-up against a strong range (an early open or a reraise), so I usually pitch the six and draw two.'
               : 'Heads-up against a relatively weaker range, so I usually keep the six and draw one.';
-          why = ' Chase\'s rule: with a deuce-less seven draw that holds a six, keep the six and draw one more often heads-up against weaker ranges, and pitch the six and draw two more often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
+          why = ' With a deuce-less seven draw that holds a six, keep the six and draw one more often heads-up against weaker ranges, and pitch the six and draw two more often multiway or against strong ranges, where making smooth hands matters more. ' + ctxTxt;
         }
         if (mem.keepSix) return { discard: keepIdx(hand, six.keep), reason: '1st draw: draw 1 to ' + hstr(six.keep) + (is543 ? '.' : ', keeping the six.') + why, tag: '' };
         cands = cands.filter((c) => !weak.includes(c));
@@ -3189,7 +3194,7 @@ window.TD = window.TD || {};
           const top = Math.max(...contender.keep.map(TD.rankOf));
           if (!A5 && top <= 7) { const twos = cands.filter((c) => c.n === 2); if (twos.length) cands = twos; } // deuce-less seven: draw two (Chase)
           firstNote = A5 ? mk(' SS2: no one-card draws to a seven or worse on the first draw (with A-2-3-7, draw two to A-2-3), so not drawing one to ') + hstr(contender.keep) + mk('.')
-            : top <= 7 ? ' Not drawing one to ' + hstr(contender.keep) + ': with no deuce it is a weak draw. Only a deuce makes a good seven, and the missing card makes a straight. Chase\'s rule (SS2: the deuce is the key card, and most hands you play should contain one): draw two, hoping to catch a deuce or make a hand worth patting.'
+            : top <= 7 ? ' Not drawing one to ' + hstr(contender.keep) + ': with no deuce it is a weak draw. Only a deuce makes a good seven, and the missing card makes a straight. SS2: the deuce is the key card, and most hands you play should contain one. So draw two, hoping to catch a deuce or make a hand worth patting.'
             : ' Not drawing one to ' + hstr(contender.keep) + ': on the first draw, drawing one to a ' + (top === 9 ? 'nine is a marginal play at best' : TD.RANK_WORD[top].toLowerCase() + ' is never right') + '. With three draws to come, the two-card draw ends up with a better hand too often.';
         }
       }
@@ -3202,7 +3207,7 @@ window.TD = window.TD || {};
       cands = cands.filter((c) => !rough.includes(c));
       if (wasTop) {
         const r0 = wasTop, r = r0.keep.map(TD.rankOf).sort((a, b) => b - a);
-        firstNote = ' Not drawing one to ' + hstr(r0.keep) + '. Chase\'s rule: never draw one to a nine or worse on the second draw. ' + (r[0] === 9 && r[1] === 8 ? 'A 9-8 draw is too rough' : r[0] >= 10 ? 'A ' + TD.RANK_WORD[r[0]].toLowerCase() + ' draw is too rough' : 'Drawing two to ' + hstr(cands.find((c) => c.n === 2).keep) + ' has the implied odds of making a wheel or another very strong hand') + ', so throw the ' + TD.RANK_WORD[r[0]].toLowerCase() + ' and draw two again.';
+        firstNote = ' Not drawing one to ' + hstr(r0.keep) + '. Never draw one to a nine or worse on the second draw. ' + (r[0] === 9 && r[1] === 8 ? 'A 9-8 draw is too rough' : r[0] >= 10 ? 'A ' + TD.RANK_WORD[r[0]].toLowerCase() + ' draw is too rough' : 'Drawing two to ' + hstr(cands.find((c) => c.n === 2).keep) + ' has the implied odds of making a wheel or another very strong hand') + ', so throw the ' + TD.RANK_WORD[r[0]].toLowerCase() + ' and draw two again.';
       }
     }
     let choice = cands[0];
@@ -3286,6 +3291,22 @@ window.TD = window.TD || {};
       }
     }
 
+    // keep to the draw the last betting decision was based on (it said "call, drawing 2 to 6-3-A", so draw two to
+    // 6-3-A), unless an opponent drew in front of me since, which is new information
+    const plan = mem.drawPlan && mem.drawPlan.round === k ? mem.drawPlan : null;
+    mem.drawPlan = null;
+    let planNote = '';
+    if (!reason && plan) {
+      const planned = cands.find((c) => cardsKey(c.keep) === plan.key);
+      const inFront = opps.filter((o) => o.draws.length > k);
+      if (planned && !inFront.length) {
+        choice = planned;
+        reason = buildDrawReason(game, p, planned, null, hand, hn, k, opps, ip).replace(/\.$/, '') + ', as planned when I ' + plan.act + ' (the draw that decision was based on).';
+      } else if (inFront.length) {
+        const who = inFront.map((o) => (o.isHuman ? 'you' : o.name) + ' drew ' + o.draws[k]).join(' and ');
+        planNote = ' I planned to ' + (plan.n ? 'draw ' + plan.n + ' to ' + hstr(plan.keep) : 'stand pat') + ' when I ' + plan.act + ', but ' + who + ' in front of me, which changes it.';
+      }
+    }
     if (!reason) {
       const top = cands[0], sec = cands[1];
       const closeGap = k === 2 ? 0.14 : 0.09;
@@ -3328,7 +3349,8 @@ window.TD = window.TD || {};
       const plainKeep = TD.cardsForMask(hand, choice.plainMask);
       deadNote = ' Dead cards: counting the cards I have already thrown (they can\'t come), ' + hstr(choice.keep) + ' has more live outs than ' + hstr(plainKeep) + '.';
     }
-    return { discard: keepIdx(hand, choice.keep), reason: reason + (choice.n >= 2 ? firstNote : '') + deadNote, tag };
+    if (planNote && plan && cardsKey(choice.keep) === plan.key) planNote = '';
+    return { discard: keepIdx(hand, choice.keep), reason: reason + (choice.n >= 2 ? firstNote : '') + deadNote + planNote, tag };
   }
 
   function buildDrawReason(game, p, choice, alt, hand, hn, k, opps, ip) {
@@ -3583,7 +3605,7 @@ window.TD = window.TD || {};
     if (c.st < 1 || c.dRem <= 0 || c.nextDraw < 3 || c.p.bot.snow || r.tag === 'snow') return r;
     const which = c.dRem === 2 ? '2nd' : '3rd';
     const plan = 'I would have to draw ' + c.nextDraw + ' on the ' + which + ' draw (keeping ' + hstr(c.keepNow) + ')';
-    const rule = 'Chase\'s rule: never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
+    const rule = 'Never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
     if (c.toCall > 0 && (r.type === 'call' || r.type === 'raise')) return act('fold', 'Fold — ' + plan + '. ' + rule, 'standard');
     if (c.toCall === 0 && r.type === 'bet') return act('check', 'Check — ' + plan + ', and a bet would only get called or raised. ' + rule, 'standard');
     return r;
@@ -3666,16 +3688,16 @@ window.TD = window.TD || {};
       const tw = twoWayHand(hand, dRem);
       if (tw && mem.twoWay3b === st && c.lvl >= 4) {
         mem.twoWay3b = null; mem.twoWayPat = false; mem.breakNext = true; mem.twoWayBreak = true;
-        r = act('call', 'He 4-bet my 3-bet: call, and break to ' + hstr(tw.keep) + ' on the next draw — two chances at the draw. Chase\'s notes: with a two-way hand, if he 4-bets, call and break.', 'two-way');
+        r = act('call', 'He 4-bet my 3-bet: call, and break to ' + hstr(tw.keep) + ' on the next draw — two chances at the draw. Notes: with a two-way hand, if he 4-bets, call and break.', 'two-way');
       } else if (tw && c.lvl === 2 && c.canRaise && mem.twoWay3b !== st && R() < 0.75) { // "consider": mostly, mixed with calling
         mem.twoWay3b = st; mem.twoWayPat = true;
-        r = act('raise', '3-bet the check-raise with ' + mk(hn.short) + ', a two-way hand (pat, or break to ' + hstr(tw.keep) + '). Chase\'s notes: rather than calling and patting behind, 3-bet; if he calls and draws I pat behind him, and if he 4-bets I call and break for two chances at the draw.', 'two-way');
+        r = act('raise', '3-bet the check-raise with ' + mk(hn.short) + ', a two-way hand (pat, or break to ' + hstr(tw.keep) + '). Notes: rather than calling and patting behind, 3-bet; if he calls and draws I pat behind him, and if he 4-bets I call and break for two chances at the draw.', 'two-way');
       }
     }
     // Chase (Nov 24): standard play after equal draws (both drew one or both drew two) is to check when
     // unimproved, in or out of position (before the river)
     if (!r && c.opp && c.toCall === 0 && st <= 2 && c.myLast > 0 && c.oppLast === c.myLast && c.drawing && !c.improved) {
-      r = act('check', 'Equal draws and I didn\'t improve: check' + (c.ip ? ' back' : '') + ' (drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) + '). Chase\'s rule: standard play is to check unimproved after an even draw, in or out of position' + (c.ip ? '' : ', even with the betting lead') + '. MMG: unimproved, you are barely ahead at best, and ' + (c.ip ? 'getting check-raised would be a disaster.' : 'if he improved a bet gets raised.'), 'standard');
+      r = act('check', 'Equal draws and I didn\'t improve: check' + (c.ip ? ' back' : '') + ' (drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) + '). Standard play is to check unimproved after an even draw, in or out of position' + (c.ip ? '' : ', even with the betting lead') + '. MMG: unimproved, you are barely ahead at best, and ' + (c.ip ? 'getting check-raised would be a disaster.' : 'if he improved a bet gets raised.'), 'standard');
     }
     if (!r) {
       if (st === 1) r = flopRules(c);
@@ -3705,6 +3727,12 @@ window.TD = window.TD || {};
       r = act(r.type, (r.reason || '').replace(/ for value/g, '').replace(' — equity edge over the field.', '.') + robustTxt(b, N), r.tag === 'card-ahead' ? 'card-ahead' : robustTag(b));
     }
     if (snowNote) r = act(r.type, snowNote + (r.reason || ''), r.tag);
+    // (Nov 24, hand #59) remember the draw this decision was based on; the draw keeps to it unless an opponent
+    // draws in front of me first (the same as the Badugi bots)
+    if (dRem > 0 && r.type !== 'fold' && !mem.snow && c.keepNow) {
+      const t = normType(r.type, opts);
+      mem.drawPlan = { round: p.draws.length, key: cardsKey(c.keepNow), n: c.nextDraw, keep: c.keepNow.slice(), act: t === 'call' ? 'called' : t === 'check' ? 'checked' : opts.toCall === 0 ? 'bet' : 'raised' };
+    }
     return r;
   }
 
@@ -3933,13 +3961,13 @@ window.TD = window.TD || {};
       const b = betEV(c);
       // a raise into a pat hand can be 3-bet and shows him I'm pat, so it needs a clear edge: about 76% against the
       // hands that would continue, mixed near that line
-      if (c.canRaise && b.gain > 0 && R() < sig((b.Ec - 0.76) / 0.025)) return act('raise', 'Raise with ' + mk(hn.short) + ' — he stood pat on the 2nd draw and bets. Chase\'s rule: against a pat hand, raise when the hand has enough robust equity against the pat hands that would continue, and that depends on the situation; here it does.', 'robust');
-      return act('call', 'Just call with ' + mk(hn.short) + ', planning to stand pat — he stood pat on the 2nd draw and bets. Chase\'s rule: against a pat hand, just call when the hand isn\'t strong enough to raise; here it doesn\'t have enough robust equity against the pat hands that would continue. (This isn\'t a freeze; freezing is against a player who drew on the 2nd draw.)' + robustTxt(b, 1).replace('Before the river a bet builds', 'Before the river a raise would build'), 'standard');
+      if (c.canRaise && b.gain > 0 && R() < sig((b.Ec - 0.76) / 0.025)) return act('raise', 'Raise with ' + mk(hn.short) + ' — he stood pat on the 2nd draw and bets. Against a pat hand, raise when the hand has enough robust equity against the pat hands that would continue, and that depends on the situation; here it does.', 'robust');
+      return act('call', 'Just call with ' + mk(hn.short) + ', planning to stand pat — he stood pat on the 2nd draw and bets. Against a pat hand, just call when the hand isn\'t strong enough to raise; here it doesn\'t have enough robust equity against the pat hands that would continue. (This isn\'t a freeze; freezing is against a player who drew on the 2nd draw.)' + robustTxt(b, 1).replace('Before the river a bet builds', 'Before the river a raise would build'), 'standard');
     }
     if (isCallingStation(c.game, c.opp) && c.canRaise) return act('raise', 'Raise ' + mk(hn.short) + ' for value instead of freezing. ToP (Sklansky): don\'t slowplay against a player who rarely folds a fair hand — bet decent hands for value.', 'value');
     // Chase's rule (Nov 24): the freezing range is raised half the time and frozen half the time
-    if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with ' + mk(hn.short) + (c.oppLast === 0 ? ' — he is pat and bets' : '') + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break (MMG). Chase\'s rule: freeze with ' + FREEZE_RANGE + ', mixed half and half with raising.', 'freeze');
-    return act('raise', 'Raise with ' + mk(hn.short) + '. Chase\'s rule: the hands I freeze with (' + FREEZE_RANGE + ') raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
+    if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with ' + mk(hn.short) + (c.oppLast === 0 ? ' — he is pat and bets' : '') + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break (MMG). Freeze with ' + FREEZE_RANGE + ', mixed half and half with raising.', 'freeze');
+    return act('raise', 'Raise with ' + mk(hn.short) + '. The hands I freeze with (' + FREEZE_RANGE + ') raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
   }
 
   function turnRules(c) {
@@ -4248,8 +4276,8 @@ window.TD = window.TD || {};
           // strongest pat hands usually bet (getting to 3-bet his raise wins more than a check-raise), but sometimes check
           // to check-raise, so he can't bet every hand he checks to me with no fear of a raise.
           if (strong) {
-            if (!isCallingStation(game, opp) && R() < 0.2) { p.bot.crPlan = c.st; return act('check', 'Check ' + mk(hn.short) + ', planning to check-raise. Chase\'s notes: usually bet the strongest pat hands here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise. SS2: now and then, check a seven to trap an eight into betting.', 'check-raise'); }
-            return act('bet', 'Pat ' + mk(hn.short) + ' vs a drawing opponent: bet. SS2: usually just bet it and collect the value. Chase\'s notes: betting is preferred to checking the strongest hands, since a raise lets me 3-bet (three bets beat the two a check-raise gets).', 'value');
+            if (!isCallingStation(game, opp) && R() < 0.2) { p.bot.crPlan = c.st; return act('check', 'Check ' + mk(hn.short) + ', planning to check-raise. Notes: usually bet the strongest pat hands here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise. SS2: now and then, check a seven to trap an eight into betting.', 'check-raise'); }
+            return act('bet', 'Pat ' + mk(hn.short) + ' vs a drawing opponent: bet. SS2: usually just bet it and collect the value. Notes: betting is preferred to checking the strongest hands, since a raise lets me 3-bet (three bets beat the two a check-raise gets).', 'value');
           }
           if (high && top === 8 && !(rough8 && patEarlyMe)) return act('bet', 'Pat ' + mk(hn.short) + ': bet. SS2: bet an eight you stood pat with after the second draw — he may call with a weak hand or a nine.', 'value');
           return act('check', 'Pat ' + mk(hn.short) + ' out of position vs a drawing opponent: check (and call one bet). SS2: check a nine, ten or jack — and a rough eight you stood pat with early; if he made a hand you would lose two bets.');
@@ -4265,7 +4293,7 @@ window.TD = window.TD || {};
       if (c.lvl === 1 && c.canRaise && strong) return act('raise', 'He drew and bets into my pat ' + mk(hn.short) + ': raise — only with a strong eight or a seven.', 'value');
       // Chase (Nov 21): the check-raising range holds a few bluffs, taken from my roughest pat hands
       const iChecked = game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type === 'check');
-      if (!c.ip && iChecked && c.lvl === 1 && c.canRaise && high && top >= 10 && !isCallingStation(game, opp) && R() < 0.12) return act('raise', 'Check-raise bluff with ' + mk(hn.short) + '. Chase\'s notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest pat hands are the bluffs, and a made eight or nine he bet may fold.', 'bluff');
+      if (!c.ip && iChecked && c.lvl === 1 && c.canRaise && high && top >= 10 && !isCallingStation(game, opp) && R() < 0.12) return act('raise', 'Check-raise bluff with ' + mk(hn.short) + '. Notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest pat hands are the bluffs, and a made eight or nine he bet may fold.', 'bluff');
       if (c.potOdds < 0.2 || c.E >= c.potOdds * 0.8) return act('call', 'He drew and bets into my pat hand — he likely made it, but there are so many bets in the pot. Notes: be pretty certain he won\'t bluff before folding.', 'mdf');
       return act('fold', 'He drew and bets into my pat ' + mk(hn.long) + '; fold.');
     }
@@ -4279,8 +4307,8 @@ window.TD = window.TD || {};
       if (fz) {
         const patLine = !A5 && c.opp.draws[1] === 0;
         const why = patLine
-          ? 'He stood pat on the 2nd draw and bet, I just called with ' + mk(hn.short) + ' in position (not strong enough to raise a pat hand), and we both stood pat. Chase\'s rule (hand #7): when he checks the river, bet almost every hand I played this way'
-          : 'I froze him: he bet after the 2nd draw, I just called with ' + mk(hn.short) + ' in position, and we both stood pat. Chase\'s rule: the point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
+          ? 'He stood pat on the 2nd draw and bet, I just called with ' + mk(hn.short) + ' in position (not strong enough to raise a pat hand), and we both stood pat. When he checks the river, bet almost every hand I played this way'
+          : 'I froze him: he bet after the 2nd draw, I just called with ' + mk(hn.short) + ' in position, and we both stood pat. The point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
         if (fz !== 'rough') return act('bet', why + '.', 'value');
         if (R() < 0.5) return act('bet', why + '. ' + mk(hn.short) + ' is one of the rougher hands I play this way, which check back about half the time so he can\'t count on a check-raise working; this time I bet.', 'value');
         return act('check', 'Check back ' + mk(hn.short) + ' (mixed, about half the time). ' + why + ', but the rougher ones like this check back about half the time, so he can\'t count on a check-raise working.', 'balance');
@@ -4416,7 +4444,10 @@ window.TD = window.TD || {};
   function coachCommit(p, rec, userType) {
     if (!rec) return;
     const s = rec.samples[userType] || rec.samples[rec.top];
-    if (s) p.coach = s.mem;
+    if (!s) return;
+    p.coach = s.mem;
+    // the AI never chose the user's action: its own draw plan isn't the user's, so the draw advice is worked out fresh
+    if (!rec.samples[userType]) { p.coach = JSON.parse(JSON.stringify(s.mem)); delete p.coach.drawPlan; }
   }
 
   function coachDraw(game, p) {
@@ -5377,7 +5408,7 @@ window.TD = window.TD || {};
       const multi = c.callers > 0;
       if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('K'))) {
         if (pos !== 'SB' && pos !== 'BB' && i.kind !== 'pat' && smooth(i) && R() < 0.12) return act('call', 'Flat the ' + op + ' raise with ' + d + ' in position — a strong hand in the calling range keeps it from being easy to play against (Mastering Mixed Games: one-card draws are 3-bet or sometimes cold-called).');
-        return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Chase\'s notes: 3-bet rather than flat a one-card draw).'), 'value');
+        return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Notes: 3-bet rather than flat a one-card draw).'), 'value');
       }
       if (pos === 'BB') {
         if (bbDefendRange(i, op, multi)) return act('call', 'Defend the big blind against the ' + op + ' raise with ' + d + '. Greenstein: in the blinds, draw one to a seven and sometimes an eight; the weakest are 8-6-5 or a two-card 5-4.');
@@ -5400,7 +5431,7 @@ window.TD = window.TD || {};
       // and break it to that draw instead.
       if (i.kind === 'pat' && i.t >= lv('Q') && (pos === 'BB' || pos === 'SB') && !c.iRaised) {
         const under = lvSortAscCards(i.keep).slice(0, 3), uTop = Math.max(...under.map(TD.rankOf));
-        const rio = 'Chase\'s rule: from the blinds facing a raise and a 3-bet, a ' + TD.RANK_WORD[i.t].toLowerCase() + ' badugi is too weak to play pat. Reverse implied odds: I act first on every street against the strongest part of both ranges (linear to the nuts), and I\'m often already dead to a better pat hand. Playing every badugi the same way predraw doesn\'t mean every badugi is played.';
+        const rio = 'From the blinds facing a raise and a 3-bet, a ' + TD.RANK_WORD[i.t].toLowerCase() + ' badugi is too weak to play pat. Reverse implied odds: I act first on every street against the strongest part of both ranges (linear to the nuts), and I\'m often already dead to a better pat hand. Playing every badugi the same way predraw doesn\'t mean every badugi is played.';
         if (uTop <= lv('6')) { mem.breakFirst = keyOf(under); return act('call', 'Call the 3-bet with ' + d + ', planning to break it to ' + hstr(under) + ' on the first draw. ' + rio + ' The strong three-card hand underneath is worth drawing to.'); }
         return act('fold', 'Fold ' + d + ' to the raise and 3-bet. ' + rio + ' With no strong three-card hand underneath to break to, fold.');
       }
@@ -5416,12 +5447,12 @@ window.TD = window.TD || {};
       // the open and the 3-bet use their own ranges
       if (two && p.seat === c.opener) {
         const price = opts.toCall > 0 ? ' Getting ' + (opts.pot / opts.toCall).toFixed(1) + '-to-1' : '';
-        if (isIP(game, p, opponentsOf(game, p))) return act('call', 'Call the 3-bet with ' + d + '. Chase\'s rule: a two-card draw in position always continues against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has plenty of equity against the 3-bet range, and acting last on every street helps it realize that equity.');
-        if (two.t <= lv('3')) return act('call', 'Call the 3-bet with ' + d + ', one of the best two-card draws (3-2, 3-A, 2-A). Chase\'s rule: out of position only the best two-card draws continue against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has enough equity against the 3-bet range to call.');
-        return act('fold', 'Fold ' + d + ' to the 3-bet. Chase\'s rule: out of position facing a predraw 3-bet, the two-card steals fold; only the best two-card draws (3-2, 3-A, 2-A) continue.');
+        if (isIP(game, p, opponentsOf(game, p))) return act('call', 'Call the 3-bet with ' + d + '. A two-card draw in position always continues against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has plenty of equity against the 3-bet range, and acting last on every street helps it realize that equity.');
+        if (two.t <= lv('3')) return act('call', 'Call the 3-bet with ' + d + ', one of the best two-card draws (3-2, 3-A, 2-A). Out of position only the best two-card draws continue against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has enough equity against the 3-bet range to call.');
+        return act('fold', 'Fold ' + d + ' to the 3-bet. Out of position facing a predraw 3-bet, the two-card steals fold; only the best two-card draws (3-2, 3-A, 2-A) continue.');
       }
       if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
-      if (i.kind === 'two') return act('fold', 'Fold ' + d + ' to the 3-bet. Chase\'s rule: from any seat, the big blind included, don\'t cold-call a 3-bet planning to draw two; a two-card draw is only worth calling from the big blind for one more small bet when that closes the action.');
+      if (i.kind === 'two') return act('fold', 'Fold ' + d + ' to the 3-bet. From any seat, the big blind included, don\'t cold-call a 3-bet planning to draw two; a two-card draw is only worth calling from the big blind for one more small bet when that closes the action.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
     // four bets (the cap: a bet and three raises, heads-up too)
@@ -5531,13 +5562,39 @@ window.TD = window.TD || {};
     return (o.isHuman ? 'you' : o.name) + (n === 0 ? ' stood pat' : ' drew ' + n) + ' in front of me';
   }
   // the next draw, decided while betting so the bet and the draw agree: { keep, alt, n }
+  // (Nov 24, Hand #111) heads-up, at the 2nd draw, against a player who drew two or more at the 1st draw: a jack
+  // badugi or better stands pat. Most hands that drew two have no badugi yet, so the made badugi is well ahead (MMG:
+  // having made a badugi, check-raise and stand pat). Not once he has re-raised me this round (that shows a badugi)
+  // or stood pat in front of me: then the simulations decide as before.
+  function patVsTwo(game, p, k, cands, opps) {
+    if (k !== 1 || opps.length !== 1) return null;
+    const o = opps[0], pat = cands.find((x) => x.n === 0);
+    if (!pat || !(o.draws[0] >= 2) || TD.handName(p.hand).cat !== 0 || lvDesc(p.hand)[0] > lv('J')) return null;
+    if (o.draws.length > 1 && o.draws[1] === 0) return null;
+    let mine = false, reraised = false;
+    for (const a of game.actions) {
+      if (a.street !== 1 || (a.type !== 'bet' && a.type !== 'raise')) continue;
+      if (a.seat === p.seat) mine = true; else if (a.seat === o.seat && mine) reraised = true;
+    }
+    if (reraised) return null;
+    return { choice: pat, why: ' ' + (o.isHuman ? 'You' : o.name) + ' drew ' + o.draws[0] + ' at the 1st draw, so most of ' + (o.isHuman ? 'your' : 'that') + ' range has no badugi yet: a jack badugi or better stands pat against it (Mastering Mixed Games: having made a badugi, check-raise and stand pat).' };
+  }
+  // (Nov 24, Hand #121) a made badugi is kept or broken to a three-card draw. It never draws three, and once I have
+  // raised with it before the first draw (a 3-bet or 4-bet says pat), it doesn't break into a two-card draw either.
+  function badugiKeeps(game, p, cands) {
+    if (TD.handName(p.hand).cat !== 0) return cands;
+    const raised = game.actions.some((a) => a.street === 0 && a.seat === p.seat && (a.type === 'raise' || a.type === 'bet'));
+    const max = raised ? 1 : 2;
+    const ok = cands.filter((x) => x.n <= max);
+    return ok.length ? ok : cands;
+  }
   function planNextDraw(game, p, st) {
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
-    let cands = TD.keepOptions(p.hand, 3 - st, p.discards);
+    let cands = badugiKeeps(game, p, TD.keepOptions(p.hand, 3 - st, p.discards));
     const fr = st === 0 ? firstDrawRough(cands, p.bot) : null;
     if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
-    const bk = fr || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    const bk = fr || patVsTwo(game, p, st, cands, opps) || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     const cc = bk ? { choice: bk.choice, alt: null } : closeKeep(game, p, st, cands, opps, ip);
     const oppDraws = {};
     for (const o of opps) oppDraws[o.seat] = o.draws.length;
@@ -5550,7 +5607,7 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     const ip = isIP(game, p, opps);
     const hn = TD.handName(hand);
-    let cands = TD.keepOptions(hand, d, p.discards);
+    let cands = badugiKeeps(game, p, TD.keepOptions(hand, d, p.discards));
     const drewThis = opps.filter((o) => o.draws.length > k).map((o) => o.draws[k]);
     const oppPat = opps.some((o) => (o.draws.length > k ? o.draws[k] : o.draws[k - 1]) === 0 && o.draws.length > 0);
     const desc = (cd) => (cd.n === 0 ? 'stand pat with ' + hn.short : cd.keep.length ? 'draw ' + cd.n + ' to ' + hstr(cd.keep) : 'draw four');
@@ -5580,7 +5637,7 @@ window.TD = window.TD || {};
     if (k === 0 && mem.breakFirst) {
       const bf = cands.find((x) => x.n === 1 && keyOf(x.keep) === mem.breakFirst);
       mem.breakFirst = null;
-      if (bf) return { discard: keepIdx(hand, bf.keep), reason: '1st draw: break the ' + hn.short + ' badugi and draw one to ' + hstr(bf.keep) + ', as planned when I called the 3-bet. Chase\'s rule: from the blinds against a raise and a 3-bet, a ' + TD.RANK_WORD[lvDesc(hand)[0]].toLowerCase() + ' badugi is too weak to stand pat; the strong three-card hand underneath is the better hand to play.', tag: '' };
+      if (bf) return { discard: keepIdx(hand, bf.keep), reason: '1st draw: break the ' + hn.short + ' badugi and draw one to ' + hstr(bf.keep) + ', as planned when I called the 3-bet. From the blinds against a raise and a 3-bet, a ' + TD.RANK_WORD[lvDesc(hand)[0]].toLowerCase() + ' badugi is too weak to stand pat; the strong three-card hand underneath is the better hand to play.', tag: '' };
     }
     const bestDraw = cands.find((x) => x.n > 0);
     const pat = cands.find((x) => x.n === 0);
@@ -5622,7 +5679,7 @@ window.TD = window.TD || {};
     if (k === 2 && pat && drewThis.length === opps.length && drewThis.every((n) => n > 0) && opps.length === 1) {
       return { discard: [], reason: '3rd draw: stand pat with ' + hn.short + ' — he drew ' + drewThis[0] + ' in front of me, so he has no badugi yet and must hit to beat any badugi.', tag: '' };
     }
-    const bk = bookKeep(k, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    const bk = patVsTwo(game, p, k, cands, opps) || bookKeep(k, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     if (bk) {
       const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
       mem.drawPlan = null;
@@ -5785,7 +5842,7 @@ window.TD = window.TD || {};
     if (c.st < 1 || c.dRem <= 0 || c.nextDraw < 3 || c.p.bot.snow || r.tag === 'snow') return r;
     const which = c.dRem === 2 ? '2nd' : '3rd';
     const plan = 'I would have to draw ' + c.nextDraw + ' on the ' + which + ' draw (keeping ' + hstr(c.keepNow) + ')';
-    const rule = 'Chase\'s rule: never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
+    const rule = 'Never call a bet or raise after the 1st draw planning to draw three on the next draw; drawing three then is only reasonable when the action was checked through.';
     if (c.toCall > 0 && (r.type === 'call' || r.type === 'raise')) return act('fold', 'Fold — ' + plan + '. ' + rule, 'standard');
     if (c.toCall === 0 && r.type === 'bet') return act('check', 'Check — ' + plan + ', and a bet would only get called or raised. ' + rule, 'standard');
     return r;
@@ -5824,6 +5881,15 @@ window.TD = window.TD || {};
         const lead = leadBehind.isHuman ? 'you drew fewer cards than I did, so you have' : leadBehind.name + ' drew fewer cards than I did, so has';
         if (c.made && !c.drawing) { p.bot.crPlan = c.st; return act('check', 'Check the ' + hn0(c) + ' to check-raise. Mastering Mixed Games: ' + lead + ' the drawing lead; having made a badugi, check-raise every time (pat now, so there is nothing left to disguise, and even a rough badugi can make a better king or queen break).', 'check-raise'); }
         return act('check', 'Check, ' + c.txt + '. Mastering Mixed Games: ' + lead + ' the drawing lead — always check to the player with the drawing lead, and with a one-card draw out of position just call (a check-raise shows my hand the moment I draw one).');
+      }
+      // (Nov 24, Hand #111) heads-up out of position, equal draws, and the player behind me made the last bet or raise
+      // before the draw: the action checks to the last aggressor, who bets often when checked to, so a made badugi I
+      // stand pat with checks to check-raise most of the time and leads the rest (MMG: with equal draws the action
+      // checks to the last aggressor, "you can mix it up"; having made a badugi, check-raise and stand pat).
+      const aggOpp = prev && c.N === 1 && prev.seat === c.opp.seat && c.oppsLast[0] === myLast;
+      if (c.made && !c.drawing && !c.ip && aggOpp && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.7) {
+        p.bot.crPlan = c.st;
+        return act('check', 'Check the ' + hn0(c) + ' to check-raise, planning to stand pat. We both drew ' + myLast + ', and ' + (c.opp.isHuman ? 'you were' : c.opp.name + ' was') + ' the last to bet or raise, so the action checks to ' + (c.opp.isHuman ? 'you' : 'that player') + ', and the last aggressor bets often when checked to. Mastering Mixed Games: having made a badugi, check-raise and stand pat. This is a mix, about 70% of the time; the rest of the time I lead out.', 'check-raise');
       }
       if (c.made && !c.drawing) {
         // Chase (Nov 21, Hand #131): a pat hand out of position bets into players who drew more cards than it did. They
@@ -5866,8 +5932,8 @@ window.TD = window.TD || {};
     // just call half the time (he thinks I'm drawing, so a worse pat hand stays pat, drawing dead) and raise half the time.
     if (c.st === 2 && c.ip && c.N === 1 && c.lvl === 1 && c.made && !c.drawing && c.hn.top >= lv('8') && c.hn.top <= lv('9')) {
       if (isCallingStation(game, c.opp) && c.canRaise) return act('raise', 'Raise the pat ' + c.txt + ' for value instead of freezing: this player rarely folds a fair hand.', 'value');
-      if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with the pat ' + c.txt + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break. Chase\'s rule: freeze with a pat 8 or 9 badugi, mixed half and half with raising.', 'freeze');
-      return act('raise', 'Raise with the pat ' + c.txt + '. Chase\'s rule: the hands I freeze with (pat 8 and 9 badugis) raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
+      if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with the pat ' + c.txt + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break. Freeze with a pat 8 or 9 badugi, mixed half and half with raising.', 'freeze');
+      return act('raise', 'Raise with the pat ' + c.txt + '. The hands I freeze with (pat 8 and 9 badugis) raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
     }
     const raiseThr = c.N === 1 ? 0.62 : fair + 0.22;
     if (c.canRaise && c.made && !c.drawing && c.E >= raiseThr) return act('raise', 'Raise with the pat ' + c.txt + ' — well ahead of the betting range.', 'value');
@@ -5964,18 +6030,18 @@ window.TD = window.TD || {};
       // then we both stood pat), bet almost every hand I froze with when he checks; the rougher ones (9 badugis) check
       // back about half the time, so he can't count on a check-raise getting in.
       if (c.made && c.N === 1 && c.ip && p.draws[2] === 0 && c.opp.draws[2] === 0 && t <= lv('9') && frozeHim(game, p, c.opp)) {
-        const why = 'I froze him: he bet after the 2nd draw, I just called with the pat ' + c.txt + ' in position, and we both stood pat. Chase\'s rule: the point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
+        const why = 'I froze him: he bet after the 2nd draw, I just called with the pat ' + c.txt + ' in position, and we both stood pat. The point of a freeze is to get him to stand pat drawing dead, so when he checks the river, bet almost every hand I froze with';
         if (t <= lv('8')) return act('bet', why + '.', 'value');
         if (R() < 0.5) return act('bet', why + '. A 9 badugi is one of the rougher hands I freeze with, which check back about half the time so he can\'t count on a check-raise working; this time I bet.', 'value');
         return act('check', 'Check back the ' + c.txt + ' (mixed, about half the time). ' + why + ', but the rougher ones like a 9 badugi check back about half the time, so he can\'t count on a check-raise working.', 'balance');
       }
-      if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. Chase\'s notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.', 'value');
+      if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. Notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.', 'value');
       // Chase (Nov 21): out of position after we both drew on the last draw (1,1). He calls one bet with any badugi he
       // made and bluff-catches with good three-card hands, so bet every badugi for value, but keep a check-raising range
       // (very strong badugis plus a few bluffs): a six badugi or better checks to check-raise about 15% of the time. The
       // check-calling (bluff-catching) range is mostly strong three-card hands, plus a queen or king badugi now and then.
       if (c.made && c.N === 1 && !c.ip && p.draws[2] > 0 && c.opp.draws[2] > 0) {
-        const why = ' Chase\'s notes: we both drew on the last draw, and he calls one bet with any badugi he made and bluff-catches with good three-card hands.';
+        const why = ' Notes: we both drew on the last draw, and he calls one bet with any badugi he made and bluff-catches with good three-card hands.';
         if (tier <= 6 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.15) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise.' + why + ' Usually bet a badugi this strong, but check-raise it about 15% of the time, so he can\'t bet freely when I check.', 'check-raise'); }
         if (t >= lv('Q') && R() < 0.25) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher.' + why + ' A queen or king badugi usually bets too; checking it now and then gives my checks something that beats a bluff, along with my strong three-card hands.');
         return act('bet', 'Bet the ' + c.txt + ' for value.' + why + (tier <= 6 ? ' Betting beats checking to check-raise most of the time: a raise lets me 3-bet, three bets instead of two.' : ''), 'value');
@@ -5991,10 +6057,10 @@ window.TD = window.TD || {};
           if (!c.ip && !oppDrew && tier <= 6 && c.canRaise && R() < 0.3) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ' to check-raise: he stood pat behind me, so he will bet his good badugis if I check.', 'check-raise'); }
           // Chase (Nov 21): against a player who drew, my check-raising range is polarized (very strong hands, a few
           // bluffs). Usually bet the strongest (getting to 3-bet his raise wins more than a check-raise), sometimes check-raise.
-          if (!c.ip && oppDrew && tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Chase\'s notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
+          if (!c.ip && oppDrew && tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
           return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.' + (!c.ip && oppDrew ? ' I stood pat on the last draw, so he won\'t necessarily bet a worse badugi he made if I check. Hands good enough to value bet here should usually not attempt a check-raise (especially hands that are strong enough to 3-bet).' : ''), 'value');
         }
-        if (!c.ip && c.opp.draws[2] > 0 && t <= lv('J')) { return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: out of position against a player who drew on the last draw, bet only the strongest badugis; with a decent one, check — he bets his better badugis and bluffs some missed draws, and a bet of mine would mostly be called by better.'); }
+        if (!c.ip && c.opp.draws[2] > 0 && t <= lv('J')) { return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Notes: out of position against a player who drew on the last draw, bet only the strongest badugis; with a decent one, check — he bets his better badugis and bluffs some missed draws, and a bet of mine would mostly be called by better.'); }
         return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — it doesn\'t beat half of the hands that would call a bet.');
       }
       if (c.made) {
@@ -6008,9 +6074,9 @@ window.TD = window.TD || {};
       // so value bet strong three-card hands more with the lead and less without it (a bet without it reads as a badugi)
       const triBet = hn.cat === 1 ? Math.min(0.95, (t <= lv('3') ? 0.8 : t <= lv('4') ? 0.6 : t <= lv('5') ? 0.3 : 0) * (hasLead ? 1.2 : 0.6)) : 0;
       if (c.N === 1 && triBet > 0 && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < triBet) {
-        return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead, since a bet can look like a three-card value bet and weaker three-card hands call' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Chase\'s notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
+        return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead, since a bet can look like a three-card value bet and weaker three-card hands call' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
       }
-      if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Chase\'s notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
+      if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
       // Chase (Nov 23): leading into, or betting behind the check of, a player who stood pat on the last draw after I
       // drew: 1 bluff for every X value bets, X = the pot odds my bet offers him (8.5-to-1 means 1 per 8.5)
       if (patBluffOK(c, p)) {
@@ -6029,7 +6095,7 @@ window.TD = window.TD || {};
         if (R() < f) return act('bet', 'Bluff with ' + c.txt + ' — ' + (c.N === 1 ? 'my opponent' : 'both opponents') + ' drew on the last draw too, so a missed draw can\'t call. ' +
           (hasLead ? 'I have the betting lead, so a bet can look like a three-card value bet: MMG says bluff less here.' : 'Mastering Mixed Games: without the betting lead, a bet reads as a badugi and gets folds — bluff more.') + ' MoP: bluff in proportion to the value bets, fewer in bigger pots.', 'bluff');
       }
-      return act('check', 'Check, ' + c.txt + (c.made ? '' : ' — Chase\'s notes: a busted smooth draw still has some showdown value against other incompletes.'));
+      return act('check', 'Check, ' + c.txt + (c.made ? '' : ' — Notes: a busted smooth draw still has some showdown value against other incompletes.'));
     }
     // facing a bet or raise
     const loose = c.opp && isLoose(game, c.opp);
@@ -6052,10 +6118,10 @@ window.TD = window.TD || {};
       if (c.made || (hn.cat === 1 && t <= lv('5'))) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. We both drew on the last draw: my opponent\'s bet is a badugi or a strong three-card hand betting for value, and sometimes a missed draw bluffing; ' + priceTxt(c) + '.', 'bluff-catch');
       const potBets = (c.pot + c.toCall) / c.unit, bluffShare = 1 / (potBets + 4);
       const f = clamp(0.15 * 0.08 / 0.6 * bluffShare / (1 - bluffShare), 0, 0.05);
-      if (c.canRaise && !isCallingStation(game, c.opp) && R() < f) return act('raise', 'Check-raise bluff with ' + c.txt + '. Chase\'s notes: my check-raises here are very strong badugis plus a few bluffs, sized by MDF (about 1 in ' + Math.round(potBets + 4) + '), taken from missed hands with no showdown value.', 'bluff');
+      if (c.canRaise && !isCallingStation(game, c.opp) && R() < f) return act('raise', 'Check-raise bluff with ' + c.txt + '. Notes: my check-raises here are very strong badugis plus a few bluffs, sized by MDF (about 1 in ' + Math.round(potBets + 4) + '), taken from missed hands with no showdown value.', 'bluff');
     }
     // Chase (Nov 21): a few check-raise bluffs with my roughest badugis, so the check-raising range isn't only the nuts
-    if (c.N === 1 && !c.ip && c.iChecked && c.made && t >= lv('Q') && c.canRaise && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp) && R() < 0.12) return act('raise', 'Check-raise bluff with the ' + c.txt + '. Chase\'s notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest badugis are the bluffs, and a worse-than-expected badugi he bet may fold.', 'bluff');
+    if (c.N === 1 && !c.ip && c.iChecked && c.made && t >= lv('Q') && c.canRaise && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp) && R() < 0.12) return act('raise', 'Check-raise bluff with the ' + c.txt + '. Notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest badugis are the bluffs, and a worse-than-expected badugi he bet may fold.', 'bluff');
     if (c.made && tier === 7 && c.lvl >= 2) return act('call', 'Call the raise with the ' + c.txt + '. Greenstein: sevens get tenuous — against a tight player, bet a rough seven and just call a raise.');
     const bluffy = c.opp && c.opp.isHuman ? clamp((userPosterior(game).riverBluff - 0.12) * 0.6, 0, 0.08) : 0;
     // Chase (Nov 22): a three-card hand facing a river bet from a player who stood pat on the last draw only beats a
@@ -6133,7 +6199,15 @@ window.TD = window.TD || {};
     const top = Object.keys(dist).sort((a, b) => dist[b] - dist[a])[0];
     return { dist, top, samples, eq };
   }
-  function coachCommit(p, rec, userType) { if (!rec) return; const s = rec.samples[userType] || rec.samples[rec.top]; if (s) p.coach = s.mem; }
+  // when the AI never chose the user's action, the plans it made for its own line (the draw it meant to make, a
+  // check-raise) aren't the user's, so the draw advice is worked out fresh rather than "as planned when I called"
+  function coachCommit(p, rec, userType) {
+    if (!rec) return;
+    const s = rec.samples[userType] || rec.samples[rec.top];
+    if (!s) return;
+    p.coach = s.mem;
+    if (!rec.samples[userType]) { p.coach = clone(s.mem); delete p.coach.drawPlan; delete p.coach.crPlan; }
+  }
   function coachDraw(game, p) {
     const saved = p.bot;
     p.bot = clone(p.coach);
@@ -6185,7 +6259,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 81;
+  TD.VERSION = 84;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -7461,6 +7535,7 @@ window.TD = window.TD || {};
         else {
           body += '<div class="cn-why"><b>Why the AI would ' + escapeHTML(n.ai) + ':</b> ' + escapeHTML(n.why) + '</div>';
           if (n.userWhy) body += '<div class="cn-why muted"><b>When the AI does ' + escapeHTML(n.user) + ' here:</b> ' + escapeHTML(n.userWhy) + '</div>';
+          if (n.altWhy) body += '<div class="cn-why muted"><b>When the AI does ' + escapeHTML(n.alt) + ' here:</b> ' + escapeHTML(n.altWhy) + '</div>';
         }
         s += '<div class="cn cn-' + n.verdict + '">' + body + '</div>';
       }
