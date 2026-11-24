@@ -410,6 +410,9 @@ body.portrait #drawer { width: 100vw; border-left: none; }
 .hh-sum { padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; cursor: pointer; flex-wrap: wrap; }
 .hh-sum .n { color: var(--accent-hi); font-weight: 700; }
 .hh-sum .r { font-variant-numeric: tabular-nums; font-weight: 800; }
+.hh-right { display: inline-flex; align-items: center; gap: 10px; }
+.hh-replay { border: 2px solid var(--accent-hi); background: transparent; color: var(--accent-hi); border-radius: 14px; padding: 2px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; min-height: 30px; }
+.hh-replay:hover { background: var(--accent-hi); color: var(--panel, #111); }
 .pos { color: var(--good); } .neg { color: var(--bad); }
 .hh-log { display: none; padding: 4px 12px 10px; font-size: 14px; border-top: 1px dashed var(--panel-line); }
 .hh-item.open .hh-log { display: block; }
@@ -1450,11 +1453,14 @@ window.TD = window.TD || {};
 
     async playHand() {
       this.handNo++;
-      const g = this.gameForNextHand();
+      // Replay (Chase, Nov 24): a temporary table that plays a hand from History again, with the same cards dealt
+      // and the same action before the user's first decision; the rest plays out as normal
+      const R0 = this.replay || null;
+      const g = R0 ? R0.game : this.gameForNextHand();
       if (g !== TD.GAME) {
         TD.setGame(g);
-        if (this.settings) this.settings.game = g;
-        this.ui.log('— The game changes to ' + TD.gameInfo.name + ' —', 'sys');
+        if (this.settings && !R0) this.settings.game = g;
+        if (!R0) this.ui.log('— The game changes to ' + TD.gameInfo.name + ' —', 'sys');
         if (this.ui.gameChanged) await this.ui.gameChanged(this);
       }
       this.gameKey = TD.GAME;
@@ -1463,14 +1469,15 @@ window.TD = window.TD || {};
       // Fixed for the whole hand; a change in Settings applies from the next hand.
       // Seat training (Chase, Nov 24): the user plays every hand from one seat, folded to them predraw.
       // The seats in front are not dealt in; in the BB the SB always opens (with a hand from its opening range).
-      const train = this.trainPos();
+      const train = R0 ? (R0.train || null) : this.trainPos();
       this.trainSeat = train;
-      this.allSeats = !train && !!(this.settings && this.settings.everySeat && this.settings.zoom === false);
+      this.allSeats = R0 ? !!R0.allSeats : !train && !!(this.settings && this.settings.everySeat && this.settings.zoom === false);
       // God mode (display only): remembered for the hand if it is on at any point, so the record is tagged
       // and the bots' read on the user's tendencies is not fed by hands played with every card visible
       this.godSeen = !!(this.settings && this.settings.godMode);
       const human0 = this.players.find((p) => p.isHuman);
-      if (train && human0) this.button = (human0.seat - POS6.indexOf(train) + 6) % 6;
+      if (R0) this.button = R0.button;
+      else if (train && human0) this.button = (human0.seat - POS6.indexOf(train) + 6) % 6;
       else this.button = this.next(this.button);
       this.street = 0;
       this.actions = [];
@@ -1481,12 +1488,14 @@ window.TD = window.TD || {};
       this.drawRound = -1; // index of draw currently in progress
       this.drawsDone = 0;
       this.stub = TD.shuffle(TD.newDeck(), this.rng);
+      if (R0) { const dealt = new Set(); R0.players.forEach((q) => (q.start || []).forEach((c) => dealt.add(c))); this.stub = this.stub.filter((c) => !dealt.has(c)); }
       this.muck = [];
       this.burns = [];
       this.burnCount = 0; // one burn card per draw: shown under the pot to mark the street
       this.betLevel = 0;
       for (const p of this.players) {
         p.resetHand();
+        if (R0) { if (R0.stacks) p.stack = R0.stacks[p.seat]; continue; } // a replay starts from the original stacks
         const topUpBelow = this.botTopUpBelow !== undefined ? this.botTopUpBelow : Math.round(this.stakes.buyin * 0.375);
         if (!p.isHuman && (p.stack < topUpBelow || p.stack <= 0)) {
           const add = this.stakes.buyin - p.stack;
@@ -1496,7 +1505,9 @@ window.TD = window.TD || {};
       }
       const human = this.players.find((p) => p.isHuman);
       const sitters = [];
-      if (train) {
+      if (R0) {
+        for (const p of this.players) if (R0.players[p.seat] && R0.players[p.seat].sitOut) { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
+      } else if (train) {
         const order = ['LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'], mine = order.indexOf(train);
         for (const p of this.players) {
           const pos = this.posName(p.seat);
@@ -1505,8 +1516,19 @@ window.TD = window.TD || {};
       }
       const btnP = this.players[this.button];
       this.handOver = false;
-      this.ui.log('— Hand #' + this.handNo + ' — ' + (btnP.isHuman ? 'you have' : btnP.name + ' has') + ' the button', 'hand');
-      this.handLog.push({ text: 'Hand #' + this.handNo + ' — button: ' + (btnP.isHuman ? 'You' : btnP.name), cls: 'hand' });
+      this.ui.log('— ' + (R0 ? 'Replay of hand #' : 'Hand #') + this.handNo + ' — ' + (btnP.isHuman ? 'you have' : btnP.name + ' has') + ' the button', 'hand');
+      this.handLog.push({ text: (R0 ? 'Replay of hand #' : 'Hand #') + this.handNo + ' — button: ' + (btnP.isHuman ? 'You' : btnP.name), cls: 'hand' });
+      if (R0) {
+        // the predraw action before the user's first decision is played again as it was (none when every seat is the user's)
+        const q = [];
+        for (const a of R0.actions || []) {
+          if (a.street !== 0 || a.type === 'post') continue;
+          if (this.allSeats || R0.players[a.seat].isHuman) break;
+          q.push({ seat: a.seat, type: a.type });
+        }
+        this.replayQueue = q;
+        this.log('Replay: the same cards as hand #' + R0.handNo + (q.length ? ', and the same predraw action up to your first decision' : '') + '. From there the hand plays out as normal.', 'sys');
+      } else this.replayQueue = null;
       for (const p of this.players) if (!p.sitOut) p.stats.hands++;
       if (sitters.length) {
         const ns = sitters.sort((a, b) => ['LJ', 'HJ', 'CO', 'BTN'].indexOf(this.posName(a.seat)) - ['LJ', 'HJ', 'CO', 'BTN'].indexOf(this.posName(b.seat))).map((p) => this.posName(p.seat));
@@ -1529,12 +1551,12 @@ window.TD = window.TD || {};
         for (let k = 0; k < 6; k++) {
           const p = this.players[s];
           if (p.sitOut) { s = this.next(s); continue; }
-          p.hand.push(this.stub.pop());
+          p.hand.push(R0 ? R0.players[s].start[r] : this.stub.pop());
           await this.ui.dealCard(this, s, p.hand.length - 1);
           s = this.next(s);
         }
       }
-      if (train === 'BB') this.sbMustOpen();
+      if (train === 'BB' && !R0) this.sbMustOpen();
       for (const p of this.players) { p.startHand = p.hand.slice(); }
       for (let k = 0, s = this.sbSeat(); k < 6; k++, s = this.next(s)) {
         const p = this.players[s];
@@ -1557,7 +1579,7 @@ window.TD = window.TD || {};
         if (this.activePlayers().length === 1) { winnerDecided = true; break; }
       }
       await this.finishHand(winnerDecided);
-      if (human && human.stack <= 0) await this.ui.onBust(this, human);
+      if (human && human.stack <= 0 && !R0) await this.ui.onBust(this, human);
     }
 
     // the seat the user trains from (Settings: Seat training), or null
@@ -1644,6 +1666,16 @@ window.TD = window.TD || {};
           } else {
             await this.ui.wait(this.ui.botDelay ? this.ui.botDelay() : 700);
             if (p.forcedPre && street === 0 && !p.acted) { act = p.forcedPre; p.forcedPre = null; }
+            else if (street === 0 && this.replayQueue && this.replayQueue.length) {
+              const q = this.replayQueue[0];
+              const ai = TD.AI.decideBet(this, p, opts);
+              if (q.seat !== p.seat) { this.replayQueue = []; act = ai; } // out of step: play on as normal
+              else {
+                this.replayQueue.shift();
+                const n = (t) => (t === 'bet' ? 'raise' : t === 'check' ? 'call' : t);
+                act = n(ai.type) === n(q.type) ? ai : { type: q.type, reason: 'Replay: the same action as in the original hand. (Here the AI would ' + ai.type + ': ' + (ai.reason || '') + ')', tag: 'replay' };
+              }
+            }
             else act = TD.AI.decideBet(this, p, opts);
           }
           this.applyAction(p, act, opts);
@@ -2050,6 +2082,9 @@ window.TD = window.TD || {};
       // build record for history/review
       const rec = {
         handNo: this.handNo, button: this.button, game: this.gameKey, allSeats: !!this.allSeats, god: !!this.godSeen, train: this.trainSeat || null,
+        // for Replay: the action list, the starting stacks and the stakes; a replay keeps the hand it replays (src)
+        actions: this.actions.filter((a) => a.type !== 'draw').map((a) => ({ seat: a.seat, street: a.street, type: a.type })),
+        stacks: this.startStacks.slice(), stakes: this.stakes, replayOf: this.replay ? this.replay.handNo : null, src: this.replay || null,
         players: this.players.map((p) => ({
           seat: p.seat, name: p.name, pos: this.posName(p.seat), start: p.startHand, final: p.hand.slice(), sitOut: !!p.sitOut,
           draws: p.draws.slice(), folded: p.folded, shown: p.shown, isHuman: p.isHuman,
@@ -2085,6 +2120,52 @@ window.TD = window.TD || {};
       return true;
     }
   }
+
+  // Replay: a temporary table for one hand from the session's History. It copies the session's players (names,
+  // stats) and what the bots have learned about the user, so the bots play as they would at the real table, and
+  // changes nothing in the session.
+  TD.newReplayGame = function (ui, main, rec) {
+    const g = new Game(ui, { settings: main.settings, stakes: rec.stakes || main.stakes, names: main.players.map((p) => p.name) });
+    g.replay = rec;
+    g.handNo = rec.handNo - 1;
+    g.userModel = JSON.parse(JSON.stringify(main.userModel));
+    g.players.forEach((p, i) => { p.stats = JSON.parse(JSON.stringify(main.players[i].stats)); p.buyins = main.players[i].buyins; });
+    g.botTopUpBelow = 0;
+    return g;
+  };
+
+  // Replay loop, run by the main loop between hands when a replay was asked for. Each replay hand is a fresh
+  // temporary table; its hands join the session's History (tagged Replay) so Review can go back to them.
+  TD.runReplay = async function (ui, main) {
+    const mainGame = TD.GAME;
+    let rec = ui.replayQueued; ui.replayQueued = null;
+    const hist = main.history.slice();
+    ui.replaying = { main, rec, hist, game: null };
+    for (;;) {
+      const rg = TD.newReplayGame(ui, main, rec);
+      rg.history = hist;
+      ui.replaying.rec = rec; ui.replaying.game = rg;
+      TD.game = rg;
+      ui.attach(rg);
+      rg.handInProgress = true; rg.handOver = false;
+      try { await rg.playHand(); } catch (e) { console.error(e); ui.log('Table error: ' + e.message, 'sys'); }
+      rg.handInProgress = false; rg.handOver = true;
+      ui.renderPre();
+      const choice = ui.replayQueued ? 'switch' : await ui.replayEnd(rg);
+      if (choice === 'switch' && ui.replayQueued) { rec = ui.replayQueued; ui.replayQueued = null; continue; }
+      if (choice === 'again') continue;
+      break;
+    }
+    main.history.length = 0;
+    hist.slice(0, 60).forEach((h) => main.history.push(h));
+    ui.replaying = null;
+    TD.game = main;
+    const changed = TD.GAME !== mainGame;
+    if (changed) TD.setGame(mainGame);
+    ui.attach(main);
+    ui.log('Replay over: back to your session.', 'sys');
+    if (changed && ui.gameChanged) await ui.gameChanged(main);
+  };
 
   TD.Game = Game;
   TD.CONST = { SB, BB, SMALL, BIG, CAP_BETS, BUYIN, STREET_NAMES, POS6, DEFAULT_STAKES };
@@ -6078,7 +6159,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 79;
+  TD.VERSION = 80;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6576,8 +6657,9 @@ window.TD = window.TD || {};
       const picked = TD.pickedGames(this.settings);
       const nextG = picked.length > 1 && game.mixGame ? TD.GAME_INFO[TD.nextPicked(game.mixGame, picked)].short : '';
       const mixTxt = nextG ? (picked.includes(game.mixGame) && game.mixLeft > 0 ? ' · ' + game.mixLeft + ' more, then ' + nextG : ' · ' + nextG + ' next hand') : '';
-      $('#hand-no').textContent = (game.handNo ? 'Hand #' + game.handNo + ' · ' : '') + TD.gameInfo.short + mixTxt + (game.trainSeat ? ' · ' + game.trainSeat + ' training' : '') + ' · ' + money(st.small) + '/' + money(st.big) + ' limit';
-      $('#session-net').innerHTML = 'Session <b class="' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</b>';
+      $('#hand-no').textContent = (game.replay ? 'Replay of hand #' + game.replay.handNo + ' · ' : game.handNo ? 'Hand #' + game.handNo + ' · ' : '') + TD.gameInfo.short + (game.replay ? '' : mixTxt) + (game.trainSeat ? ' · ' + game.trainSeat + ' training' : '') + ' · ' + money(st.small) + '/' + money(st.big) + ' limit';
+      if (game.replay) $('#session-net').innerHTML = 'Replay <b>not counted</b>';
+      else $('#session-net').innerHTML = 'Session <b class="' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</b>';
       const canTop = human.stack + human.totalBet < st.buyin;
       $('#tb-chips').style.display = canTop ? '' : 'none';
       $('#ib-chips').style.display = canTop ? '' : 'none';
@@ -7158,6 +7240,48 @@ window.TD = window.TD || {};
       $('#action-msg').textContent = '';
     }
 
+    // Replay (Chase, Nov 24): pick a hand in Hand History to play it again on a temporary table with the same cards
+    // and the same predraw action before your first decision. It starts when the hand on the table is over.
+    requestReplay(rec) {
+      if (!rec) return;
+      const src = rec.src || rec;
+      if (!src.actions) { this.toast('That hand was played before Replay existed'); return; }
+      this.toggleDrawer(null);
+      this.replayQueued = src;
+      if (this.replayEndResolve) { this.replayEndResolve('switch'); return; }
+      const g = this.game;
+      if (g && g.handInProgress) this.toast('Replay of hand #' + src.handNo + ' starts when this hand is over');
+    }
+    replayEnd(game) {
+      this.setFastForward(false);
+      this.hideBanner();
+      const r = this.replaying ? this.replaying.rec : game.replay;
+      return new Promise((resolve) => {
+        const box = $('#action-btns');
+        box.innerHTML = '';
+        $('#pre-actions').innerHTML = '';
+        const done = (v) => { this.replayEndResolve = null; this.clearButtons(); resolve(v); };
+        this.replayEndResolve = done;
+        const mk = (cls, label, key, fn) => {
+          const b = document.createElement('button');
+          b.className = 'abtn ' + cls;
+          b.innerHTML = label + '<kbd>' + key + '</kbd>';
+          b.onclick = fn;
+          box.appendChild(b);
+          return b;
+        };
+        mk('deal replay-again', 'Replay again', 'Space', () => done('again'));
+        mk('neutral replay-review', 'Review', 'V', () => this.toggleDrawer('review', true));
+        mk('neutral replay-end', 'End replay', 'E', () => done('end'));
+        $('#action-msg').textContent = 'Replay of hand #' + r.handNo + ' is over. Open Review to see how your play compares with the AI.';
+        this.keyHandler = (k) => {
+          if (k === ' ' || k === 'enter') done('again');
+          else if (k === 'v') this.toggleDrawer('review', true);
+          else if (k === 'e') done('end');
+        };
+      });
+    }
+
     flushTopUp(game) {
       if (!this.pendingTopUp) return;
       this.pendingTopUp = false;
@@ -7168,6 +7292,7 @@ window.TD = window.TD || {};
     addChips() {
       const g = this.game;
       if (!g) return;
+      if (this.replaying) { this.toast('Add chips after the replay'); return; }
       const p = g.players[0];
       const add = g.stakes.buyin - p.stack;
       if (add <= 0) return;
@@ -7216,9 +7341,10 @@ window.TD = window.TD || {};
       const g = this.game;
       if (!g) return;
       if (this.drawerTab === 'history') body.innerHTML = this.historyHTML(g);
-      else if (this.drawerTab === 'stats') body.innerHTML = this.statsHTML(g);
+      else if (this.drawerTab === 'stats') body.innerHTML = this.statsHTML(this.replaying ? this.replaying.main : g);
       else body.innerHTML = this.reviewHTML(g);
       $$('.hh-sum', body).forEach((el) => (el.onclick = () => el.parentElement.classList.toggle('open')));
+      $$('.hh-replay', body).forEach((b) => (b.onclick = (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.requestReplay(g.history[+b.dataset.i]); }));
       const sel = $('#rv-select', body);
       if (sel) sel.onchange = () => { this.reviewIndex = +sel.value; this.renderDrawer(); };
       const ns = $('#btn-new-session', body);
@@ -7227,13 +7353,14 @@ window.TD = window.TD || {};
 
     historyHTML(g) {
       if (!g.history.length) return '<div class="rv-empty">No hands played yet.</div>';
-      return g.history.map((h) => {
+      return g.history.map((h, i) => {
         const me = h.players[0];
+        const canReplay = !!(h.src || h).actions;
         const winners = Object.keys(h.results.winners).map((s) => (+s === 0 ? 'You' : h.players[s].name));
         const net = me.net;
         const lines = h.log.filter((l) => !l.liveOnly && (l.full || l.text)).map((l) => '<div class="' + (l.cls || '') + '">' + escapeHTML(l.full || l.text) + '</div>').join('');
-        return '<div class="hh-item"><div class="hh-sum"><span><span class="n">#' + h.handNo + '</span> · ' + (h.game ? TD.GAME_INFO[h.game].short + ' · ' : '') + (h.allSeats ? 'every seat · ' : '') + (h.train ? h.train + ' training · ' : '') + (h.god ? 'God mode · ' : '') + me.pos + ' · ' + miniCards(me.start) + ' → ' + (me.folded ? '<span class="muted">folded</span>' : miniCards(me.final)) +
-          '</span><span class="r ' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</span></div>' +
+        return '<div class="hh-item"><div class="hh-sum"><span>' + (h.replayOf ? '<span class="n">Replay of #' + h.replayOf + '</span>' : '<span class="n">#' + h.handNo + '</span>') + ' · ' + (h.game ? TD.GAME_INFO[h.game].short + ' · ' : '') + (h.allSeats ? 'every seat · ' : '') + (h.train ? h.train + ' training · ' : '') + (h.god ? 'God mode · ' : '') + me.pos + ' · ' + miniCards(me.start) + ' → ' + (me.folded ? '<span class="muted">folded</span>' : miniCards(me.final)) +
+          '</span><span class="hh-right"><span class="r ' + (net > 0 ? 'pos' : net < 0 ? 'neg' : '') + '">' + (net > 0 ? '+' : '') + money(net) + '</span>' + (canReplay ? '<button class="hh-replay" data-i="' + i + '" title="Play this hand again: same cards, same action before your first decision">Replay</button>' : '') + '</span></div>' +
           '<div class="hh-log"><div class="muted">Won by ' + escapeHTML(winners.join(' & ')) + '</div>' + lines + '</div></div>';
       }).join('');
     }
@@ -7242,7 +7369,7 @@ window.TD = window.TD || {};
       if (!g.history.length) return '<div class="rv-empty">After each hand you will see every computer decision with the strategy note behind it, plus how each of your own decisions compares with the AI.</div>';
       const idx = Math.min(this.reviewIndex, g.history.length - 1);
       const h = g.history[idx];
-      const opts = g.history.slice(0, 30).map((x, i) => '<option value="' + i + '"' + (i === idx ? ' selected' : '') + '>Hand #' + x.handNo + (x.game ? ' · ' + TD.GAME_INFO[x.game].short : '') + '</option>').join('');
+      const opts = g.history.slice(0, 30).map((x, i) => '<option value="' + i + '"' + (i === idx ? ' selected' : '') + '>' + (x.replayOf ? 'Replay of #' + x.replayOf : 'Hand #' + x.handNo) + (x.game ? ' · ' + TD.GAME_INFO[x.game].short : '') + '</option>').join('');
       let html = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap"><select class="sel-hand" id="rv-select">' + opts + '</select><span class="muted" style="font-size:13px">Study mode — all hole cards are revealed after the hand.</span></div>';
       const streetName = (n) => (n.phase === 'draw' ? 'Draw ' + n.street : ['Predraw', 'Bet · D1', 'Bet · D2', 'River'][n.street]);
       const HG = TD.forGame(h.game || TD.GAME);
@@ -7594,7 +7721,7 @@ window.TD = window.TD || {};
     ui.logLines = [];
     ui.log('New session started at ' + TD.uiHelpers.money(game.stakes.small) + '/' + TD.uiHelpers.money(game.stakes.big) + '.', 'sys');
   }
-  ui.onResetRequested = () => { if (ui.resetRequested && !game.handInProgress) startNewSession(); };
+  ui.onResetRequested = () => { if (ui.resetRequested && !game.handInProgress && !ui.replaying) startNewSession(); };
 
   function welcome() {
     return new Promise((resolve) => {
@@ -7661,6 +7788,8 @@ window.TD = window.TD || {};
       await ui.betweenHands(game);
       // never deal the next hand behind an open dialog (Zoom deals at once, auto-deal on a timer)
       await ui.whenNoDialog();
+      // Replay (Chase, Nov 24): a hand picked in Hand History plays again on a temporary table, then the session goes on
+      if (ui.replayQueued && !ui.resetRequested) { await TD.runReplay(ui, game); await ui.whenNoDialog(); }
     }
   }
   loop();
