@@ -545,6 +545,82 @@ table.stats.sess-facts td { text-align: left; padding: 7px 4px; }
 table.stats.sess-facts td:first-child { color: var(--accent-hi); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; width: 42%; }
 body.portrait .sess-opt { display: none; }
 
+/* ---------------- full-screen pages (v96): splash menu, in-game menu, Session log ---------------- */
+.seat.empty, .bet.empty { display: none !important; }
+#modal-root.full { align-items: stretch; justify-content: stretch; background: var(--bg); }
+body.theme-classic #modal-root.full { background: radial-gradient(ellipse 90% 60% at 50% 0%, #3a1714 0%, #1a0a08 55%, #0c0605 100%); }
+.modal.full { width: 100%; max-width: none; height: 100%; max-height: none; border: none; border-radius: 0; padding: 0; box-shadow: none; background: transparent !important;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal.full .fs-inner { max-width: 720px; margin: 0 auto; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column;
+  padding: calc(8px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) calc(18px + env(safe-area-inset-left)); }
+.modal.full .fs-body { flex: 1 0 auto; }
+.fs-top { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; min-height: 52px; margin: 0 -4px 6px; padding: 6px 4px;
+  background: var(--bg); border-bottom: 1px solid var(--panel-line); }
+body.theme-classic .fs-top { background: #1d0c0a; }
+.fs-top .fs-title { flex: 1; font-family: var(--serif); color: var(--accent-hi); font-size: 22px; letter-spacing: 2px; text-transform: uppercase; text-align: center; padding: 0 4px; }
+.fs-top .fs-side { width: 48px; flex: none; display: flex; }
+.fs-x, .fs-back { width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--panel-line); background: transparent; color: var(--text); font-size: 22px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0; }
+.fs-back { font-size: 26px; }
+.modal.full .modal-actions { margin-top: 22px; }
+.modal.full .modal-actions .mbtn { flex: 1 1 200px; max-width: 340px; }
+/* splash */
+.splash-head { text-align: center; padding: 14px 0 4px; }
+.splash-head .crest { width: 92px !important; height: 92px !important; }
+.splash-head h1 { font-family: var(--serif); font-weight: 400; color: var(--accent-hi); font-size: 34px; letter-spacing: 6px; margin: 6px 0 2px; }
+.splash-head .tag { color: var(--text-dim); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+.continue-card { display: flex; align-items: center; gap: 14px; margin: 18px 0 4px; padding: 14px 16px; border: 2px solid var(--accent); border-radius: 14px; background: rgba(212, 176, 106, 0.08); }
+.continue-card .cc-txt { flex: 1; min-width: 0; }
+.continue-card .cc-k { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 800; color: var(--accent-hi); }
+.continue-card .cc-v { font-size: 15px; font-weight: 700; margin-top: 3px; line-height: 1.35; }
+.continue-card .mbtn { min-width: 0; flex: none; }
+.mode-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
+.mode-tile { text-align: left; border: 2px solid var(--panel-line); border-radius: 14px; padding: 14px 14px 12px; background: transparent; color: var(--text); cursor: pointer; font: inherit; }
+.mode-tile b { display: block; font-size: 18px; font-family: var(--serif); letter-spacing: 1px; color: var(--accent-hi); margin-bottom: 4px; }
+.mode-tile span { display: block; font-size: 13px; color: var(--text-dim); line-height: 1.4; }
+.mode-tile.on { border-color: var(--accent); background: rgba(212, 176, 106, 0.12); box-shadow: inset 0 0 0 1px var(--accent); }
+.pick-row { margin: 16px 0 0; }
+.pick-row .pick-lbl { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 800; color: var(--accent-hi); margin-bottom: 8px; }
+.pick-row .seg { display: inline-flex; flex-wrap: nowrap; max-width: 100%; }
+.pick-row .seg button { min-width: 54px; min-height: 46px; padding: 10px 14px; font-size: 16px; }
+.pick-row .pick-note { font-size: 13px; color: var(--muted); margin-top: 7px; line-height: 1.45; }
+.splash-desc { font-size: 14px !important; color: var(--text-dim); line-height: 1.55 !important; margin: 16px 0 0; }
+.splash-start { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 22px; }
+.splash-start .mbtn { width: 100%; min-height: 56px; font-size: 18px; }
+/* in-game menu */
+.menu-session { border: 2px solid var(--panel-line); border-radius: 14px; padding: 14px 16px; margin: 10px 0 6px; }
+.menu-session .ms-k { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 800; color: var(--accent-hi); }
+.menu-session .ms-v { font-size: 16px; font-weight: 700; margin: 3px 0 0; line-height: 1.4; }
+.menu-session .ms-btns { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.menu-session .ms-btns .mbtn { flex: 1 1 140px; min-width: 0; }
+.mbtn.danger { background: transparent !important; color: var(--bad) !important; border-color: var(--bad) !important; }
+/* Session log */
+.sess-filter { display: flex; justify-content: center; margin: 4px 0 14px; }
+.sess-list { display: flex; flex-direction: column; gap: 8px; }
+.sess-card { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; font: inherit; color: var(--text); background: transparent; cursor: pointer;
+  border: 2px solid var(--panel-line); border-radius: 12px; padding: 12px 14px; }
+.sess-card:active, .sess-card:hover { border-color: var(--accent-lo); }
+.sess-card.cur { border-color: var(--accent); }
+.sess-card .sc-main { flex: 1; min-width: 0; }
+.sess-card .sc-when { font-weight: 800; font-size: 15px; }
+.sess-card .sc-what { font-size: 13px; color: var(--text-dim); margin-top: 3px; line-height: 1.4; }
+.sess-card .sc-res { text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.sess-card .sc-net { font-size: 19px; font-weight: 800; }
+.sess-card .sc-sub { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; }
+.sess-card .sc-chev { color: var(--muted); font-size: 22px; flex: none; }
+@media (max-width: 420px) {
+  .mode-tiles { grid-template-columns: 1fr; }
+  .splash-head h1 { font-size: 28px; letter-spacing: 4px; }
+  .pick-row .seg button { min-width: 46px; padding: 10px 11px; font-size: 15px; }
+  .stat-card .v { font-size: 19px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .splash-head { padding: 4px 0 0; display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
+  .splash-head .crest { width: 56px !important; height: 56px !important; margin: 0 !important; }
+  .splash-head h1 { font-size: 26px; margin: 0; }
+  .mode-tiles { margin-top: 12px; }
+}
+
 </style>
 </head>
 <body class="theme-classic landscape">
@@ -618,7 +694,7 @@ body.portrait .sess-opt { display: none; }
           <button class="tb" id="tb-history" title="Hand history"><svg><use href="#ic-history"/></svg><span>History</span></button>
           <button class="tb" id="tb-stats" title="Session stats"><svg><use href="#ic-stats"/></svg><span>Stats</span></button>
           <button class="tb land-only" id="tb-rules" title="Rules"><svg><use href="#ic-rules"/></svg><span>Rules</span></button>
-          <button class="tb" id="tb-settings" title="Settings"><svg><use href="#ic-settings"/></svg><span>Settings</span></button>
+          <button class="tb" id="tb-settings" title="Menu: session, Session log and settings"><svg><use href="#ic-settings"/></svg><span>Menu</span></button>
           <button class="tb land-only icon-only" id="tb-sound" title="Sound on/off"><svg><use href="#ic-sound"/></svg></button>
         </div>
       </header>
@@ -1361,6 +1437,10 @@ window.TD = window.TD || {};
   }
   const STREET_NAMES = ['Predraw', 'After 1st draw', 'After 2nd draw', 'After 3rd draw'];
   const POS6 = ['BTN', 'SB', 'BB', 'LJ', 'HJ', 'CO'];
+  // Fewer players (Chase, Nov 25: 3 to 6 seated, the user included): the table keeps its six seats and leaves
+  // these ones empty, so the seated players stay spread around the felt. Positions are named from the button:
+  // the early seats drop out first, so BTN, SB and BB always play (5: HJ CO BTN SB BB, 4: CO BTN SB BB, 3: BTN SB BB).
+  const EMPTY_SEATS = { 6: [], 5: [3], 4: [2, 4], 3: [1, 3, 5] };
   const CHIP_UNIT = 1;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1393,6 +1473,7 @@ window.TD = window.TD || {};
       this.stakes = makeStakes(opts.stakes || DEFAULT_STAKES);
       for (let i = 0; i < 6; i++) this.players.push(new Player(i, names[i], i === 0 && !opts.allBots, this.stakes.buyin));
       this.button = Math.floor(Math.random() * 6);
+      this.setSeats(opts.seats || 6);
       this.handNo = 0;
       this.rng = Math.random;
       this.history = []; // finished hand records
@@ -1406,12 +1487,33 @@ window.TD = window.TD || {};
     }
 
     /* ---------- helpers ---------- */
+    // how many players are seated (3 to 6); the other seats stay empty for the whole session
+    setSeats(n) {
+      n = Math.max(3, Math.min(6, Math.round(+n) || 6));
+      this.nSeats = n;
+      for (const p of this.players) p.empty = EMPTY_SEATS[n].includes(p.seat);
+      if (this.players[this.button].empty) this.button = this.nextSeated(this.button);
+    }
     next(i) { return (i + 1) % 6; }
-    posName(seat) { return POS6[(seat - this.button + 6) % 6]; }
-    // order index for post-draw action (SB first = 0, BTN last = 5)
-    actOrder(seat) { return (seat - this.button - 1 + 12) % 6; }
-    sbSeat() { return this.next(this.button); }
-    bbSeat() { return this.next(this.next(this.button)); }
+    // the next seat clockwise with a player in it
+    nextSeated(i) { let s = i; for (let k = 0; k < 6; k++) { s = (s + 1) % 6; if (!this.players[s].empty) return s; } return s; }
+    // seated players from the button to this seat (BTN 0, SB 1, BB 2, ...)
+    seatOffset(seat) { let k = 0, s = this.button; while (s !== seat && k < 6) { s = this.nextSeated(s); k++; } return k; }
+    posName(seat) {
+      const n = this.nSeats || 6;
+      if (n === 6) return POS6[(seat - this.button + 6) % 6];
+      if (this.players[seat].empty) return '';
+      const k = this.seatOffset(seat);
+      return k < 3 ? POS6[k] : ['LJ', 'HJ', 'CO'][k - 3 + 6 - n];
+    }
+    // order index for post-draw action (SB first = 0, BTN last)
+    actOrder(seat) {
+      const n = this.nSeats || 6;
+      if (n === 6) return (seat - this.button - 1 + 12) % 6;
+      return (this.seatOffset(seat) - 1 + n) % n;
+    }
+    sbSeat() { return this.nextSeated(this.button); }
+    bbSeat() { return this.nextSeated(this.sbSeat()); }
     activePlayers() { return this.players.filter((p) => !p.folded); }
     pot() { return this.players.reduce((s, p) => s + p.totalBet, 0); }
     // full: the same line with every card named, shown in the Log once the hand is over and in History
@@ -1456,9 +1558,9 @@ window.TD = window.TD || {};
       let picked = TD.pickedGames(this.settings);
       if (this.trainPos() && picked.length > 1) picked = [picked.includes(TD.GAME) ? TD.GAME : picked[0]]; // seat training: one game
       if (picked.length === 1) { this.mixGame = null; this.mixLeft = 0; return TD.GAMES[picked[0]] ? picked[0] : '27'; }
-      if (!this.mixGame) { this.mixGame = picked.includes(TD.GAME) ? TD.GAME : TD.nextPicked(TD.GAME, picked); this.mixLeft = 6; }
-      else if (!picked.includes(this.mixGame)) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = 6; }
-      else if (this.mixLeft <= 0) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = 6; }
+      if (!this.mixGame) { this.mixGame = picked.includes(TD.GAME) ? TD.GAME : TD.nextPicked(TD.GAME, picked); this.mixLeft = this.nSeats || 6; }
+      else if (!picked.includes(this.mixGame)) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = this.nSeats || 6; }
+      else if (this.mixLeft <= 0) { this.mixGame = TD.nextPicked(this.mixGame, picked); this.mixLeft = this.nSeats || 6; }
       this.mixLeft--;
       return this.mixGame;
     }
@@ -1490,7 +1592,7 @@ window.TD = window.TD || {};
       const human0 = this.players.find((p) => p.isHuman);
       if (R0) this.button = R0.button;
       else if (train && human0) this.button = (human0.seat - POS6.indexOf(train) + 6) % 6;
-      else this.button = this.next(this.button);
+      else this.button = this.nextSeated(this.button);
       this.street = 0;
       this.actions = [];
       this.handLog = [];
@@ -1507,6 +1609,7 @@ window.TD = window.TD || {};
       this.betLevel = 0;
       for (const p of this.players) {
         p.resetHand();
+        if (p.empty) { p.sitOut = true; p.folded = true; continue; } // an empty seat: never dealt in
         if (R0) { if (R0.stacks) p.stack = R0.stacks[p.seat]; continue; } // a replay starts from the original stacks
         const topUpBelow = this.botTopUpBelow !== undefined ? this.botTopUpBelow : Math.round(this.stakes.buyin * 0.375);
         if (!p.isHuman && (p.stack < topUpBelow || p.stack <= 0)) {
@@ -1518,12 +1621,12 @@ window.TD = window.TD || {};
       const human = this.players.find((p) => p.isHuman);
       const sitters = [];
       if (R0) {
-        for (const p of this.players) if (R0.players[p.seat] && R0.players[p.seat].sitOut) { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
+        for (const p of this.players) if (!p.empty && R0.players[p.seat] && R0.players[p.seat].sitOut) { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
       } else if (train) {
         const order = ['LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'], mine = order.indexOf(train);
         for (const p of this.players) {
           const pos = this.posName(p.seat);
-          if (order.indexOf(pos) < mine && pos !== 'SB') { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
+          if (!p.empty && order.indexOf(pos) < mine && pos !== 'SB') { p.sitOut = true; p.folded = true; p.lastAction = 'Fold'; sitters.push(p); }
         }
       }
       const btnP = this.players[this.button];
@@ -2102,7 +2205,7 @@ window.TD = window.TD || {};
         actions: this.actions.filter((a) => a.type !== 'draw').map((a) => ({ seat: a.seat, street: a.street, type: a.type })),
         stacks: this.startStacks.slice(), stakes: this.stakes, replayOf: this.replay ? this.replay.handNo : null, src: this.replay || null,
         players: this.players.map((p) => ({
-          seat: p.seat, name: p.name, pos: this.posName(p.seat), start: p.startHand, final: p.hand.slice(), sitOut: !!p.sitOut,
+          seat: p.seat, name: p.name, pos: this.posName(p.seat), start: p.startHand, final: p.hand.slice(), sitOut: !!p.sitOut, empty: !!p.empty,
           draws: p.draws.slice(), folded: p.folded, shown: p.shown, isHuman: p.isHuman,
           net: p.stack - this.startStacks[p.seat], history: p.handHistory
         })),
@@ -2123,13 +2226,13 @@ window.TD = window.TD || {};
 
     serialize() {
       return {
-        v: 1, handNo: this.handNo, button: this.button, mixGame: this.mixGame || null, mixLeft: this.mixLeft || 0, userModel: this.userModel, coachStats: this.coachStats, stakes: this.stakes,
+        v: 1, handNo: this.handNo, button: this.button, seats: this.nSeats || 6, mixGame: this.mixGame || null, mixLeft: this.mixLeft || 0, userModel: this.userModel, coachStats: this.coachStats, stakes: this.stakes,
         players: this.players.map((p) => ({ name: p.name, stack: p.stack, buyins: p.buyins, stats: p.stats }))
       };
     }
     restore(data) {
       if (!data || data.v !== 1) return false;
-      this.handNo = data.handNo; this.button = data.button; this.mixGame = data.mixGame || null; this.mixLeft = data.mixLeft || 0; this.userModel = Object.assign(this.userModel, data.userModel || {});
+      this.handNo = data.handNo; this.button = data.button; this.setSeats(data.seats || 6); this.mixGame = data.mixGame || null; this.mixLeft = data.mixLeft || 0; this.userModel = Object.assign(this.userModel, data.userModel || {});
       if (data.coachStats) this.coachStats = data.coachStats;
       if (data.stakes) this.stakes = makeStakes(data.stakes);
       data.players.forEach((d, i) => { const p = this.players[i]; p.stack = d.stack; p.buyins = d.buyins; p.stats = Object.assign(p.stats, d.stats); });
@@ -2142,6 +2245,7 @@ window.TD = window.TD || {};
   // changes nothing in the session.
   TD.newReplayGame = function (ui, main, rec) {
     const g = new Game(ui, { settings: main.settings, stakes: rec.stakes || main.stakes, names: main.players.map((p) => p.name) });
+    g.setSeats(main.nSeats || 6);
     g.replay = rec;
     g.handNo = rec.handNo - 1;
     g.userModel = JSON.parse(JSON.stringify(main.userModel));
@@ -5117,8 +5221,22 @@ window.TD = window.TD || {};
   // bluff-catches with some good three-card hands, more the better they are. w > 0.3: a player shown to fold the river more.
   // leadMul: MMG — three-card hands call a bettor who had the betting lead more (he may be value betting a three-card
   // hand) and a bettor without it less (a bet without the lead reads as a badugi)
-  function riverCallLik(hand, w, leadMul) {
+  // pat: the bettor stood pat on the last draw (Chase, Nov 25). He can't be value betting a three-card hand, so the
+  // caller's worse hands only beat a snow: three-card hands call only when the snow rate pays the price (the bots' own
+  // rule), and rough badugis mostly fold. pat.strong: he stood pat on the last two draws and bet after the 2nd draw,
+  // a line that represents a strong made badugi, so queen and king badugis (which beat none of his value bets) fold
+  // nearly always and jacks often. A one-draw pat line is weaker: rough badugis call more.
+  const PAT_CALL = {
+    strong: (t) => (t <= lv('8') ? 1 : t <= lv('9') ? 0.9 : t <= lv('T') ? 0.75 : t <= lv('J') ? 0.45 : t <= lv('Q') ? 0.12 : 0.06),
+    pat: (t) => (t <= lv('T') ? 1 : t <= lv('J') ? 0.85 : t <= lv('Q') ? 0.6 : 0.35),
+  };
+  function riverCallLik(hand, w, leadMul, pat) {
     const v = TD.evalHand(hand), cat = TD.evalCat(v), tight = (w || 0.3) / 0.3;
+    if (pat) {
+      if (cat === 0) return clamp(PAT_CALL[pat.strong ? 'strong' : 'pat'](TD.handName(hand).top) / Math.max(1, tight), 0.02, 1);
+      if (cat === 1) return pat.snow * triBeatsSnow(hand) >= pat.odds ? 0.9 : 0.03;
+      return 0.01;
+    }
     if (cat === 0) return tight > 1 ? clamp(1 - (tight - 1) * 0.6 * (1 - TD._bd.qOfValue(v)), 0.6, 1) : 1;
     if (cat === 1) {
       const t = lvDesc(TD.playing(hand))[0];
@@ -5178,7 +5296,7 @@ window.TD = window.TD || {};
         if (ok && R() > pa) ok = false;
         if (!ok && w < bestW * 0.5) break;
       }
-      if (model.hypoCall) { const pc = riverCallLik(hand, model.callW, model.leadMul); w *= pc; if (ok && R() > pc) ok = false; }
+      if (model.hypoCall) { const pc = riverCallLik(hand, model.callW, model.leadMul, model.pat); w *= pc; if (ok && R() > pc) ok = false; }
       if (ok) { if (best) for (const c of best.cards) pool.putBack(c); return hand; }
       if (w > bestW) { if (best) for (const c of best.cards) pool.putBack(c); best = { cards: hand }; bestW = w; continue; }
       pool.top = save;
@@ -5202,7 +5320,7 @@ window.TD = window.TD || {};
 
   let EQ_CACHE = null;
   function mcEquity(game, p, opt) {
-    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' + (opt.leadMul || 1) : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') : null;
+    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' + (opt.leadMul || 1) + (opt.pat ? '|pat' + (opt.pat.strong ? 2 : 1) : '') : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') : null;
     if (ckey && ckey in EQ_CACHE) return EQ_CACHE[ckey];
     const v = mcEquityRaw(game, p, opt);
     if (ckey) EQ_CACHE[ckey] = v;
@@ -5212,7 +5330,7 @@ window.TD = window.TD || {};
     const opps = opponentsOf(game, p);
     if (!opps.length) return 1;
     const models = opps.map((o) => buildModel(game, o));
-    if (opt.hypoCall) for (const m of models) { m.hypoCall = true; m.leadMul = opt.leadMul || 1; }
+    if (opt.hypoCall) for (const m of models) { m.hypoCall = true; m.leadMul = opt.leadMul || 1; m.pat = opt.pat || null; }
     const known = new Set(p.hand.concat(p.discards));
     const avail = [];
     for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
@@ -6145,6 +6263,15 @@ window.TD = window.TD || {};
     acts.forEach((a, i) => { if (a.type === 'bet' || a.type === 'raise') last = i; });
     return last >= 0 && acts[last].seat === opp.seat && acts[last].type === 'bet' && acts.slice(last + 1).some((a) => a.seat === p.seat && a.type === 'call');
   }
+  // the line I took to the river when I stood pat on the last draw (Chase, Nov 25): null if I drew; strong when I stood
+  // pat on the last two draws and made the last bet after the 2nd draw. snow and odds: how often that line is a snow and
+  // the price a caller gets, which decide whether a three-card hand can call as a bluff catcher.
+  function strongPatLine(game, p, c, lead0) {
+    if (!(p.draws.length >= 3 && p.draws[2] === 0)) return null;
+    const strong = p.draws[1] === 0 && !!lead0 && lead0.seat === p.seat && lead0.street === 2;
+    const raisedPre = game.actions.some((a) => a.seat === p.seat && a.street === 0 && a.type === 'raise');
+    return { strong, raisedPre, snow: snowRate(game, p).rate, odds: c.unit / (c.pot + 2 * c.unit) };
+  }
   function river(c, fair) {
     const { game, p, hn } = c;
     const t = hn.top;
@@ -6172,17 +6299,25 @@ window.TD = window.TD || {};
       }
       if (c.made && c.N === 1) {
         const lead0 = leadInto(game, 3);
-        const Ec = mcEquity(game, p, { mode: 'bet', hypoCall: true, leadMul: lead0 && lead0.seat === p.seat ? 1.3 : 0.6 });
+        const oppDrew = c.opp.draws[2] > 0;
+        // Chase (Nov 25): when I stood pat on the last draw against a player who drew, the hands that call my bet are
+        // the ones that beat my value bets, plus bluff catchers that beat a snow. A line that stood pat twice and bet
+        // after the 2nd draw represents a strong made badugi: worse badugis and three-card hands won't pay it off.
+        const pat = strongPatLine(game, p, c, lead0);
+        const Ec = mcEquity(game, p, { mode: 'bet', hypoCall: true, leadMul: lead0 && lead0.seat === p.seat ? 1.3 : 0.6, pat });
         const need = c.ip ? 0.53 : 0.56;
         if (tier <= 6 || Ec >= need) {
           // Chase (Nov 21): out of position, check-raise only when he will bet often enough — when he stood pat behind me.
           // Against a player who drew, bet the strongest badugis: a worse badugi he made would check behind.
-          const oppDrew = c.opp.draws[2] > 0;
           if (!c.ip && !oppDrew && tier <= 6 && c.canRaise && R() < 0.3) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ' to check-raise: he stood pat behind me, so he will bet his good badugis if I check.', 'check-raise'); }
           // Chase (Nov 21): against a player who drew, my check-raising range is polarized (very strong hands, a few
           // bluffs). Usually bet the strongest (getting to 3-bet his raise wins more than a check-raise), sometimes check-raise.
           if (!c.ip && oppDrew && tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
           return act('bet', 'Bet the ' + c.txt + ' for value: against his likely range it beats more than half of the hands that would call.' + (!c.ip && oppDrew ? ' I stood pat on the last draw, so he won\'t necessarily bet a worse badugi he made if I check. Hands good enough to value bet here should usually not attempt a check-raise (especially hands that are strong enough to 3-bet).' : ''), 'value');
+        }
+        if (pat && pat.strong && oppDrew) {
+          const myLine = 'My line (' + (pat.raisedPre ? 'a raise before the draw, then ' : '') + 'pat on the last two draws with a bet after the 2nd draw) represents a strong made badugi.';
+          return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + (c.ip ? '' : ', planning to call a bet as a bluff catcher') + '. ' + myLine + ' A bet gets called by the badugis that beat my value bets and little else: worse badugis only beat a snow, and three-card hands fold. Against that calling range the ' + c.txt + ' wins less than half the time, so ' + (c.ip ? 'it checks back.' : 'check and bluff-catch: he bets his better badugis and bluffs some missed draws.'));
         }
         if (!c.ip && c.opp.draws[2] > 0 && t <= lv('J')) { return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Notes: out of position against a player who drew on the last draw, bet only the strongest badugis; with a decent one, check — he bets his better badugis and bluffs some missed draws, and a bet of mine would mostly be called by better.'); }
         return act('check', (c.ip ? 'Check back ' : 'Check ') + 'the ' + c.txt + ' — it doesn\'t beat half of the hands that would call a bet.');
@@ -6383,7 +6518,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 93;
+  TD.VERSION = 96;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6391,6 +6526,9 @@ window.TD = window.TD || {};
     remove(k) { try { window.localStorage.removeItem(k); } catch (e) { /* ignore */ } }
   };
   TD.store = store;
+  // v96: the id of the session at the table, so the splash menu can offer to continue it after the page is closed.
+  // Ending the session (in-game menu > End session) removes it; the session stays in the Session log.
+  TD.CURRENT_KEY = 'lago27.current';
 
   /* ---------------- Session log (Chase, Nov 25) ----------------
      Every session (regular play and Seat training) gets a row: a short summary in lago27.log and the table state
@@ -6411,7 +6549,7 @@ window.TD = window.TD || {};
       const me = g.players[0], s = me.stats, cs = g.coachStats || {};
       const st = g.stakes;
       return {
-        id: g.sessionId, mode: meta.mode, seat: meta.seat || null, games: meta.games.slice(),
+        id: g.sessionId, mode: meta.mode, seat: meta.seat || null, games: meta.games.slice(), seats: g.nSeats || 6,
         stakes: { sb: st.sb, bb: st.bb, small: st.small, big: st.big, buyin: st.buyin },
         started, updated: Date.now(), hands: g.handNo, dealt: s.hands, net: me.stack - me.buyins, buyins: me.buyins, rebuys: s.rebuys,
         vpip: s.vpip, pfr: s.pfr, sd: s.showdowns, sdw: s.sdWins, wins: s.wins,
@@ -6571,13 +6709,14 @@ window.TD = window.TD || {};
   class UI {
     constructor() {
       const saved = (() => { try { return JSON.parse(store.get('lago27.settings') || '{}'); } catch (e) { return {}; } })();
-      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', stakes: null, seatTrain: null, mode: 'play', trainSeat: null, trainGame: null, playGames: null }, saved);
+      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', stakes: null, seatTrain: null, mode: 'play', trainSeat: null, trainGame: null, playGames: null, playSeats: 6 }, saved);
       // Game modes (Chase, Nov 24): regular play and Seat training are separate modes picked in the menu.
       // mode: the one being played; trainSeat / trainGame: Seat training's seat and its one game;
       // playGames: the games picked for regular play. seatTrain (what the table reads) is set only in Seat training.
       const POS = ['LJ', 'HJ', 'CO', 'BTN', 'SB', 'BB'];
       if (!POS.includes(this.settings.trainSeat)) this.settings.trainSeat = POS.includes(this.settings.seatTrain) ? this.settings.seatTrain : 'BTN'; // older saves: the Settings switch
       if (!['play', 'train'].includes(this.settings.mode)) this.settings.mode = 'play';
+      this.settings.playSeats = Math.max(3, Math.min(6, Math.round(+this.settings.playSeats) || 6)); // regular play: players seated, you included
       if (this.settings.zoom !== false) this.settings.everySeat = false; // play every seat needs Zoom off
       if (!['rotate', 'fixed'].includes(this.settings.seatView)) this.settings.seatView = 'rotate';
       if (!['classic', 'light', 'dark'].includes(this.settings.theme)) this.settings.theme = 'classic';
@@ -6627,13 +6766,47 @@ window.TD = window.TD || {};
     get training() { return this.settings.mode === 'train'; }
     // Only regular play keeps a saved session; Seat training starts a new session every time, so clearing a
     // training session never touches the regular one
-    clearSavedSession() { if (!this.training) store.remove(TD.SESSION_KEY); }
-    // Settings > Menu: back to the menu to pick a mode. Between hands it opens at once; during a hand, when it is over.
-    requestMenu() {
+    clearSavedSession() { store.remove(TD.CURRENT_KEY); }
+    // back to the splash menu to pick a mode. Between hands it opens at once; during a hand, when it is over.
+    requestMenu(quiet) {
       this.menuRequested = true;
       this.toggleDrawer(null);
       if (this.replayEndResolve) { this.replayEndResolve('end'); return; }
-      if ((this.game && this.game.handInProgress) || this.replaying) this.toast('The menu opens when this hand is over');
+      if (!quiet && ((this.game && this.game.handInProgress) || this.replaying)) this.toast('The menu opens when this hand is over');
+    }
+    // In-game menu > End session (v96): asks first, then the session ends and the splash menu opens. The session
+    // stays in the Session log. During a hand your cards are folded and the rest of the hand plays out at once
+    // (with Play every seat on, the hand is played to the end first).
+    confirmEndSession() {
+      const g = this.game, main = this.replaying ? this.replaying.main : g;
+      const inHand = g && g.handInProgress, me = g && g.players[0];
+      const live = inHand && me && !me.folded && !g.allSeats;
+      const hands = main ? main.handNo : 0, net = main ? main.players[0].stack - main.players[0].buyins : 0;
+      const html = '<h2>End Session?</h2><div class="sub">' + (this.training ? 'Seat training · ' + escapeHTML(this.settings.trainSeat) : 'Regular play') + '</div>' +
+        '<p style="text-align:center">' + (hands ? 'This session (' + hands + ' hand' + (hands === 1 ? '' : 's') + ', ' + sessFmt.signed(net) + ') stays in the <b>Session log</b>, so you can pick it up again from there.' : 'No hands have been played in this session yet, so it does not go into the Session log.') + '</p>' +
+        (live ? '<p style="text-align:center">You are in a hand: your cards are folded and the hand plays out at once.</p>'
+          : inHand && g.allSeats ? '<p style="text-align:center">The hand on the table is played to the end first.</p>' : '') +
+        (this.replaying ? '<p style="text-align:center">The replay ends too.</p>' : '');
+      this.modal(html, [['End session', () => this.endSession()], ['Cancel', () => this.showSettings(), true]], false);
+    }
+    endSession() {
+      store.remove(TD.CURRENT_KEY);
+      this.endRequested = true;
+      this.requestMenu(true);
+      const g = this.game;
+      if (g && g.handInProgress) this.foldOut(g);
+    }
+    // End session during a hand: fold your cards (now, or at your next turn) and play the hand out at once
+    foldOut(g) {
+      if (g.allSeats) { this.toast('The session ends when this hand is over'); return; }
+      const me = g.players[0];
+      g.fastForward = true;
+      this.setFastForward(true, ['Session over', 'Saved in the Session log']);
+      if (!me.folded && !me.allIn) {
+        this.preAction = 'fastfold';
+        if (this.actNow) this.actNow({ type: 'fold', forceFold: true });
+        else if (this.drawNow) this.drawNow();
+      }
     }
     // Session log > Resume at the table: the session opens between hands (at once if none is being played)
     requestResume(sid) {
@@ -6713,11 +6886,11 @@ window.TD = window.TD || {};
 
     wait(ms) { if (this.ff) return Promise.resolve(); return new Promise((r) => setTimeout(r, Math.max(0, ms * this.f))); }
     // Zoom: once the user folds, the rest of the hand plays out instantly (no animation or sound)
-    setFastForward(on) {
+    setFastForward(on, banner) {
       this.ff = !!on;
       Sound.suspend = !!on;
       document.body.classList.toggle('zooming', !!on);
-      if (on) { this.clearButtons(); $('#pre-actions').innerHTML = ''; this.showBanner('Zoom', 'Next hand coming up…'); }
+      if (on) { const b = banner || ['Zoom', 'Next hand coming up…']; this.clearButtons(); $('#pre-actions').innerHTML = ''; this.showBanner(b[0], b[1]); }
     }
     botDelay() { return 520 + Math.random() * 640; }
     async flush() { await Promise.all(Array.from(this.pending)); }
@@ -6802,7 +6975,7 @@ window.TD = window.TD || {};
       if (!live && dropped) {
         const to = next.length === 1 ? next[0] : TD.nextPicked(TD.GAME, next);
         TD.setGame(to); s.game = to; this.refreshStakesText(); this.relayout();
-        if (g && next.length > 1) { g.mixGame = to; g.mixLeft = 6; }
+        if (g && next.length > 1) { g.mixGame = to; g.mixLeft = g.nSeats || 6; }
       }
       this.saveSettings();
       if (g) this.update(g, {});
@@ -6811,12 +6984,15 @@ window.TD = window.TD || {};
       return true;
     }
     // "Playing Badugi" / "Playing 2-7 and Badugi, 6 hands each" / "Playing 2-7, A-5 and Badugi, 6 hands each"
+    // (one orbit of each game: as many hands as there are players at the table)
     gamesLabel() {
       const p = TD.pickedGames(this.settings);
       if (p.length === 1) return 'Playing ' + TD.GAME_INFO[p[0]].name;
       const ns = p.map((k) => TD.GAME_INFO[k].short);
-      return 'Playing ' + (ns.length === 2 ? ns.join(' and ') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]) + ', 6 hands each';
+      return 'Playing ' + (ns.length === 2 ? ns.join(' and ') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]) + ', ' + this.orbit() + ' hands each';
     }
+    // hands in one orbit: the players at the table now (Seat training is always six-handed)
+    orbit() { return (this.game && this.game.nSeats) || (this.training ? 6 : this.settings.playSeats) || 6; }
     // the game buttons (Settings and the welcome screen); the picked ones are highlighted
     gameButtons() {
       const picked = TD.pickedGames(this.settings);
@@ -6849,7 +7025,7 @@ window.TD = window.TD || {};
       this.fixedView = !!game.allSeats && this.settings.seatView === 'fixed';
       this.glowSeat = -1;
       // turning table: start the hand turned to the first player to act; otherwise your seat is at the bottom
-      const view = game.allSeats && !this.fixedView ? (game.button + 3) % 6 : 0;
+      const view = game.allSeats && !this.fixedView ? game.nextSeated(game.bbSeat()) : 0;
       if (view !== this.viewSeat) { this.viewSeat = view; this.heroOrderCache = null; this.relayout(); }
       this.renderFocusTag(game);
       this.setFastForward(false);
@@ -6925,6 +7101,8 @@ window.TD = window.TD || {};
       const human = game.players[0];
       for (const p of game.players) {
         const s = $('#seat-' + p.seat);
+        s.classList.toggle('empty', !!p.empty);
+        $('#bet-' + p.seat).classList.toggle('empty', !!p.empty);
         s.querySelector('.ini').textContent = p.isHuman ? 'YOU' : p.name.slice(0, 2).toUpperCase();
         s.querySelector('.pname').textContent = p.isHuman ? 'You' : p.name;
         s.querySelector('.pstack').textContent = money(p.stack);
@@ -7318,7 +7496,8 @@ window.TD = window.TD || {};
       }
       Sound.turn();
       return new Promise((resolve) => {
-        const done = (a) => { this.clearButtons(); this.renderPre(); resolve(a); };
+        const done = (a) => { this.actNow = null; this.clearButtons(); this.renderPre(); resolve(a); };
+        this.actNow = done; // End session: fold at once
         const box = $('#action-btns');
         box.innerHTML = '';
         $('#pre-actions').innerHTML = '';
@@ -7492,6 +7671,7 @@ window.TD = window.TD || {};
         });
         $('#action-msg').textContent = (game.allSeats ? this.seatName(game, p) + ' · ' : '') + ['1st', '2nd', '3rd'][k] + ' draw · tap cards to discard · ' + others.join(' · ');
         const done = () => {
+          this.drawNow = null;
           const idx = $$('.card.sel', hc).map((e) => +e.dataset.hi);
           this.drawMode = false;
           this.heroSel.clear();
@@ -7508,6 +7688,7 @@ window.TD = window.TD || {};
         draw.className = 'abtn draw';
         box.appendChild(pat); box.appendChild(draw);
         draw.onclick = done;
+        this.drawNow = () => pat.click(); // End session: stand pat now, fold at the next bet
         // one button at a time: Stand Pat while no cards are marked, otherwise Draw N
         this.updateDrawButtons = () => {
           const n = $$('.card.sel', hc).length;
@@ -7692,6 +7873,7 @@ window.TD = window.TD || {};
       const folds = [];
       for (const pl of order) {
         const notes = h.review.filter((n) => n.seat === pl.seat);
+        if (pl.empty) continue;
         if (pl.sitOut) { folds.push('<div class="rv-line"><span class="st">' + pl.pos + '</span><b>' + escapeHTML(pl.name) + '</b> <span class="muted">— not dealt in (seat training)</span></div>'); continue; }
         if (!saw(pl) && pl.folded) {
           folds.push('<div class="rv-line"><span class="st">' + pl.pos + '</span><b>' + (pl.isHuman ? 'You' : escapeHTML(pl.name)) + '</b> ' + miniCards(pl.start) + (notes[0] ? ' <span class="muted">— ' + escapeHTML(notes[notes.length - 1].reason) + '</span>' : ' <span class="muted">— folded</span>') + '</div>');
@@ -7708,7 +7890,7 @@ window.TD = window.TD || {};
           s += '<div class="rv-line"><span class="st">' + (pl.folded ? 'Folded' : 'Final') + '</span>' + miniCards(HG.sortForDisplay(pl.final)) + ' <span class="muted">' + hn.long + '</span></div>';
         }
         for (const n of notes) {
-          const tag = n.tag ? '<span class="tagb ' + n.tag + '">' + n.tag.replace('-', ' ') + '</span>' : '';
+          const tag = n.tag && n.tag !== 'steal' ? '<span class="tagb ' + n.tag + '">' + n.tag.replace('-', ' ') + '</span>' : '';
           s += '<div class="rv-dec"><span class="st">' + streetName(n) + '</span> ' + tag + escapeHTML(n.reason) + '</div>';
         }
         html += s + '</div>';
@@ -7773,6 +7955,7 @@ window.TD = window.TD || {};
       }
       html += '<table class="stats"><tr><th>Player</th><th>VPIP</th><th>PFR</th><th>WTSD</th><th>W$SD</th><th>Net</th><th>BB/100</th></tr>';
       for (const p of g.players) {
+        if (p.empty) continue;
         const s = p.stats;
         const h = Math.max(1, s.hands);
         const n = p.stack - p.buyins;
@@ -7786,11 +7969,25 @@ window.TD = window.TD || {};
     }
 
     /* ---------- modals ---------- */
-    modal(html, buttons, closable = true, wide = false) {
+    // wide === 'full' (v96): a full-screen page (splash menu, in-game menu, Session log) with a top bar.
+    // fs: { title, x: true for an X that closes (or a function run after it closes), back: a function for a back arrow }
+    modal(html, buttons, closable = true, wide = false, fs) {
       const root = $('#modal-root');
-      root.innerHTML = '<div class="modal' + (wide ? ' wide' : '') + '">' + html + '<div class="row modal-actions"></div></div>';
+      const full = wide === 'full';
+      root.classList.toggle('full', full);
+      if (full) {
+        fs = fs || {};
+        const top = fs.title || fs.x || fs.back ? '<div class="fs-top"><div class="fs-side">' + (fs.back ? '<button class="fs-back" aria-label="Back" title="Back">‹</button>' : '') + '</div>' +
+          '<div class="fs-title">' + (fs.title || '') + '</div><div class="fs-side" style="justify-content:flex-end">' + (fs.x ? '<button class="fs-x" aria-label="Close" title="Close">✕</button>' : '') + '</div></div>' : '';
+        root.innerHTML = '<div class="modal full"><div class="fs-inner">' + top + '<div class="fs-body">' + html + '</div><div class="row modal-actions"></div></div></div>';
+      } else root.innerHTML = '<div class="modal' + (wide ? ' wide' : '') + '">' + html + '<div class="row modal-actions"></div></div>';
       const row = root.querySelector('.modal-actions');
-      const close = () => { root.classList.remove('show'); root.innerHTML = ''; this.modalClose = null; };
+      const close = () => { root.classList.remove('show', 'full'); root.innerHTML = ''; this.modalClose = null; };
+      if (full) {
+        const xb = root.querySelector('.fs-x'), bb = root.querySelector('.fs-back');
+        if (xb) xb.onclick = () => { close(); Sound.init(); if (typeof fs.x === 'function') fs.x(); };
+        if (bb) bb.onclick = () => { close(); fs.back(); };
+      }
       (buttons || []).forEach(([label, fn, ghost, keepOpen]) => {
         const b = document.createElement('button');
         b.className = 'mbtn' + (ghost ? ' ghost' : '');
@@ -7799,10 +7996,12 @@ window.TD = window.TD || {};
         row.appendChild(b);
       });
       this.modalClose = closable ? close : null;
-      root.onclick = (e) => { if (e.target === root && closable) close(); };
+      root.onclick = (e) => { if (e.target === root && closable && !full) close(); };
       root.classList.add('show');
+      if (full) root.firstChild.scrollTop = 0;
       return root.firstChild;
     }
+    closeModal() { const r = $('#modal-root'); r.classList.remove('show', 'full'); r.innerHTML = ''; this.modalClose = null; }
     // A dialog (Settings, Stakes, Review, Rules…) is open. The table holds the next deal until it
     // closes, so a hand is never dealt behind it (a stakes change made there then lands on the hand you see next).
     dialogOpen() { const r = $('#modal-root'); return !!r && r.classList.contains('show'); }
@@ -7820,7 +8019,15 @@ window.TD = window.TD || {};
       const sw = (k, on) => '<div class="switch' + (on ? ' on' : '') + '" data-k="' + k + '"></div>';
       const themeOpt = (k, label, bg, felt, fg) => '<button class="theme-opt' + (s.theme === k ? ' on' : '') + '" data-theme="' + k + '"><div class="sw" style="background:' + bg + '"><div style="background:' + felt + ';border-radius:20px;padding:5px 8px;display:flex;gap:3px"><span>7</span><span style="color:#d0021b">5</span><span>2</span></div></div><div style="color:' + fg + '">' + label + '</div></button>';
       const train = s.mode === 'train';
-      const html = '<h2>Settings</h2><div class="sub">Table preferences</div>' +
+      // In-game menu (v96): full screen, X at the top and Done at the bottom; the session on the table comes first,
+      // with End session (back to the splash menu, after a confirmation) and the Session log
+      const g = this.replaying ? this.replaying.main : this.game;
+      const me = g && g.players[0], net = me ? me.stack - me.buyins : 0;
+      const sessLine = (train ? 'Seat training · ' + escapeHTML(s.trainSeat) + ' · ' : 'Regular play · ') + sessFmt.games({ games: TD.pickedGames(s) }) +
+        (train ? '' : ' · ' + ((g && g.nSeats) || s.playSeats) + ' players') + ' · ' + money(st.small) + '/' + money(st.big);
+      const html = '<div class="menu-session"><div class="ms-k">This session</div><div class="ms-v">' + sessLine + '</div>' +
+        '<div class="ms-v" style="font-weight:600;color:var(--text-dim);font-size:14px">' + (g && g.handNo ? g.handNo + ' hand' + (g.handNo === 1 ? '' : 's') + ' · <span class="' + sessFmt.cls(net) + '">' + sessFmt.signed(net) + '</span>' : 'No hands played yet') + '</div>' +
+        '<div class="ms-btns"><button class="mbtn danger" id="btn-end">End session</button><button class="mbtn ghost" id="btn-sesslog">Session log</button></div></div>' +
         '<div class="set-group">Appearance</div>' +
         '<div class="theme-pick">' +
         themeOpt('classic', 'Classic', 'linear-gradient(180deg,#3a1714,#120706)', '#7a1627', 'inherit') +
@@ -7828,13 +8035,9 @@ window.TD = window.TD || {};
         themeOpt('dark', 'Dark', '#0b0d10', '#171b21', 'inherit') + '</div>' +
         '<div class="setting"><div class="lbl">Four-colour deck<small>Blue diamonds, green clubs — easier to spot flushes</small></div>' + sw('fourColor', s.fourColor) + '</div>' +
         '<div class="set-group">Table</div>' +
-        '<div class="setting"><div class="lbl">Game mode: ' + (train ? 'Seat training' : 'Regular play') + '<small>' + (train
-          ? 'Training from the ' + s.trainSeat + '. Open the menu to go back to regular play (your regular session is still saved) or to start a new Seat training session.'
-          : 'Seat training is its own mode: open the menu to start it. Your regular session stays saved while you train.') + '</small></div><button class="mbtn ghost" id="btn-menu" style="min-width:0;min-height:42px">Menu</button></div>' +
-        '<div class="setting"><div class="lbl">Session log<small>Every session you have played, regular and Seat training, with its results and stats. Tap one to pick it up where you left off.</small></div><button class="mbtn ghost" id="btn-sesslog" style="min-width:0;min-height:42px">Open</button></div>' +
         '<div class="setting"><div class="lbl">Games<small>' + (train
           ? 'Seat training plays one game at a time: tap a game to switch to it. A change during a hand starts with the next hand.'
-          : 'Select which games you would like to play. Tap a game to add or remove it; with more than one, the game changes every 6 hands (one orbit). A change during a hand starts with the next hand.') + '</small></div><div class="seg" id="set-game">' +
+          : 'Select which games you would like to play. Tap a game to add or remove it; with more than one, the game changes every ' + this.orbit() + ' hands (one orbit). A change during a hand starts with the next hand.') + '</small></div><div class="seg" id="set-game">' +
         this.gameButtons() + '</div></div>' +
         (train ? '<div class="setting"><div class="lbl">Training seat<small>Every hand is folded to you predraw in this seat. The seats in front of you are not dealt in (from the LJ, everyone is dealt in as usual). In the big blind, the small blind always opens with a random hand from its opening range. A change applies from the next hand.</small></div><div class="seg" id="set-train">' +
         TD.CONST.POS6.map((k) => '<button data-k="' + k + '" class="' + (s.trainSeat === k ? 'on' : '') + '">' + k + '</button>').join('') + '</div></div>' : '') +
@@ -7853,7 +8056,7 @@ window.TD = window.TD || {};
         '<div class="setting"><div class="lbl">Rules &amp; hand rankings</div><button class="mbtn ghost" id="btn-rules" style="min-width:0;min-height:42px">Open</button></div>' +
         '<p class="muted land-only" style="font-size:13px;margin-top:14px">Keyboard: <span class="kbd">F</span> fold · <span class="kbd">C</span>/<span class="kbd">Space</span> check/call · <span class="kbd">R</span> bet/raise · <span class="kbd">1</span>–<span class="kbd">5</span> mark discards · <span class="kbd">D</span> draw · <span class="kbd">P</span> stand pat · <span class="kbd">G</span> God mode</p>' +
         '<p class="muted" id="app-version" style="font-size:12px;text-align:center;margin-top:14px">The Lago Room · Version ' + TD.VERSION + '</p>';
-      const m = this.modal(html, [['Done', null]]);
+      const m = this.modal(html, [['Done', null]], true, 'full', { title: 'Menu', x: true });
       $$('#set-speed button', m).forEach((b) => (b.onclick = () => { s.speed = b.dataset.k; this.saveSettings(); $$('#set-speed button', m).forEach((x) => x.classList.toggle('on', x === b)); }));
       const live = () => this.game && this.game.handInProgress;
       const syncEvery = () => {
@@ -7874,8 +8077,8 @@ window.TD = window.TD || {};
         if (this.game) this.update(this.game, {});
         this.toast('Training from the ' + v + (live() ? ', from the next hand' : ''));
       }));
-      $('#btn-sesslog', m).onclick = () => { const r = $('#modal-root'); r.classList.remove('show'); r.innerHTML = ''; this.modalClose = null; if (this.openSessionLog) this.openSessionLog(); };
-      $('#btn-menu', m).onclick = () => { const r = $('#modal-root'); r.classList.remove('show'); r.innerHTML = ''; this.modalClose = null; this.requestMenu(); };
+      $('#btn-sesslog', m).onclick = () => { if (this.openSessionLog) this.openSessionLog({ onBack: () => this.showSettings() }); };
+      $('#btn-end', m).onclick = () => this.confirmEndSession();
       $$('#set-seatview button', m).forEach((b) => (b.onclick = () => {
         if (s.zoom !== false || !s.everySeat || s.seatView === b.dataset.k) return;
         s.seatView = b.dataset.k;
@@ -7996,10 +8199,14 @@ window.TD = window.TD || {};
        opts: { current: the session on the table (no Resume or Delete for it), onResume(id), onDelete(id),
        onBack: from the menu, Back returns to it (and the log can't be closed by tapping outside) } */
     showSessionLog(opts) {
-      const list = TD.SessionLog.list();
+      const all = TD.SessionLog.list();
       const S = sessFmt;
-      let html = '<h2>Session Log</h2><div class="sub">' + (list.length ? list.length + ' session' + (list.length === 1 ? '' : 's') + ' · tap one to see it or pick it up again' : 'Your sessions') + '</div>';
-      if (!list.length) html += '<div class="rv-empty">No sessions yet. A session shows up here after its first hand.</div>';
+      const filt = ['all', 'play', 'train'].includes(opts.filter) ? opts.filter : 'all';
+      const both = all.some((e) => e.mode === 'train') && all.some((e) => e.mode !== 'train');
+      const list = !both || filt === 'all' ? all : all.filter((e) => (filt === 'train') === (e.mode === 'train'));
+      let html = '<div class="sub" style="margin-top:6px">' + (all.length ? all.length + ' session' + (all.length === 1 ? '' : 's') + ' · tap one to see it or pick it up again' : 'Your sessions') + '</div>';
+      if (both) html += '<div class="sess-filter"><div class="seg" id="sess-filter">' + [['all', 'All'], ['play', 'Regular'], ['train', 'Seat training']].map(([k, l]) => '<button data-k="' + k + '" class="' + (filt === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>';
+      if (!all.length) html += '<div class="rv-empty" style="text-align:center;padding:30px 0">No sessions yet. A session shows up here after its first hand.</div>';
       else {
         const hands = list.reduce((a, e) => a + e.hands, 0), net = list.reduce((a, e) => a + e.net, 0);
         const bigs = list.reduce((a, e) => a + e.net / (e.stakes.big || 1), 0);
@@ -8008,18 +8215,21 @@ window.TD = window.TD || {};
           '<div class="stat-card"><div class="k">Hands</div><div class="v">' + hands.toLocaleString() + '</div></div>' +
           '<div class="stat-card"><div class="k">Net</div><div class="v ' + S.cls(net) + '">' + S.signed(net) + '</div></div>' +
           '<div class="stat-card"><div class="k">BB / 100</div><div class="v ' + S.cls(bb) + '">' + bb.toFixed(1) + '</div></div></div>' +
-          '<table class="stats sess"><tr><th>Session</th><th>Hands</th><th>Net</th><th>BB/100</th><th class="sess-opt">VPIP</th><th class="sess-opt">PFR</th></tr>' +
-          list.map((e) => {
-            const b = S.bb100(e);
-            return '<tr class="sess-row' + (e.id === opts.current ? ' cur' : '') + '" data-id="' + escapeHTML(e.id) + '"><td><div class="sess-when">' + S.when(e.updated) + (e.id === opts.current ? '<span class="sess-tag">At the table</span>' : '') + '</div>' +
-              '<div class="sess-what">' + S.games(e) + ' · ' + money(e.stakes.small) + '/' + money(e.stakes.big) + (e.mode === 'train' ? '<br>Seat training · ' + escapeHTML(e.seat || '') : '') + '</div></td>' +
-              '<td>' + e.hands + '</td><td class="' + S.cls(e.net) + '">' + S.signed(e.net) + '</td><td class="' + S.cls(b) + '">' + b.toFixed(1) + '</td>' +
-              '<td class="sess-opt">' + S.pct(e.vpip, e.dealt) + '</td><td class="sess-opt">' + S.pct(e.pfr, e.dealt) + '</td></tr>';
-          }).join('') + '</table>' +
-          '<p class="muted" style="font-size:13px;margin-top:10px">Newest first, by when you last played. BB/100 = big bets won per 100 hands; the totals add up every session at its own stakes. The log keeps your last ' + TD.SessionLog.MAX + ' sessions.</p>';
+          '<div class="sess-list">' + list.map((e) => {
+            const b = S.bb100(e), cur = e.id === opts.current;
+            return '<button class="sess-card sess-row' + (cur ? ' cur' : '') + '" data-id="' + escapeHTML(e.id) + '"><div class="sc-main"><div class="sc-when">' + S.when(e.updated) + (cur ? '<span class="sess-tag">At the table</span>' : '') + '</div>' +
+              '<div class="sc-what">' + S.desc(e) + '</div></div>' +
+              '<div class="sc-res"><div class="sc-net ' + S.cls(e.net) + '">' + S.signed(e.net) + '</div><div class="sc-sub">' + e.hands + ' hand' + (e.hands === 1 ? '' : 's') + ' · ' + b.toFixed(1) + ' BB/100</div></div><div class="sc-chev">›</div></button>';
+          }).join('') + '</div>' +
+          '<p class="muted" style="font-size:13px;margin-top:14px">Newest first, by when you last played. BB/100 = big bets won per 100 hands; the totals add up every session' + (both && filt !== 'all' ? ' shown' : '') + ' at its own stakes. The log keeps your last ' + TD.SessionLog.MAX + ' sessions.</p>';
       }
-      const m = this.modal(html, opts.onBack ? [['Back', () => opts.onBack(), true]] : [['Close', null]], !opts.onBack, true);
-      $$('.sess-row', m).forEach((tr) => (tr.onclick = () => { const e = list.find((x) => x.id === tr.dataset.id); if (e) this.showSessionDetail(e, opts); }));
+      // from the splash menu (onClose): X and the button go back to it; from the in-game menu (onBack): the arrow
+      // and the button go back to the menu, X goes back to the table; from Stats: X and Close go back to the table
+      const fs = { title: 'Session Log', x: opts.onClose || true, back: opts.onBack || null };
+      const btn = opts.onClose ? [['Back to the menu', () => opts.onClose(), true]] : opts.onBack ? [['Back', () => opts.onBack(), true]] : [['Close', null, true]];
+      const m = this.modal(html, btn, !opts.onClose, 'full', fs);
+      $$('.sess-row', m).forEach((tr) => (tr.onclick = () => { const e = all.find((x) => x.id === tr.dataset.id); if (e) this.showSessionDetail(e, Object.assign({}, opts, { filter: filt })); }));
+      $$('#sess-filter button', m).forEach((b) => (b.onclick = () => { if (b.dataset.k !== filt) this.showSessionLog(Object.assign({}, opts, { filter: b.dataset.k })); }));
       return m;
     }
     showSessionDetail(e, opts) {
@@ -8027,17 +8237,18 @@ window.TD = window.TD || {};
       const canResume = !cur && !!TD.SessionLog.load(e.id);
       const cs = e.coach || [0, 0, 0], tot = cs[0] + cs[1] + cs[2];
       const card = (k, v, c) => '<div class="stat-card"><div class="k">' + k + '</div><div class="v ' + (c || '') + '">' + v + '</div></div>';
-      const html = '<h2>Session</h2><div class="sub">' + (e.mode === 'train' ? 'Seat training · ' + escapeHTML(e.seat || '') : 'Regular play') + ' · ' + S.games(e) + '</div>' +
+      const html = '<div class="sub" style="margin-top:6px">' + S.desc(e) + '</div>' +
         '<div class="stat-cards">' + card('Hands', e.hands) + card('Net', S.signed(e.net), S.cls(e.net)) + card('BB / 100', b.toFixed(1), S.cls(b)) + '</div>' +
         '<div class="stat-cards">' + card('VPIP', S.pct(e.vpip, e.dealt)) + card('PFR', S.pct(e.pfr, e.dealt)) + card('W$SD', S.pct(e.sdw, e.sd)) + '</div>' +
         (tot ? '<div class="stat-cards">' + card('Same as AI', S.pct(cs[0], tot), 'pos') + card('Close / mixed', S.pct(cs[1], tot)) + card('AI differs', S.pct(cs[2], tot), 'neg') + '</div>' : '') +
         '<table class="stats sess-facts">' +
         '<tr><td>Started</td><td>' + S.when(e.started) + '</td></tr>' +
         '<tr><td>Last played</td><td>' + S.when(e.updated) + '</td></tr>' +
+        '<tr><td>Mode</td><td>' + (e.mode === 'train' ? 'Seat training from the ' + escapeHTML(e.seat || '') : 'Regular play, ' + (e.seats || 6) + ' players') + '</td></tr>' +
         '<tr><td>Stakes</td><td>' + money(e.stakes.sb) + '/' + money(e.stakes.bb) + ' blinds · ' + money(e.stakes.small) + '/' + money(e.stakes.big) + ' limit</td></tr>' +
         '<tr><td>Bought in</td><td>' + money(e.buyins) + (e.rebuys ? ' (' + e.rebuys + ' rebuy' + (e.rebuys === 1 ? '' : 's') + ')' : '') + '</td></tr>' +
         '<tr><td>Went to showdown</td><td>' + S.pct(e.sd, e.dealt) + '</td></tr></table>' +
-        '<p class="muted" style="text-align:center;font-size:14px;margin-top:12px">' + (cur ? 'This is the session on the table now.'
+        '<p class="muted" style="text-align:center;font-size:14px;margin-top:14px">' + (cur ? 'This is the session on the table now.'
           : canResume ? 'Resume picks up at hand #' + (e.hands + 1) + ' with every stack, stat and the dealer button where you left them. Hand History and Review start fresh.'
           : 'This session can no longer be loaded.') + '</p>';
       const back = () => this.showSessionLog(opts);
@@ -8047,7 +8258,7 @@ window.TD = window.TD || {};
       if (!cur) buttons.push(['Delete', () => this.modal('<h2>Delete Session?</h2><div class="sub">' + S.when(e.updated) + '</div><p style="text-align:center">This session (' + e.hands + ' hands, ' + S.signed(e.net) + ') leaves the log for good.</p>',
         [['Delete', () => { opts.onDelete(e.id); back(); }], ['Cancel', () => this.showSessionDetail(e, opts), true]], false), true]);
       buttons.push(['Back', back, true]);
-      return this.modal(html, buttons, !opts.onBack, true);
+      return this.modal(html, buttons, !opts.onClose, 'full', { title: 'Session', back, x: opts.onClose || true });
     }
 
     resetSession() {
@@ -8066,6 +8277,8 @@ window.TD = window.TD || {};
       return d.toLocaleDateString(undefined, o) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     },
     games: (e) => (e.games || []).map((k) => (TD.GAME_INFO[k] ? TD.GAME_INFO[k].short : escapeHTML(k))).join(' / '),
+    // "Regular play · 2-7 / A-5 · 4 players · $40/$80" / "Seat training · BTN · Badugi · $40/$80"
+    desc: (e) => (e.mode === 'train' ? 'Seat training · ' + escapeHTML(e.seat || '') : 'Regular play') + ' · ' + sessFmt.games(e) + (e.mode === 'train' ? '' : ' · ' + (e.seats || 6) + ' players') + ' · ' + money(e.stakes.small) + '/' + money(e.stakes.big),
     bb100: (e) => (e.hands ? (e.net / (e.stakes.big || 1)) / e.hands * 100 : 0),
     pct: (a, b) => (b ? Math.round(100 * a / b) + '%' : '—'),
     signed: (n) => (n > 0 ? '+' : '') + money(n),
@@ -8075,80 +8288,82 @@ window.TD = window.TD || {};
 
   TD.UI = UI;
   TD.Sound = Sound;
-  TD.uiHelpers = { cardEl, miniCards, chipsHTML, money, escapeHTML };
+  TD.uiHelpers = { cardEl, miniCards, chipsHTML, money, escapeHTML, sessFmt };
 })(window.TD);
 
 </script>
   <script>
 /* =====================================================================
-   Bootstrap: welcome screen, session persistence, main game loop
+   Bootstrap: splash menu, session persistence, main game loop
    ===================================================================== */
 'use strict';
 (function (TD) {
   const ui = new TD.UI();
   TD.ui = ui;
-  // every new table is a new session with its own id in the Session log
-  const newGame = () => {
-    const g = new TD.Game(ui, { settings: ui.settings, stakes: ui.settings.stakes || TD.CONST.DEFAULT_STAKES });
-    g.sessionId = TD.SessionLog.newId(); g.sessionStarted = Date.now();
+  const LOG = TD.SessionLog;
+  const store = TD.store;
+  const CURRENT_KEY = TD.CURRENT_KEY; // the session at the table (v96): the splash offers to continue it
+  // every new table is a new session with its own id in the Session log; seats: players seated, you included (3-6)
+  const newGame = (seats) => {
+    const g = new TD.Game(ui, { settings: ui.settings, stakes: ui.settings.stakes || TD.CONST.DEFAULT_STAKES, seats: seats || 6 });
+    g.sessionId = LOG.newId(); g.sessionStarted = Date.now();
     return g;
   };
-  const LOG = TD.SessionLog;
-  // the mode, seat and games a session is played with (kept with it, so Resume sets them back)
-  const metaNow = () => ({ mode: ui.training ? 'train' : 'play', seat: ui.training ? ui.settings.trainSeat : null, games: TD.pickedGames(ui.settings) });
-  // a table rebuilt from saved data keeps the session's id
-  const restored = (d) => { const g = newGame(); g.restore(d); if (d.sid) g.sessionId = d.sid; if (d.started) g.sessionStarted = d.started; return g; };
-  let game = newGame();
+  // the mode, seat, games and table size a session is played with (kept with it, so Resume sets them back)
+  const metaNow = (g) => ({ mode: ui.training ? 'train' : 'play', seat: ui.training ? ui.settings.trainSeat : null, games: TD.pickedGames(ui.settings), seats: (g && g.nSeats) || 6 });
+  // a table rebuilt from saved data keeps the session's id and its number of players
+  const restored = (d) => { const g = newGame(d.seats || 6); g.restore(d); if (d.sid) g.sessionId = d.sid; if (d.started) g.sessionStarted = d.started; return g; };
+  let game = newGame(6);
   TD.game = game;
   ui.attach(game);
 
-  const SESSION_KEY = TD.SESSION_KEY; // regular play's saved session (both games); Seat training is never saved
-  const readSaved = () => { try { const d = JSON.parse(TD.store.get(SESSION_KEY) || 'null'); return d && d.v === 1 && d.handNo > 0 ? d : null; } catch (e) { return null; } };
-  // Regular play's session while you train or look at the menu (so its History and Review are still there when you
-  // come back); after a reload it is rebuilt from the saved session
-  let playGame = null;
-  // don't re-save a session that is about to be replaced (new stakes / new session requested mid-hand);
-  // only regular play is saved, so Seat training never overwrites it
-  // Session log (Chase, Nov 25): every finished hand also updates the session's row in the log, Seat training included
+  // Sessions played since the page opened, so Resume brings back their Hand History and Review too
+  // (after a reload a session is rebuilt from the Session log, with History and Review fresh)
+  const kept = new Map();
+  const remember = (g) => { kept.delete(g.sessionId); kept.set(g.sessionId, g); while (kept.size > 6) kept.delete(kept.keys().next().value); };
+  const liveSession = (sid) => (game && game.sessionId === sid ? game : kept.get(sid) || null);
+
+  // Session log (Chase, Nov 25): every finished hand updates the session's row in the log. The session at the table
+  // is remembered as the current one, unless it is being ended or replaced by a new session.
   ui.onHandDone = (g) => {
     if (g !== game) return;
-    const meta = metaNow();
-    LOG.save(g, meta);
-    if (!ui.resetRequested && !ui.training) TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(g, meta)));
+    LOG.save(g, metaNow(g));
+    if (!ui.resetRequested && !ui.endRequested) store.set(CURRENT_KEY, g.sessionId);
   };
-  // a regular session saved before the Session log existed joins the log
+  // a regular session saved by an older version (lago27.session) joins the log and is the one the splash offers to continue
   {
-    const d = readSaved();
-    if (d && (!d.sid || !LOG.entry(d.sid))) {
-      const g = restored(d), meta = { mode: 'play', seat: null, games: ui.settings.playGames.slice() };
-      LOG.save(g, meta);
-      TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(g, meta)));
+    const SESSION_KEY = TD.SESSION_KEY;
+    let d = null;
+    try { d = JSON.parse(store.get(SESSION_KEY) || 'null'); } catch (e) { d = null; }
+    if (d && d.v === 1 && d.handNo > 0) {
+      let sid = d.sid;
+      if (!sid || !LOG.entry(sid)) { const g = restored(d); LOG.save(g, { mode: 'play', seat: null, games: ui.settings.playGames.slice(), seats: g.nSeats }); sid = g.sessionId; }
+      if (!store.get(CURRENT_KEY)) store.set(CURRENT_KEY, sid);
     }
+    store.remove(SESSION_KEY);
   }
-  // the session in memory with this id (the table's, or the regular session kept while you train)
-  const liveSession = (sid) => [game, playGame].find((g) => g && g.sessionId === sid) || null;
   function deleteSession(sid) {
     LOG.remove(sid);
-    const d = readSaved();
-    if (d && d.sid === sid) TD.store.remove(SESSION_KEY);
-    if (playGame && playGame.sessionId === sid) playGame = null;
+    if (store.get(CURRENT_KEY) === sid) store.remove(CURRENT_KEY);
+    kept.delete(sid);
   }
-  // Session log from the table (Stats, Settings): Resume opens the session between hands
-  ui.openSessionLog = () => ui.showSessionLog({
+  // Session log from the table (Stats, the in-game menu): Resume opens the session between hands
+  ui.openSessionLog = (o) => ui.showSessionLog(Object.assign({
     current: ui.replaying ? ui.replaying.main.sessionId : game.sessionId,
     onResume: (sid) => ui.requestResume(sid),
     onDelete: deleteSession
-  });
+  }, o || {}));
 
   function clearLog() { document.getElementById('log').innerHTML = ''; ui.logLines = []; }
-  // New stakes or "Start fresh": during a hand the new session starts with the next hand (top of the loop);
-  // between hands it starts at once, so the header and stacks change right away
+  // New stakes or "Start a new session" (Stats): a new session in the same mode with the same number of players.
+  // During a hand it starts with the next hand (top of the loop); between hands it starts at once.
   function startNewSession() {
     ui.resetRequested = false;
-    game = newGame();
+    game = newGame(game.nSeats);
+    remember(game);
     TD.game = game;
-    if (!ui.training) playGame = game;
     ui.attach(game);
+    ui.relayout();
     clearLog();
     ui.log('New ' + (ui.training ? 'Seat training ' : '') + 'session started at ' + TD.uiHelpers.money(game.stakes.small) + '/' + TD.uiHelpers.money(game.stakes.big) + '.', 'sys');
   }
@@ -8160,123 +8375,128 @@ window.TD = window.TD || {};
     'A5': ['Lowest hand wins — aces are low and straights and flushes don\'t count, so 5-4-3-2-A is the nuts.', 'in A-5 aces are low and straights and flushes don\'t count'],
     'BD': ['Lowest hand wins with four cards of four different suits and ranks (a badugi). Aces are low, so A-2-3-4 of four suits is the nuts; pairs and suited cards don\'t play.', 'in Badugi four cards of different ranks and suits beat any hand with a pair or two of a suit']
   };
+  // the positions played with n seated (early seats drop out first)
+  const SEATS_POS = { 6: 'LJ, HJ, CO, BTN, SB and BB', 5: 'HJ, CO, BTN, SB and BB', 4: 'CO, BTN, SB and BB', 3: 'BTN, SB and BB' };
+  const NUM = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six' };
 
-  // The menu (Chase, Nov 24): pick Regular play or Seat training. They are separate modes with separate sessions:
-  // Regular play resumes or starts its saved session; starting Seat training always begins a new session.
-  // Resolves with { mode: 'play', resume } or { mode: 'train' }.
+  // The splash menu (Chase, Nov 25): full screen, shown when the app opens and between sessions. Pick Regular play
+  // (games and players at the table) or Seat training (one game and a seat), continue the session left at the table,
+  // or open the Session log. Resolves with { mode: 'play' | 'train' } for a new session or { sid } to pick one up.
   function welcome() {
     return new Promise((resolve) => {
-      const m = TD.uiHelpers.money;
-      const getSaved = () => (playGame && playGame.handNo > 0 ? playGame.serialize() : readSaved());
-      let saved = getSaved();
-      let tab = ui.training ? 'train' : 'play';
+      const m = TD.uiHelpers.money, S = TD.uiHelpers.sessFmt;
+      let tab = ui.settings.mode === 'train' ? 'train' : 'play';
       const picked = () => TD.pickedGames(ui.settings);
-      const rulesTxt = () => { const p = picked(); return p.length === 1 ? RULE[p[0]][0] : 'Six hands (one orbit) of each game in turn: ' + p.map((k) => TD.GAME_INFO[k].short).join(', then ') + '. Lowest hand wins — ' + p.map((k) => RULE[k][1]).join('; ') + '.'; };
+      const seats = () => ui.settings.playSeats;
+      const orbit = () => (tab === 'train' ? 6 : seats());
+      const rulesTxt = () => { const p = picked(); return p.length === 1 ? RULE[p[0]][0] : 'One orbit (' + orbit() + ' hands) of each game in turn: ' + p.map((k) => TD.GAME_INFO[k].short).join(', then ') + '. Lowest hand wins — ' + p.map((k) => RULE[k][1]).join('; ') + '.'; };
       const stakesNow = () => TD.makeStakes(ui.settings.stakes || TD.CONST.DEFAULT_STAKES);
-      const subTxt = () => { const p = picked(), st = stakesNow(); return (tab === 'train' ? 'Seat training · ' : '') + (p.length === 1 ? TD.GAME_INFO[p[0]].limitName : 'Limit ' + p.map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix') + ' · ' + m(st.small) + '/' + m(st.big); };
-      const savedTxt = () => {
-        if (!saved) return '';
-        const net = saved.players[0].stack - saved.players[0].buyins;
-        const ss = TD.makeStakes(saved.stakes || TD.CONST.DEFAULT_STAKES);
-        return saved.handNo + ' hands at ' + m(ss.small) + '/' + m(ss.big) + ', ' + (net >= 0 ? '+' : '') + m(net);
-      };
+      const seatsTxt = (n) => (n === 6 ? 'Six-handed: you and five seasoned regulars, from the LJ round to the BB.'
+        : 'You and ' + NUM[n - 1] + ' seasoned regulars. The early seats drop out first, so the table plays ' + SEATS_POS[n] + '.');
       const seatTxt = (p) => p === 'BB' ? 'In the big blind it folds to the small blind, which always opens with a random hand from its opening range.'
         : p === 'LJ' ? 'From the LJ everyone is dealt in as usual, and you are first to act.'
         : 'The seats in front of you are not dealt in, so the action is folded to you predraw.';
-      const openLog = () => ui.showSessionLog({ current: null, onResume: (sid) => resolve({ sid }), onDelete: deleteSession, onBack: () => render() });
+      // the session left at the table (the page was closed without ending it)
+      const curEntry = () => { const sid = store.get(CURRENT_KEY); const e = sid ? LOG.entry(sid) : null; return e && (liveSession(sid) || LOG.load(sid)) ? e : null; };
+      const openLog = () => ui.showSessionLog({ current: null, onResume: (sid) => resolve({ sid }), onDelete: deleteSession, onClose: () => render() });
       const render = () => {
-        saved = getSaved();
         ui.setMode(tab);
-        const st = stakesNow();
-        const modeSeg = '<div style="display:flex;justify-content:center;margin:2px 0 12px"><div class="seg" id="welcome-mode">' +
-          [['play', 'Regular play'], ['train', 'Seat training']].map(([k, l]) => '<button data-k="' + k + '" class="' + (tab === k ? 'on' : '') + '">' + l + '</button>').join('') + '</div></div>';
-        let html = '<svg class="crest"><use href="#crest"/></svg>' +
-          '<h2>THE LAGO ROOM</h2><div class="sub" id="wel-sub">' + subTxt() + '</div>' + modeSeg;
-        const buttons = [];
+        const st = stakesNow(), cur = curEntry();
+        const seg = (id, items, on) => '<div class="seg" id="' + id + '">' + items.map(([k, l]) => '<button data-k="' + k + '" class="' + (on(k) ? 'on' : '') + '">' + l + '</button>').join('') + '</div>';
+        let html = '<div class="splash-head"><svg class="crest"><use href="#crest"/></svg><div><h1>THE LAGO ROOM</h1><div class="tag">Limit Triple Draw · ' + m(st.small) + '/' + m(st.big) + '</div></div></div>';
+        if (cur) html += '<div class="continue-card" id="wel-continue"><div class="cc-txt"><div class="cc-k">Continue where you left off</div><div class="cc-v">' + S.desc(cur) + '</div>' +
+          '<div class="cc-v" style="font-weight:600;color:var(--text-dim);font-size:13px">' + cur.hands + ' hand' + (cur.hands === 1 ? '' : 's') + ' · <span class="' + S.cls(cur.net) + '">' + S.signed(cur.net) + '</span> · ' + S.when(cur.updated) + '</div></div>' +
+          '<button class="mbtn" id="btn-continue">Continue</button></div>';
+        html += '<div class="mode-tiles" id="welcome-mode">' +
+          '<button class="mode-tile' + (tab === 'play' ? ' on' : '') + '" data-k="play"><b>Regular play</b><span>A real game: pick the games and how many players sit at the table.</span></button>' +
+          '<button class="mode-tile' + (tab === 'train' ? ' on' : '') + '" data-k="train"><b>Seat training</b><span>Every hand folded to you in the seat you want to practise.</span></button></div>';
         if (tab === 'play') {
-          html += '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Select which games you would like to play</p>' +
-            '<div style="display:flex;justify-content:center;margin:4px 0 10px"><div class="seg" id="welcome-game">' + ui.gameButtons() + '</div></div>' +
-            '<p style="text-align:center">Six-handed against five seasoned regulars. Blinds ' + m(st.sb) + '/' + m(st.bb) + ', bets ' + m(st.small) + ' before and after the first draw, ' + m(st.big) + ' after the second and third. <span id="wel-rules">' + rulesTxt() + '</span></p>' +
-            '<p style="text-align:center;font-size:14px" class="muted">Buy-in ' + m(st.buyin) + '. Tap your cards any time to mark discards for the next draw. Open <b>Review</b> after a hand to see every opponent\'s cards and reasoning — and how your decisions compare with the AI. Change stakes and the table style in <b>Settings</b>.</p>';
-          if (saved) html += '<p style="text-align:center;font-size:15px">Saved session: ' + savedTxt() + '.</p>';
-          if (saved) buttons.push(['Resume session', () => resolve({ mode: 'play', resume: true })]);
-          buttons.push([saved ? 'New session' : 'Take your seat', () => resolve({ mode: 'play', resume: false }), !!saved]);
-          if (LOG.list().length) buttons.push(['Session log', openLog, true]);
+          html += '<div class="pick-row"><div class="pick-lbl">Games</div><div class="seg" id="welcome-game">' + ui.gameButtons() + '</div><div class="pick-note">Tap a game to add or remove it.</div></div>' +
+            '<div class="pick-row"><div class="pick-lbl">Players at the table</div>' + seg('welcome-seats', [3, 4, 5, 6].map((n) => [n, n]), (k) => k === seats()) +
+            '<div class="pick-note" id="wel-seats-txt">' + seatsTxt(seats()) + '</div></div>' +
+            '<p class="splash-desc">Blinds ' + m(st.sb) + '/' + m(st.bb) + ', bets ' + m(st.small) + ' before and after the first draw, ' + m(st.big) + ' after the second and third, buy-in ' + m(st.buyin) + ' (change the stakes in the Menu at the table). <span id="wel-rules">' + rulesTxt() + '</span></p>' +
+            '<div class="splash-start"><button class="mbtn" id="btn-start">Start session</button><button class="mbtn ghost" id="btn-log">Session log</button></div>';
         } else {
           const seat = ui.settings.trainSeat;
-          html += '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Pick your seat</p>' +
-            '<div style="display:flex;justify-content:center;margin:4px 0 10px"><div class="seg" id="welcome-seat">' +
-            POS.map((k) => '<button data-k="' + k + '" class="' + (seat === k ? 'on' : '') + '">' + k + '</button>').join('') + '</div></div>' +
-            '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Pick a game</p>' +
-            '<div style="display:flex;justify-content:center;margin:4px 0 10px"><div class="seg" id="welcome-game">' + ui.gameButtons() + '</div></div>' +
-            '<p style="text-align:center">Every hand is dealt with you in the <b id="wel-seat">' + seat + '</b>. <span id="wel-seat-txt">' + seatTxt(seat) + '</span> <span id="wel-rules">' + rulesTxt() + '</span></p>' +
-            '<p style="text-align:center;font-size:14px" class="muted">Starting Seat training begins a new session with its own stats, History and Review (past ones wait in the <b>Session log</b>)' + (saved ? '. Your regular session (' + savedTxt() + ') stays saved: open <b>Settings</b> &gt; <b>Menu</b> to go back to it.' : '. Open <b>Settings</b> &gt; <b>Menu</b> to go back to regular play.') + '</p>';
-          buttons.push(['Start seat training', () => resolve({ mode: 'train' })]);
-          if (LOG.list().length) buttons.push(['Session log', openLog, true]);
+          html += '<div class="pick-row"><div class="pick-lbl">Game</div><div class="seg" id="welcome-game">' + ui.gameButtons() + '</div></div>' +
+            '<div class="pick-row"><div class="pick-lbl">Your seat</div>' + seg('welcome-seat', POS.slice(3).concat(POS.slice(0, 3)).map((k) => [k, k]), (k) => k === seat) + '</div>' +
+            '<p class="splash-desc">Six-handed. Every hand is dealt with you in the <b id="wel-seat">' + seat + '</b>. <span id="wel-seat-txt">' + seatTxt(seat) + '</span> <span id="wel-rules">' + rulesTxt() + '</span> Each start is a new session with its own stats, History and Review; past ones wait in the Session log.</p>' +
+            '<div class="splash-start"><button class="mbtn" id="btn-start">Start seat training</button><button class="mbtn ghost" id="btn-log">Session log</button></div>';
         }
-        const box = ui.modal(html, buttons, false);
-        box.querySelectorAll('#welcome-mode button').forEach((b) => (b.onclick = () => { if (b.dataset.k !== tab) { tab = b.dataset.k; render(); } }));
-        box.querySelectorAll('#welcome-game button').forEach((b) => (b.onclick = () => {
+        const box = ui.modal(html, [], false, 'full');
+        const q = (sel) => box.querySelector(sel), qa = (sel) => box.querySelectorAll(sel);
+        if (q('#btn-continue')) q('#btn-continue').onclick = () => { ui.closeModal(); TD.Sound.init(); resolve({ sid: cur.id }); };
+        q('#btn-start').onclick = () => { ui.closeModal(); TD.Sound.init(); resolve({ mode: tab }); };
+        q('#btn-log').onclick = openLog;
+        qa('#welcome-mode button').forEach((b) => (b.onclick = () => { if (b.dataset.k !== tab) { tab = b.dataset.k; render(); } }));
+        qa('#welcome-game button').forEach((b) => (b.onclick = () => {
           ui.toggleGame(b.dataset.k);
-          ui.markGameButtons(box.querySelectorAll('#welcome-game button'));
-          box.querySelector('#wel-sub').textContent = subTxt();
-          box.querySelector('#wel-rules').textContent = rulesTxt();
+          ui.markGameButtons(qa('#welcome-game button'));
+          q('#wel-rules').textContent = rulesTxt();
         }));
-        box.querySelectorAll('#welcome-seat button').forEach((b) => (b.onclick = () => {
+        qa('#welcome-seats button').forEach((b) => (b.onclick = () => {
+          const n = +b.dataset.k;
+          ui.settings.playSeats = n; ui.saveSettings();
+          qa('#welcome-seats button').forEach((x) => x.classList.toggle('on', x === b));
+          q('#wel-seats-txt').textContent = seatsTxt(n);
+          q('#wel-rules').textContent = rulesTxt();
+        }));
+        qa('#welcome-seat button').forEach((b) => (b.onclick = () => {
           const k = b.dataset.k;
           ui.settings.trainSeat = k; ui.settings.seatTrain = k; ui.saveSettings();
-          box.querySelectorAll('#welcome-seat button').forEach((x) => x.classList.toggle('on', x === b));
-          box.querySelector('#wel-seat').textContent = k;
-          box.querySelector('#wel-seat-txt').textContent = seatTxt(k);
+          qa('#welcome-seat button').forEach((x) => x.classList.toggle('on', x === b));
+          q('#wel-seat').textContent = k;
+          q('#wel-seat-txt').textContent = seatTxt(k);
         }));
       };
       render();
     });
   }
 
-  // Set up the table for the mode picked in the menu
+  // Set up the table for what was picked on the splash menu. Returns false when a session could not be loaded.
   function begin(choice) {
-    // Session log > Resume: the session comes back with its mode, seat, games and stakes
+    let fromLog = false;
     if (choice.sid) {
+      // Session log > Resume, or Continue: the session comes back with its mode, seat, games, players and stakes
       const e = LOG.entry(choice.sid), live = liveSession(choice.sid), d = live ? null : LOG.load(choice.sid);
-      if (!e || (!live && !d)) { ui.toast('That session could not be loaded'); choice = { mode: ui.training ? 'train' : 'play', resume: !ui.training }; }
-      else {
-        const s = ui.settings;
-        if (e.mode === 'train') { if (e.seat) s.trainSeat = e.seat; if (e.games && e.games[0]) s.trainGame = e.games[0]; }
-        else if (e.games && e.games.length) s.playGames = TD.pickedGames({ games: e.games });
-        ui.setMode(e.mode);
-        game = live || restored(d);
-        if (e.mode === 'play') { playGame = game; TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(game, metaNow()))); }
-        ui.settings.stakes = game.stakes; ui.saveSettings();
-        choice = { mode: e.mode, resume: true, fromLog: true };
-      }
-    }
-    ui.setMode(choice.mode);
-    if (choice.fromLog) { /* the table is set above */ }
-    else if (choice.mode === 'train') game = newGame(); // a new Seat training session every time
-    else if (choice.resume) {
-      if (!playGame) { const d = readSaved(); playGame = d ? restored(d) : newGame(); }
-      game = playGame;
+      if (!e || (!live && !d)) { ui.toast('That session could not be loaded'); return false; }
+      const s = ui.settings;
+      if (e.mode === 'train') { if (e.seat) s.trainSeat = e.seat; if (e.games && e.games[0]) s.trainGame = e.games[0]; }
+      else if (e.games && e.games.length) s.playGames = TD.pickedGames({ games: e.games });
+      ui.setMode(e.mode);
+      game = live || restored(d);
       ui.settings.stakes = game.stakes; ui.saveSettings();
-    } else { TD.store.remove(SESSION_KEY); game = playGame = newGame(); }
+      store.set(CURRENT_KEY, game.sessionId);
+      fromLog = true;
+      choice = { mode: e.mode };
+    } else {
+      ui.setMode(choice.mode);
+      game = newGame(choice.mode === 'train' ? 6 : ui.settings.playSeats); // Seat training is always six-handed
+      store.remove(CURRENT_KEY); // the new session becomes the current one after its first hand
+    }
+    remember(game);
     TD.game = game;
     ui.resetRequested = false;
     ui.attach(game);
     ui.refreshStakesText(); ui.relayout();
     clearLog();
-    const p = TD.pickedGames(ui.settings);
-    const gname = p.length > 1 ? 'Limit ' + p.map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix, six hands of each' : TD.gameInfo.limitName;
-    if (choice.fromLog) ui.log('Back to your ' + (choice.mode === 'train' ? 'Seat training session from the ' + ui.settings.trainSeat : 'session') + ': ' + gname + ', hand #' + (game.handNo + 1) + ' next.', 'sys');
+    const p = TD.pickedGames(ui.settings), n = game.nSeats;
+    const gname = (p.length > 1 ? 'Limit ' + p.map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix, ' + n + ' hands of each' : TD.gameInfo.limitName) +
+      (choice.mode === 'train' ? '' : ', ' + NUM[n] + ' players');
+    if (fromLog) ui.log('Back to your ' + (choice.mode === 'train' ? 'Seat training session from the ' + ui.settings.trainSeat : 'session') + ': ' + gname + ', hand #' + (game.handNo + 1) + ' next.', 'sys');
     else if (choice.mode === 'train') ui.log('Seat training from the ' + ui.settings.trainSeat + ': ' + gname + '. A new session.', 'sys');
-    else if (choice.resume && game.handNo > 0) ui.log('Back to your session: ' + gname + ', hand #' + (game.handNo + 1) + ' next.', 'sys');
     else ui.log('Welcome to the Lago Room. ' + gname + '.', 'sys');
+    return true;
   }
   async function menu() {
-    ui.menuRequested = false;
+    ui.menuRequested = false; ui.endRequested = false;
+    ui.setFastForward(false); ui.hideBanner();
     ui.toggleDrawer(null);
     ui.clearButtons();
     const sid = ui.pendingResume; ui.pendingResume = null;
-    begin(sid && LOG.entry(sid) ? { sid } : await welcome());
+    if (!(sid && LOG.entry(sid) && begin({ sid }))) {
+      for (;;) { if (begin(await welcome())) break; }
+    }
     TD.Sound.init();
   }
 
@@ -8300,7 +8520,7 @@ window.TD = window.TD || {};
       await ui.betweenHands(game);
       // never deal the next hand behind an open dialog (Zoom deals at once, auto-deal on a timer)
       await ui.whenNoDialog();
-      if (ui.menuRequested) ui.replayQueued = null; // Settings > Menu: no replay
+      if (ui.menuRequested) ui.replayQueued = null; // End session / Resume: no replay
       // Replay (Chase, Nov 24): a hand picked in Hand History plays again on a temporary table, then the session goes on
       if (ui.replayQueued && !ui.resetRequested && !ui.menuRequested) { await TD.runReplay(ui, game); await ui.whenNoDialog(); }
     }
