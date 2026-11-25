@@ -2660,7 +2660,11 @@ window.TD = window.TD || {};
         w *= pc;
         if (ok && R() > pc) ok = false;
         if (n > 0) hand = drawInto(hand, forcedKeep(hand, 5 - n, dRem), pool);
-        const pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1);
+        let pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1);
+        // a card ahead of me after this draw (fewer cards to draw than I just drew), he bets automatically (SS2,
+        // and the bots do): his lone bet then says nothing about strength, so every hand a card ahead fits it
+        const sk = model.streets[k + 1];
+        if (model.aheadSt === k + 1 && sk && sk.aggr === 1 && sk.raises === 0 && TD.policyDrawCount(hand, 3 - (k + 1)) < model.aheadN) pa = 1;
         w *= pa;
         if (ok && R() > pa) ok = false;
         if (!ok && w < bestW * 0.5) break; // hopeless attempt
@@ -2692,7 +2696,7 @@ window.TD = window.TD || {};
      opt.mode 'draw' : evaluating keeping opt.keep at the current draw */
   let EQ_CACHE = null; // shared equity results while the coach samples a decision many times
   function mcEquity(game, p, opt) {
-    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' : '') : null;
+    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' : '') + (opt.aheadBet ? '|ahead' : '') : null;
     if (ckey && ckey in EQ_CACHE) return EQ_CACHE[ckey];
     const v = mcEquityRaw(game, p, opt);
     if (ckey) EQ_CACHE[ckey] = v;
@@ -2703,6 +2707,7 @@ window.TD = window.TD || {};
     if (!opps.length) return 1;
     const models = opps.map((o) => buildModel(game, o));
     if (opt.hypoCall) for (const m of models) m.hypoCall = true;
+    if (opt.aheadBet) for (const m of models) { m.aheadSt = game.street; m.aheadN = p.draws[game.street - 1]; }
     const known = new Set(p.hand.concat(p.discards));
     const avail = [];
     for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
@@ -4013,6 +4018,8 @@ window.TD = window.TD || {};
       if (c.improved) return act('bet', 'Equal draws, he checked and I improved to ' + (nextDraw === 0 ? mk(c.hn.short) : 'a ' + nextDraw + '-card draw') + ': bet. MMG: in position after equal draws, bet when you improve.', 'value');
       return act('check', 'Equal draws, he checked and I didn\'t improve: check back. MMG: unimproved, you are barely ahead at best, and getting check-raised would be a disaster.');
     }
+    // Nov 25: a card ahead of his betting range, raise (see cardAheadRaise)
+    if (toCall > 0) { const ah = cardAheadRaise(c); if (ah) return ah; }
     // SS2: drawing two to a premium hand in a raised multiway pot — call one bet whether you improve or not
     if (c.N >= 2 && toCall > 0 && toCall <= unit && c.p.roundBet === 0 && nextDraw >= 2 && c.premiumDraw) {
       return act('call', 'Multiway, drawing two to ' + hstr(c.keepNow) + ': call one bet. SS2: in a raised multiway pot a premium two-card draw is worth one bet even unimproved.');
@@ -4098,6 +4105,23 @@ window.TD = window.TD || {};
     return act('raise', 'Raise with ' + mk(hn.short) + '. The hands I freeze with (' + FREEZE_RANGE + ') raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
   }
 
+  // Pat, facing his lone bet after a draw where I drew two or more and he drew too (heads-up, a draw still to come).
+  function cardAheadRaise(c) {
+    if (!c.opp || c.toCall === 0 || c.lvl !== 1 || !c.canRaise || !c.made || c.nextDraw !== 0 || c.dRem < 1) return null;
+    if (c.iBet || !(c.myLast >= 2) || !(c.oppLast >= 1) || c.opp.allIn || c.p.bot.snow) return null;
+    // the freeze range keeps its own half-and-half mix in position before the last draw (freezeRule)
+    if (c.ip && c.st === 2 && ['freeze', 'rough'].includes(freezeClass(c))) return null;
+    const E2 = mcEquity(c.game, c.p, { mode: 'bet', aheadBet: true });
+    const f = clamp((E2 - AHEAD_LO) / (AHEAD_HI - AHEAD_LO), 0, 1);
+    if (f <= 0) return null;
+    const shareTxt = 'Pat ' + mk(c.hn.short) + ' facing his bet after he drew ' + c.oppLast + ' and I drew ' + c.myLast + '. He bets every hand that needs fewer than ' + c.myLast + ' cards (he is a card ahead of my draw), so his range is mostly ' + (c.myLast >= 3 ? 'one- and two-card draws' : 'one-card draws') + ', and my pat hand is a card ahead of them: about ' + Math.round(E2 * 100) + '% against his betting range.';
+    const rough = c.hn.top >= 9 ? ' Breaking it to draw would be too rough here.' : '';
+    if (R() < f) {
+      return act('raise', 'Raise, planning to stand pat. ' + shareTxt + ' Being a card ahead, bet or raise: the raise makes the pot bigger when I win.' + rough + (f < 1 ? ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.' : ''), 'card-ahead');
+    }
+    return act('call', 'Call and stand pat. ' + shareTxt + ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.', 'card-ahead');
+  }
+  const AHEAD_LO = 0.40, AHEAD_HI = 0.47;
   function turnRules(c) {
     const { opp, ip, toCall, myLast, nextDraw, hn, unit, game, p } = c;
     const rs = c.hand.map(TD.rankOf).sort((a, b) => b - a);
@@ -4183,6 +4207,13 @@ window.TD = window.TD || {};
     if (opp && ip && toCall > 0 && c.lvl === 1 && myLast === 2 && c.oppLast === 1 && c.made && nextDraw === 0 && rs[0] <= 8) {
       return act('call', 'Made ' + mk(hn.short) + ' drawing two; he drew one and bets: just call. SS2: he thinks I\'m still drawing, so if he makes a ten he stays pat — calling protects the pot instead of forcing him to break and draw live.', 'trap');
     }
+    // Nov 25 (hand report): being a card ahead, bet or raise. After I drew two (or three) and he drew and leads, he
+    // bets every one-card draw (he is a card ahead of my draw), so his range is mostly draws: a pat hand that stands
+    // pat is a card ahead of most of it. Raise for value, planning to stand pat (breaking a rough pat to draw is
+    // too rough here). The raise needs good equity against his whole betting range, worked out with his automatic
+    // card-ahead bets in it; hands near the line mix.
+    const ah = cardAheadRaise(c);
+    if (ah) return ah;
     // SS2: drawing two with only one draw left — fold to a bet (unless position + live discards + big pot)
     if (toCall > 0 && nextDraw >= 2) {
       const exception = ip && c.oppsLast.some((n) => n > 0) && c.deadWheel >= 3 && c.potOdds < 0.12;
@@ -5290,7 +5321,11 @@ window.TD = window.TD || {};
         w *= pc;
         if (ok && R() > pc) ok = false;
         if (n > 0) hand = drawInto(hand, forcedKeep(hand, 4 - n, dRem), pool);
-        const pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1, TD.isMadeLow(hand));
+        let pa = actionLik(model.streets[k + 1], TD.strengthNow(hand, 3 - (k + 1)), k + 1, TD.isMadeLow(hand));
+        // a card ahead of me after this draw (fewer cards to draw than I just drew), he bets automatically: his lone
+        // bet then says nothing about strength, so every hand a card ahead fits it
+        const sk = model.streets[k + 1];
+        if (model.aheadSt === k + 1 && sk && sk.aggr === 1 && sk.raises === 0 && 3 - (k + 1) > 0 && 4 - TD.POP[TD.bestKeepSub(hand, 3 - (k + 1))] < model.aheadN) pa = 1;
         w *= pa;
         if (ok && R() > pa) ok = false;
         if (!ok && w < bestW * 0.5) break;
@@ -5319,7 +5354,7 @@ window.TD = window.TD || {};
 
   let EQ_CACHE = null;
   function mcEquity(game, p, opt) {
-    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' + (opt.leadMul || 1) + (opt.pat ? '|pat' + (opt.pat.strong ? 2 : 1) : '') : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') : null;
+    const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + (opt.keeps ? opt.keeps.map((x) => x.slice().sort((a, b) => a - b).join(',')).join('/') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' + (opt.leadMul || 1) + (opt.pat ? '|pat' + (opt.pat.strong ? 2 : 1) : '') : '') + (opt.ev ? '|ev' : '') + (opt.nextKeep ? '|n' + opt.nextKeep.slice().sort((a, b) => a - b).join(',') : '') + (opt.aheadBet ? '|ahead' : '') : null;
     if (ckey && ckey in EQ_CACHE) return EQ_CACHE[ckey];
     const v = mcEquityRaw(game, p, opt);
     if (ckey) EQ_CACHE[ckey] = v;
@@ -5330,6 +5365,7 @@ window.TD = window.TD || {};
     if (!opps.length) return 1;
     const models = opps.map((o) => buildModel(game, o));
     if (opt.hypoCall) for (const m of models) { m.hypoCall = true; m.leadMul = opt.leadMul || 1; m.pat = opt.pat || null; }
+    if (opt.aheadBet) for (const m of models) { m.aheadSt = game.street; m.aheadN = p.draws[game.street - 1]; }
     const known = new Set(p.hand.concat(p.discards));
     const avail = [];
     for (let c = 0; c < 52; c++) if (!known.has(c)) avail.push(c);
@@ -6106,6 +6142,7 @@ window.TD = window.TD || {};
     if (share >= 1 - foldMax) return act('fold', r.reason + ' ' + head + ' This hand is among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), the part MDF lets me fold.', r.tag);
     return act('call', 'Call, ' + c.txt + '. ' + head + ' This hand is not among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), so it is part of the range that has to defend.', 'mdf');
   }
+  const AHEAD_LO = 0.40, AHEAD_HI = 0.47;
   function drawStreet(c, fair) {
     const { game, p } = c;
     const fewer = c.oppsLast.length > 0 && c.oppsLast.every((n) => n > c.nextDraw); // I draw fewer cards than everyone
@@ -6175,6 +6212,19 @@ window.TD = window.TD || {};
       if (isCallingStation(game, c.opp) && c.canRaise) return act('raise', 'Raise the pat ' + c.txt + ' for value instead of freezing: this player rarely folds a fair hand.', 'value');
       if (!c.canRaise || R() < 0.5) return act('call', 'Freeze: just call in position with the pat ' + c.txt + '. The flat call makes him think I\'m still drawing, so a worse pat hand stays pat and is drawing dead; a raise would give him the chance to break. Freeze with a pat 8 or 9 badugi, mixed half and half with raising.', 'freeze');
       return act('raise', 'Raise with the pat ' + c.txt + '. The hands I freeze with (pat 8 and 9 badugis) raise half the time, so my raises aren\'t only premium hands and my flat calls aren\'t capped.', 'balance');
+    }
+    // Nov 25 (hand report, the same in all three games): being a card ahead, bet or raise. After I drew two or more
+    // and he drew and leads, he bets every hand that needs fewer cards than I drew (he is a card ahead of my draw), so
+    // his range is mostly draws: a pat badugi is a card ahead of most of it. Raise for value, planning to stand pat;
+    // the raise needs good equity against that whole betting range, and hands near the line mix.
+    if (c.N === 1 && c.lvl === 1 && c.canRaise && c.made && !c.drawing && c.dRem > 0 && !c.iBet && myLast >= 2 && c.oppsLast[0] >= 1 && !c.opp.allIn) {
+      const E2 = mcEquity(game, p, { mode: 'bet', aheadBet: true });
+      const f = clamp((E2 - AHEAD_LO) / (AHEAD_HI - AHEAD_LO), 0, 1);
+      if (f > 0) {
+        const share = 'He drew ' + c.oppsLast[0] + ' and I drew ' + myLast + '. He bets every hand that needs fewer than ' + myLast + ' cards (he is a card ahead of my draw), so his range is mostly ' + (myLast >= 3 ? 'three-card and two-card hands' : 'three-card hands') + ', and my pat badugi is a card ahead of them: about ' + Math.round(E2 * 100) + '% against his betting range.';
+        if (R() < f) return act('raise', 'Raise with the pat ' + c.txt + '. ' + share + ' Being a card ahead, bet or raise: the raise makes the pot bigger when I win.' + (f < 1 ? ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.' : ''), 'card-ahead');
+        return act('call', 'Call, ' + c.txt + '. ' + share + ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.', 'card-ahead');
+      }
     }
     const raiseThr = c.N === 1 ? 0.62 : fair + 0.22;
     if (c.canRaise && c.made && !c.drawing && c.E >= raiseThr) return act('raise', 'Raise with the pat ' + c.txt + ' — well ahead of the betting range.', 'value');
@@ -6517,7 +6567,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 98;
+  TD.VERSION = 99;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
