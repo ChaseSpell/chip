@@ -693,7 +693,6 @@ body.theme-classic .fs-top { background: #1d0c0a; }
           <button class="tb" id="tb-review" title="Hand review: bot reasoning and your play vs the AI"><svg><use href="#ic-review"/></svg><span>Review</span></button>
           <button class="tb" id="tb-history" title="Hand history"><svg><use href="#ic-history"/></svg><span>History</span></button>
           <button class="tb" id="tb-stats" title="Session stats"><svg><use href="#ic-stats"/></svg><span>Stats</span></button>
-          <button class="tb land-only" id="tb-rules" title="Rules"><svg><use href="#ic-rules"/></svg><span>Rules</span></button>
           <button class="tb" id="tb-settings" title="Menu: session, Session log and settings"><svg><use href="#ic-settings"/></svg><span>Menu</span></button>
           <button class="tb land-only icon-only" id="tb-sound" title="Sound on/off"><svg><use href="#ic-sound"/></svg></button>
         </div>
@@ -6518,7 +6517,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 96;
+  TD.VERSION = 98;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6923,7 +6922,6 @@ window.TD = window.TD || {};
       $('#tb-stats').onclick = () => this.toggleDrawer('stats');
       $('#drawer-close').onclick = () => this.toggleDrawer(null);
       $$('.tab').forEach((t) => (t.onclick = () => this.toggleDrawer(t.dataset.tab, true)));
-      $('#tb-rules').onclick = () => this.showRules();
       $('#tb-settings').onclick = () => this.showSettings();
       $('#tb-sound').onclick = () => { this.settings.sound = !this.settings.sound; this.saveSettings(); Sound.init(); };
       const gt = $('#god-tag'); if (gt) gt.onclick = () => this.setGodMode(false);
@@ -8053,7 +8051,6 @@ window.TD = window.TD || {};
         '<div class="setting"><div class="lbl">Auto-muck losing hands<small>At showdown, muck when beaten by a hand already shown</small></div>' + sw('autoMuck', s.autoMuck) + '</div>' +
         '<div class="setting"><div class="lbl">Coach my decisions<small>Compare your actions and draws with the AI strategy (in Review)</small></div>' + sw('coach', s.coach !== false) + '</div>' +
         '<div class="setting"><div class="lbl">Sound effects</div>' + sw('sound', s.sound) + '</div>' +
-        '<div class="setting"><div class="lbl">Rules &amp; hand rankings</div><button class="mbtn ghost" id="btn-rules" style="min-width:0;min-height:42px">Open</button></div>' +
         '<p class="muted land-only" style="font-size:13px;margin-top:14px">Keyboard: <span class="kbd">F</span> fold · <span class="kbd">C</span>/<span class="kbd">Space</span> check/call · <span class="kbd">R</span> bet/raise · <span class="kbd">1</span>–<span class="kbd">5</span> mark discards · <span class="kbd">D</span> draw · <span class="kbd">P</span> stand pat · <span class="kbd">G</span> God mode</p>' +
         '<p class="muted" id="app-version" style="font-size:12px;text-align:center;margin-top:14px">The Lago Room · Version ' + TD.VERSION + '</p>';
       const m = this.modal(html, [['Done', null]], true, 'full', { title: 'Menu', x: true });
@@ -8108,7 +8105,6 @@ window.TD = window.TD || {};
       }));
       $$('#set-game button', m).forEach((b) => (b.onclick = () => { this.toggleGame(b.dataset.k); this.markGameButtons($$('#set-game button', m)); }));
       $('#btn-stakes', m).onclick = () => this.showStakes();
-      $('#btn-rules', m).onclick = () => this.showRules();
     }
 
     showStakes() {
