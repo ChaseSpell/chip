@@ -2394,13 +2394,31 @@ window.TD = window.TD || {};
   if (A5) { // SS2: three-card draws only A-2, A-3, 2-3 (written as levels); the 2-7 two-card extra (8-6-3) is dropped
     RANGE.BTN.cores = ['23', '24', '34'];
     delete RANGE.CO.extra; delete RANGE.SB.extra;
+    // three-card draws to an ace with a six or better (A-6, A-5, A-4) also open-raise from the button and when
+    // folded to the small blind (Nov 25), to steal the blinds; they draw three to it. Opening only: the big blind's
+    // defence and the isolation raises keep their ranges. Written as levels: '27' = A-6, '26' = A-5, '25' = A-4.
+    RANGE.BTN.openThree = ['25', '26', '27'];
+    RANGE.SB.openThree = ['23', '24', '34', '25', '26', '27'];
+    RANGE.BTN.drawThree = RANGE.SB.drawThree = ['25', '26', '27'];
+  } else {
+    // folded to the small blind it open-raises or folds, never limps (Nov 25): the three-card draws it used to
+    // mix limps with (a deuce with another wheel card) are open-raised
+    RANGE.SB.openThree = ['23', '24', '25', '27'];
+  }
+  // the hand's three-card draw to an ace with a six or better that opens from this position (A-5 only), or null
+  function openThreeCore(info, pos, s) {
+    const r = RANGE[pos];
+    if (!r || !r.openThree || (info.kind !== 'three' && info.kind !== 'two') || !info.three.mask) return null;
+    if (!r.openThree.some((m) => maskOf(m) === info.three.mask)) return null;
+    return info.three.score >= 44 + Math.max(0, s || 0) ? info.three.mask : null;
   }
   const maskOf = (s) => TD.levelMask(s); // patterns are written in 2-7 terms (levels; see A-5 above)
   // is this hand in the position's opening range, with every threshold moved by s score points?
-  function inRange(info, pos, s) {
+  function inRange(info, pos, s, opening) {
     const r = RANGE[pos];
     if (!r) return false;
     s = s || 0;
+    if (opening && openThreeCore(info, pos, s)) return true;
     if (info.kind === 'pat') return info.patScore >= r.pat + s;
     if (info.kind === 'one') return info.score >= r.one + s;
     if (info.kind === 'two') return info.score >= r.two + s || (!!r.extra && s <= 0 && r.extra.some((m) => maskOf(m) === info.two.mask));
@@ -2422,7 +2440,7 @@ window.TD = window.TD || {};
       for (let i = 0; i < N; i++) {
         for (let k = 0; k < 5; k++) { const j = k + Math.floor(rnd() * (52 - k)); const t = deck[k]; deck[k] = deck[j]; deck[j] = t; }
         const info = TD.predrawInfo(deck.slice(0, 5));
-        for (const p in RANGE) if (inRange(info, p, 0)) cnt[p]++;
+        for (const p in RANGE) if (inRange(info, p, 0, true)) cnt[p]++;
       }
       const tail = scoreTail();
       for (const p in RANGE) {
@@ -2920,25 +2938,23 @@ window.TD = window.TD || {};
         // MMG: always open-raise, never limp — the draw announces your hand, so put pressure on the blinds now.
         // Ranges are the book's (RANGE); ToP ch. 4: they follow the ante structure (no change in the standard one)
         const s = anteShift(game, pos, openRef(pos));
-        const inR = inRange(info, pos, s), inStd = inRange(info, pos, 0);
+        const inR = inRange(info, pos, s, true), inStd = inRange(info, pos, 0, true);
+        const core3 = inR && info.kind !== 'pat' && !inRange(info, pos, s) ? openThreeCore(info, pos, s) : null;
+        const steal3 = core3 && RANGE[pos].drawThree && RANGE[pos].drawThree.some((m) => maskOf(m) === core3);
+        if (steal3) mem.plan = { draw: 3, mask: core3, opened: true };
+        const core3Txt = !core3 ? '' : !steal3 ? ' MMG: a deuce with another wheel card is playable from the small blind. Folded to the small blind, open-raise or fold; never limp.' : mk(' A three-card draw to an ace with a six or better opens from the ' + (pos === 'SB' ? 'small blind' : 'button') + ' to steal the blinds: keep ' + TD.maskStr(core3).split('-').reverse().join('-') + ' and draw three.');
         const aNote = inR !== inStd ? anteNote(game, pos, s) : '';
         if (pos === 'SB') {
+          if (core3) return act('raise', 'Folded to SB with ' + d + ': raise.' + core3Txt + aNote, 'steal');
           if (inR) return act('raise', 'Folded to SB with ' + d + ': raise. MMG: open the cutoff range from the small blind — out of position for the whole hand, don\'t play from behind.' + aNote, 'steal');
           const swSB = stealWiden(game, p, pos);
-          if (swSB.pts && inRange(info, pos, s - swSB.pts)) return act('raise', 'Folded to SB with ' + d + ': steal.' + swSB.note, 'steal');
-          // MMG / SS2: three-card draws with a deuce and another wheel card are playable here — mix raising and
-          // limping (limp more against an aggressive big blind, raise against a tight one)
-          if (info.kind === 'three' && (A5 ? ['23', '24', '34'] : ['23', '24', '25', '27']).some((m) => maskOf(m) === info.three.mask)) {
-            const bb = game.players[game.bbSeat()];
-            const aggressiveBB = bb.isHuman && bb.stats.hands >= 20 && bb.stats.pfr / bb.stats.hands > 0.28;
-            if (!aggressiveBB && R() < 0.5) return act('raise', 'Folded to SB with ' + d + ': raise. MMG: a deuce with another wheel card is playable from the small blind; mix raising with limping (raise more against a tight big blind).', 'steal');
-            return act('call', 'Folded to SB with ' + d + ': complete. MMG: a deuce with another wheel card is playable from the small blind; mix in some limps' + (aggressiveBB ? ' — especially against an aggressive big blind (SS2 agrees).' : '.'), 'steal');
-          }
+          if (swSB.pts && inRange(info, pos, s - swSB.pts, true)) return act('raise', 'Folded to SB with ' + d + ': steal.' + swSB.note, 'steal');
           return act('fold', 'Folded to SB with ' + d + ' — outside the small blind range (MMG: the cutoff range).' + aNote);
         }
         let why = '';
         if (info.kind === 'one' && info.made) why = A5 ? mk(' SS2: a pat eight is a weak hand in A-5 — break it and draw to a six.') : ' Notes: a pat 9-5-4-3-2 type hand is broken — opened as a one-card draw.';
         if (info.kind === 'pat' && !inR && info.patScore < 84) why = A5 ? mk(' SS2: keep and play pat sevens or better; a pat eight is weak.') : ' MMG: ' + (pos === 'LJ' || pos === 'HJ' ? 'from early position open only pat eights or better.' : 'this pat hand is too rough.');
+        if (core3) return act('raise', 'First in from ' + pos + ' with ' + d + ' (in the ' + pos + ' opening range).' + core3Txt + aNote, 'steal');
         if (inR) {
           const late = (pos === 'CO' || pos === 'BTN');
           const bookTxt = A5 ? (pos === 'BTN' && info.kind === 'three' ? mk(' SS2: draw three only to steal from the button (or from the blinds) — and only with A-2, A-3 or 2-3.')
@@ -2950,7 +2966,7 @@ window.TD = window.TD || {};
           return act('raise', 'First in from ' + pos + ' with ' + d + ' (in the ' + pos + ' opening range).' + why + bookTxt + aNote, late ? 'steal' : '');
         }
         const sw = stealWiden(game, p, pos);
-        if (sw.pts && inRange(info, pos, s - sw.pts)) return act('raise', 'Steal from the ' + pos + ' with ' + d + '.' + sw.note, 'steal');
+        if (sw.pts && inRange(info, pos, s - sw.pts, true)) return act('raise', 'Steal from the ' + pos + ' with ' + d + '.' + sw.note, 'steal');
         return act('fold', 'Fold ' + d + ' from ' + pos + ' — outside the first-raise-in range.' + why + aNote);
       }
       // limpers in front
@@ -3417,10 +3433,11 @@ window.TD = window.TD || {};
 
     // honour the predraw plan on the first draw (balance: raise-&-draw-1 vs call-&-draw-2)
     if (k === 0 && mem.plan) {
-      const planned = cands.find((c) => c.n === mem.plan.draw);
-      if (planned && planned.val >= cands[0].val * 0.78) {
+      const planned = mem.plan.mask ? cands.find((c) => c.n === mem.plan.draw && TD.rankMaskOf(c.keep) === mem.plan.mask) : cands.find((c) => c.n === mem.plan.draw);
+      if (planned && (mem.plan.opened || planned.val >= cands[0].val * 0.78)) {
         choice = planned;
-        reason = 'Draw ' + planned.n + ' to ' + hstr(planned.keep) + ' as planned predraw (' + (planned.n === 1 ? (mem.rastFlat ? 'flat-called from the big blind and drawing one' : 'raised and drawing one') : 'flat-called and drawing two') + ').';
+        if (mem.plan.opened) firstNote = '';
+        reason = 'Draw ' + planned.n + ' to ' + hstr(planned.keep) + (mem.plan.opened ? ', as planned when I opened it: a three-card draw raised to steal the blinds draws three.' : ' as planned predraw (' + (planned.n === 1 ? (mem.rastFlat ? 'flat-called from the big blind and drawing one' : 'raised and drawing one') : 'flat-called and drawing two') + ').');
       }
     }
 
@@ -6587,7 +6604,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 100;
+  TD.VERSION = 102;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
