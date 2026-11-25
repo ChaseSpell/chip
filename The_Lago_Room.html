@@ -533,6 +533,18 @@ body.turning .seat, body.turning .bet, body.turning #dealer-btn { transition: le
 body.god-on #god-tag { display: inline-block; }
 .rv-line.god-note { margin-bottom: 6px; }
 
+/* Session log (v93) */
+table.stats.sess td { vertical-align: top; }
+table.stats.sess tr.sess-row { cursor: pointer; }
+table.stats.sess tr.sess-row:hover td, table.stats.sess tr.sess-row:active td { background: var(--panel-line); }
+table.stats.sess tr.sess-row.cur td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 9px; }
+.sess-when { font-weight: 700; white-space: nowrap; }
+.sess-what { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
+.sess-tag { display: inline-block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; font-weight: 800; color: var(--on-accent); background: var(--accent); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+table.stats.sess-facts td { text-align: left; padding: 7px 4px; }
+table.stats.sess-facts td:first-child { color: var(--accent-hi); font-size: 12px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; width: 42%; }
+body.portrait .sess-opt { display: none; }
+
 </style>
 </head>
 <body class="theme-classic landscape">
@@ -6371,7 +6383,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 92;
+  TD.VERSION = 93;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6379,6 +6391,53 @@ window.TD = window.TD || {};
     remove(k) { try { window.localStorage.removeItem(k); } catch (e) { /* ignore */ } }
   };
   TD.store = store;
+
+  /* ---------------- Session log (Chase, Nov 25) ----------------
+     Every session (regular play and Seat training) gets a row: a short summary in lago27.log and the table state
+     needed to pick it up again (stacks, stats, button, hand number, mix position, what the bots learned about you)
+     in lago27.s.<id>. Each session takes about 1.5 KB whatever its length, so every session is kept, up to
+     LOG_MAX (about 1 MB); past that the oldest go first. A session joins the log after its first hand. */
+  const LOG_KEY = 'lago27.log', SESS_PREFIX = 'lago27.s.', LOG_MAX = 500;
+  const trySet = (k, v) => { try { window.localStorage.setItem(k, v); return true; } catch (e) { return false; } };
+  const SessionLog = {
+    MAX: LOG_MAX,
+    list() { try { const d = JSON.parse(store.get(LOG_KEY) || 'null'); return d && d.v === 1 && Array.isArray(d.list) ? d.list : []; } catch (e) { return []; } },
+    entry(id) { return this.list().find((e) => e.id === id) || null; },
+    newId() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); },
+    load(id) { try { const d = JSON.parse(store.get(SESS_PREFIX + id) || 'null'); return d && d.v === 1 && d.handNo > 0 ? d : null; } catch (e) { return null; } },
+    // the table state of a session, as main.js saves and restores it
+    data(g, meta) { return Object.assign(g.serialize(), { sid: g.sessionId, started: g.sessionStarted || Date.now(), meta }); },
+    summary(g, meta, started) {
+      const me = g.players[0], s = me.stats, cs = g.coachStats || {};
+      const st = g.stakes;
+      return {
+        id: g.sessionId, mode: meta.mode, seat: meta.seat || null, games: meta.games.slice(),
+        stakes: { sb: st.sb, bb: st.bb, small: st.small, big: st.big, buyin: st.buyin },
+        started, updated: Date.now(), hands: g.handNo, dealt: s.hands, net: me.stack - me.buyins, buyins: me.buyins, rebuys: s.rebuys,
+        vpip: s.vpip, pfr: s.pfr, sd: s.showdowns, sdw: s.sdWins, wins: s.wins,
+        coach: [cs.agree || 0, cs.mixed || 0, cs.differs || 0]
+      };
+    },
+    // after every finished hand: the session's row moves to the top of the log
+    save(g, meta) {
+      if (!g || !g.sessionId || !(g.handNo > 0)) return false;
+      const d = this.data(g, meta);
+      let list = this.list().filter((e) => e.id !== g.sessionId);
+      list.unshift(this.summary(g, meta, d.started));
+      while (list.length > LOG_MAX) store.remove(SESS_PREFIX + list.pop().id);
+      // storage full: drop the oldest sessions until both writes fit
+      for (;;) {
+        if (trySet(SESS_PREFIX + g.sessionId, JSON.stringify(d)) && trySet(LOG_KEY, JSON.stringify({ v: 1, list }))) return true;
+        if (list.length <= 1) return false;
+        store.remove(SESS_PREFIX + list.pop().id);
+      }
+    },
+    remove(id) {
+      store.remove(SESS_PREFIX + id);
+      trySet(LOG_KEY, JSON.stringify({ v: 1, list: this.list().filter((e) => e.id !== id) }));
+    }
+  };
+  TD.SessionLog = SessionLog;
 
   /* ---------------- geometry (design px) ---------------- */
   function landscapeGeo() {
@@ -6575,6 +6634,14 @@ window.TD = window.TD || {};
       this.toggleDrawer(null);
       if (this.replayEndResolve) { this.replayEndResolve('end'); return; }
       if ((this.game && this.game.handInProgress) || this.replaying) this.toast('The menu opens when this hand is over');
+    }
+    // Session log > Resume at the table: the session opens between hands (at once if none is being played)
+    requestResume(sid) {
+      this.pendingResume = sid;
+      this.menuRequested = true;
+      this.toggleDrawer(null);
+      if (this.replayEndResolve) { this.replayEndResolve('end'); return; }
+      if ((this.game && this.game.handInProgress) || this.replaying) this.toast('That session opens when this hand is over');
     }
     saveSettings() { store.set('lago27.settings', JSON.stringify(this.settings)); this.applySettings(); }
     applySettings() {
@@ -7590,6 +7657,8 @@ window.TD = window.TD || {};
       if (sel) sel.onchange = () => { this.reviewIndex = +sel.value; this.renderDrawer(); };
       const ns = $('#btn-new-session', body);
       if (ns) ns.onclick = () => this.resetSession();
+      const sl = $('#btn-sess-log', body);
+      if (sl) sl.onclick = () => { if (this.openSessionLog) this.openSessionLog(); };
     }
 
     historyHTML(g) {
@@ -7712,7 +7781,7 @@ window.TD = window.TD || {};
           '</td><td class="' + (n > 0 ? 'pos' : n < 0 ? 'neg' : '') + '">' + (n > 0 ? '+' : '') + money(n) + '</td><td>' + b.toFixed(1) + '</td></tr>';
       }
       html += '</table><p class="muted" style="font-size:13px;margin-top:10px">Stakes ' + money(g.stakes.sb) + '/' + money(g.stakes.bb) + ' blinds, ' + money(g.stakes.small) + '/' + money(g.stakes.big) + ' limit, ' + money(g.stakes.buyin) + ' stacks. BB/100 = big bets (' + money(big) + ') won per 100 hands. VPIP = voluntarily put money in predraw. PFR = predraw raise. WTSD = went to showdown. W$SD = won at showdown. Your rebuys: ' + me.stats.rebuys + '.</p>';
-      html += '<div class="row" style="justify-content:flex-start;margin-top:14px;display:flex"><button class="mbtn ghost" id="btn-new-session">Start a new session</button></div>';
+      html += '<div class="row" style="justify-content:flex-start;margin-top:14px;display:flex"><button class="mbtn ghost" id="btn-sess-log">Session log</button><button class="mbtn ghost" id="btn-new-session">Start a new session</button></div>';
       return html;
     }
 
@@ -7762,6 +7831,7 @@ window.TD = window.TD || {};
         '<div class="setting"><div class="lbl">Game mode: ' + (train ? 'Seat training' : 'Regular play') + '<small>' + (train
           ? 'Training from the ' + s.trainSeat + '. Open the menu to go back to regular play (your regular session is still saved) or to start a new Seat training session.'
           : 'Seat training is its own mode: open the menu to start it. Your regular session stays saved while you train.') + '</small></div><button class="mbtn ghost" id="btn-menu" style="min-width:0;min-height:42px">Menu</button></div>' +
+        '<div class="setting"><div class="lbl">Session log<small>Every session you have played, regular and Seat training, with its results and stats. Tap one to pick it up where you left off.</small></div><button class="mbtn ghost" id="btn-sesslog" style="min-width:0;min-height:42px">Open</button></div>' +
         '<div class="setting"><div class="lbl">Games<small>' + (train
           ? 'Seat training plays one game at a time: tap a game to switch to it. A change during a hand starts with the next hand.'
           : 'Select which games you would like to play. Tap a game to add or remove it; with more than one, the game changes every 6 hands (one orbit). A change during a hand starts with the next hand.') + '</small></div><div class="seg" id="set-game">' +
@@ -7804,6 +7874,7 @@ window.TD = window.TD || {};
         if (this.game) this.update(this.game, {});
         this.toast('Training from the ' + v + (live() ? ', from the next hand' : ''));
       }));
+      $('#btn-sesslog', m).onclick = () => { const r = $('#modal-root'); r.classList.remove('show'); r.innerHTML = ''; this.modalClose = null; if (this.openSessionLog) this.openSessionLog(); };
       $('#btn-menu', m).onclick = () => { const r = $('#modal-root'); r.classList.remove('show'); r.innerHTML = ''; this.modalClose = null; this.requestMenu(); };
       $$('#set-seatview button', m).forEach((b) => (b.onclick = () => {
         if (s.zoom !== false || !s.everySeat || s.seatView === b.dataset.k) return;
@@ -7921,13 +7992,85 @@ window.TD = window.TD || {};
       this.modal(html, [['Close', null]], true, true);
     }
 
+    /* ---------- Session log (Chase, Nov 25) ----------
+       opts: { current: the session on the table (no Resume or Delete for it), onResume(id), onDelete(id),
+       onBack: from the menu, Back returns to it (and the log can't be closed by tapping outside) } */
+    showSessionLog(opts) {
+      const list = TD.SessionLog.list();
+      const S = sessFmt;
+      let html = '<h2>Session Log</h2><div class="sub">' + (list.length ? list.length + ' session' + (list.length === 1 ? '' : 's') + ' · tap one to see it or pick it up again' : 'Your sessions') + '</div>';
+      if (!list.length) html += '<div class="rv-empty">No sessions yet. A session shows up here after its first hand.</div>';
+      else {
+        const hands = list.reduce((a, e) => a + e.hands, 0), net = list.reduce((a, e) => a + e.net, 0);
+        const bigs = list.reduce((a, e) => a + e.net / (e.stakes.big || 1), 0);
+        const bb = hands ? bigs / hands * 100 : 0;
+        html += '<div class="stat-cards">' +
+          '<div class="stat-card"><div class="k">Hands</div><div class="v">' + hands.toLocaleString() + '</div></div>' +
+          '<div class="stat-card"><div class="k">Net</div><div class="v ' + S.cls(net) + '">' + S.signed(net) + '</div></div>' +
+          '<div class="stat-card"><div class="k">BB / 100</div><div class="v ' + S.cls(bb) + '">' + bb.toFixed(1) + '</div></div></div>' +
+          '<table class="stats sess"><tr><th>Session</th><th>Hands</th><th>Net</th><th>BB/100</th><th class="sess-opt">VPIP</th><th class="sess-opt">PFR</th></tr>' +
+          list.map((e) => {
+            const b = S.bb100(e);
+            return '<tr class="sess-row' + (e.id === opts.current ? ' cur' : '') + '" data-id="' + escapeHTML(e.id) + '"><td><div class="sess-when">' + S.when(e.updated) + (e.id === opts.current ? '<span class="sess-tag">At the table</span>' : '') + '</div>' +
+              '<div class="sess-what">' + S.games(e) + ' · ' + money(e.stakes.small) + '/' + money(e.stakes.big) + (e.mode === 'train' ? '<br>Seat training · ' + escapeHTML(e.seat || '') : '') + '</div></td>' +
+              '<td>' + e.hands + '</td><td class="' + S.cls(e.net) + '">' + S.signed(e.net) + '</td><td class="' + S.cls(b) + '">' + b.toFixed(1) + '</td>' +
+              '<td class="sess-opt">' + S.pct(e.vpip, e.dealt) + '</td><td class="sess-opt">' + S.pct(e.pfr, e.dealt) + '</td></tr>';
+          }).join('') + '</table>' +
+          '<p class="muted" style="font-size:13px;margin-top:10px">Newest first, by when you last played. BB/100 = big bets won per 100 hands; the totals add up every session at its own stakes. The log keeps your last ' + TD.SessionLog.MAX + ' sessions.</p>';
+      }
+      const m = this.modal(html, opts.onBack ? [['Back', () => opts.onBack(), true]] : [['Close', null]], !opts.onBack, true);
+      $$('.sess-row', m).forEach((tr) => (tr.onclick = () => { const e = list.find((x) => x.id === tr.dataset.id); if (e) this.showSessionDetail(e, opts); }));
+      return m;
+    }
+    showSessionDetail(e, opts) {
+      const S = sessFmt, cur = e.id === opts.current, b = S.bb100(e);
+      const canResume = !cur && !!TD.SessionLog.load(e.id);
+      const cs = e.coach || [0, 0, 0], tot = cs[0] + cs[1] + cs[2];
+      const card = (k, v, c) => '<div class="stat-card"><div class="k">' + k + '</div><div class="v ' + (c || '') + '">' + v + '</div></div>';
+      const html = '<h2>Session</h2><div class="sub">' + (e.mode === 'train' ? 'Seat training · ' + escapeHTML(e.seat || '') : 'Regular play') + ' · ' + S.games(e) + '</div>' +
+        '<div class="stat-cards">' + card('Hands', e.hands) + card('Net', S.signed(e.net), S.cls(e.net)) + card('BB / 100', b.toFixed(1), S.cls(b)) + '</div>' +
+        '<div class="stat-cards">' + card('VPIP', S.pct(e.vpip, e.dealt)) + card('PFR', S.pct(e.pfr, e.dealt)) + card('W$SD', S.pct(e.sdw, e.sd)) + '</div>' +
+        (tot ? '<div class="stat-cards">' + card('Same as AI', S.pct(cs[0], tot), 'pos') + card('Close / mixed', S.pct(cs[1], tot)) + card('AI differs', S.pct(cs[2], tot), 'neg') + '</div>' : '') +
+        '<table class="stats sess-facts">' +
+        '<tr><td>Started</td><td>' + S.when(e.started) + '</td></tr>' +
+        '<tr><td>Last played</td><td>' + S.when(e.updated) + '</td></tr>' +
+        '<tr><td>Stakes</td><td>' + money(e.stakes.sb) + '/' + money(e.stakes.bb) + ' blinds · ' + money(e.stakes.small) + '/' + money(e.stakes.big) + ' limit</td></tr>' +
+        '<tr><td>Bought in</td><td>' + money(e.buyins) + (e.rebuys ? ' (' + e.rebuys + ' rebuy' + (e.rebuys === 1 ? '' : 's') + ')' : '') + '</td></tr>' +
+        '<tr><td>Went to showdown</td><td>' + S.pct(e.sd, e.dealt) + '</td></tr></table>' +
+        '<p class="muted" style="text-align:center;font-size:14px;margin-top:12px">' + (cur ? 'This is the session on the table now.'
+          : canResume ? 'Resume picks up at hand #' + (e.hands + 1) + ' with every stack, stat and the dealer button where you left them. Hand History and Review start fresh.'
+          : 'This session can no longer be loaded.') + '</p>';
+      const back = () => this.showSessionLog(opts);
+      const buttons = [];
+      if (cur) buttons.push(['Back to the table', null]);
+      else if (canResume) buttons.push(['Resume session', () => opts.onResume(e.id)]);
+      if (!cur) buttons.push(['Delete', () => this.modal('<h2>Delete Session?</h2><div class="sub">' + S.when(e.updated) + '</div><p style="text-align:center">This session (' + e.hands + ' hands, ' + S.signed(e.net) + ') leaves the log for good.</p>',
+        [['Delete', () => { opts.onDelete(e.id); back(); }], ['Cancel', () => this.showSessionDetail(e, opts), true]], false), true]);
+      buttons.push(['Back', back, true]);
+      return this.modal(html, buttons, !opts.onBack, true);
+    }
+
     resetSession() {
       const st = this.stakes;
-      this.modal('<h2>New Session?</h2><div class="sub">Reset stacks &amp; stats</div><p style="text-align:center">All stacks return to ' + money(st.buyin) + ' and session statistics are cleared. The new session starts with the next hand.</p>',
+      this.modal('<h2>New Session?</h2><div class="sub">Reset stacks &amp; stats</div><p style="text-align:center">All stacks return to ' + money(st.buyin) + ' and a new session with fresh stats starts with the next hand. This session stays in the Session log, so you can pick it up again later.</p>',
         [['Start fresh', () => { this.clearSavedSession(); this.resetRequested = true; this.toast(this.game && this.game.handInProgress ? 'New session starts next hand' : 'New session started'); if (this.onResetRequested) this.onResetRequested(); }], ['Cancel', null, true]]);
     }
   }
 
+  // Session log formatting
+  const sessFmt = {
+    when(t) {
+      const d = new Date(t || 0), now = new Date();
+      const o = { month: 'short', day: 'numeric' };
+      if (d.getFullYear() !== now.getFullYear()) o.year = 'numeric';
+      return d.toLocaleDateString(undefined, o) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    },
+    games: (e) => (e.games || []).map((k) => (TD.GAME_INFO[k] ? TD.GAME_INFO[k].short : escapeHTML(k))).join(' / '),
+    bb100: (e) => (e.hands ? (e.net / (e.stakes.big || 1)) / e.hands * 100 : 0),
+    pct: (a, b) => (b ? Math.round(100 * a / b) + '%' : '—'),
+    signed: (n) => (n > 0 ? '+' : '') + money(n),
+    cls: (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '')
+  };
   function escapeHTML(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   TD.UI = UI;
@@ -7944,7 +8087,17 @@ window.TD = window.TD || {};
 (function (TD) {
   const ui = new TD.UI();
   TD.ui = ui;
-  const newGame = () => new TD.Game(ui, { settings: ui.settings, stakes: ui.settings.stakes || TD.CONST.DEFAULT_STAKES });
+  // every new table is a new session with its own id in the Session log
+  const newGame = () => {
+    const g = new TD.Game(ui, { settings: ui.settings, stakes: ui.settings.stakes || TD.CONST.DEFAULT_STAKES });
+    g.sessionId = TD.SessionLog.newId(); g.sessionStarted = Date.now();
+    return g;
+  };
+  const LOG = TD.SessionLog;
+  // the mode, seat and games a session is played with (kept with it, so Resume sets them back)
+  const metaNow = () => ({ mode: ui.training ? 'train' : 'play', seat: ui.training ? ui.settings.trainSeat : null, games: TD.pickedGames(ui.settings) });
+  // a table rebuilt from saved data keeps the session's id
+  const restored = (d) => { const g = newGame(); g.restore(d); if (d.sid) g.sessionId = d.sid; if (d.started) g.sessionStarted = d.started; return g; };
   let game = newGame();
   TD.game = game;
   ui.attach(game);
@@ -7956,7 +8109,36 @@ window.TD = window.TD || {};
   let playGame = null;
   // don't re-save a session that is about to be replaced (new stakes / new session requested mid-hand);
   // only regular play is saved, so Seat training never overwrites it
-  ui.onHandDone = (g) => { if (!ui.resetRequested && g === game && !ui.training) TD.store.set(SESSION_KEY, JSON.stringify(g.serialize())); };
+  // Session log (Chase, Nov 25): every finished hand also updates the session's row in the log, Seat training included
+  ui.onHandDone = (g) => {
+    if (g !== game) return;
+    const meta = metaNow();
+    LOG.save(g, meta);
+    if (!ui.resetRequested && !ui.training) TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(g, meta)));
+  };
+  // a regular session saved before the Session log existed joins the log
+  {
+    const d = readSaved();
+    if (d && (!d.sid || !LOG.entry(d.sid))) {
+      const g = restored(d), meta = { mode: 'play', seat: null, games: ui.settings.playGames.slice() };
+      LOG.save(g, meta);
+      TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(g, meta)));
+    }
+  }
+  // the session in memory with this id (the table's, or the regular session kept while you train)
+  const liveSession = (sid) => [game, playGame].find((g) => g && g.sessionId === sid) || null;
+  function deleteSession(sid) {
+    LOG.remove(sid);
+    const d = readSaved();
+    if (d && d.sid === sid) TD.store.remove(SESSION_KEY);
+    if (playGame && playGame.sessionId === sid) playGame = null;
+  }
+  // Session log from the table (Stats, Settings): Resume opens the session between hands
+  ui.openSessionLog = () => ui.showSessionLog({
+    current: ui.replaying ? ui.replaying.main.sessionId : game.sessionId,
+    onResume: (sid) => ui.requestResume(sid),
+    onDelete: deleteSession
+  });
 
   function clearLog() { document.getElementById('log').innerHTML = ''; ui.logLines = []; }
   // New stakes or "Start fresh": during a hand the new session starts with the next hand (top of the loop);
@@ -7985,7 +8167,8 @@ window.TD = window.TD || {};
   function welcome() {
     return new Promise((resolve) => {
       const m = TD.uiHelpers.money;
-      const saved = playGame && playGame.handNo > 0 ? playGame.serialize() : readSaved();
+      const getSaved = () => (playGame && playGame.handNo > 0 ? playGame.serialize() : readSaved());
+      let saved = getSaved();
       let tab = ui.training ? 'train' : 'play';
       const picked = () => TD.pickedGames(ui.settings);
       const rulesTxt = () => { const p = picked(); return p.length === 1 ? RULE[p[0]][0] : 'Six hands (one orbit) of each game in turn: ' + p.map((k) => TD.GAME_INFO[k].short).join(', then ') + '. Lowest hand wins — ' + p.map((k) => RULE[k][1]).join('; ') + '.'; };
@@ -8000,7 +8183,9 @@ window.TD = window.TD || {};
       const seatTxt = (p) => p === 'BB' ? 'In the big blind it folds to the small blind, which always opens with a random hand from its opening range.'
         : p === 'LJ' ? 'From the LJ everyone is dealt in as usual, and you are first to act.'
         : 'The seats in front of you are not dealt in, so the action is folded to you predraw.';
+      const openLog = () => ui.showSessionLog({ current: null, onResume: (sid) => resolve({ sid }), onDelete: deleteSession, onBack: () => render() });
       const render = () => {
+        saved = getSaved();
         ui.setMode(tab);
         const st = stakesNow();
         const modeSeg = '<div style="display:flex;justify-content:center;margin:2px 0 12px"><div class="seg" id="welcome-mode">' +
@@ -8016,6 +8201,7 @@ window.TD = window.TD || {};
           if (saved) html += '<p style="text-align:center;font-size:15px">Saved session: ' + savedTxt() + '.</p>';
           if (saved) buttons.push(['Resume session', () => resolve({ mode: 'play', resume: true })]);
           buttons.push([saved ? 'New session' : 'Take your seat', () => resolve({ mode: 'play', resume: false }), !!saved]);
+          if (LOG.list().length) buttons.push(['Session log', openLog, true]);
         } else {
           const seat = ui.settings.trainSeat;
           html += '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Pick your seat</p>' +
@@ -8024,8 +8210,9 @@ window.TD = window.TD || {};
             '<p class="muted" style="text-align:center;font-size:14px;margin:6px 0 4px">Pick a game</p>' +
             '<div style="display:flex;justify-content:center;margin:4px 0 10px"><div class="seg" id="welcome-game">' + ui.gameButtons() + '</div></div>' +
             '<p style="text-align:center">Every hand is dealt with you in the <b id="wel-seat">' + seat + '</b>. <span id="wel-seat-txt">' + seatTxt(seat) + '</span> <span id="wel-rules">' + rulesTxt() + '</span></p>' +
-            '<p style="text-align:center;font-size:14px" class="muted">Starting Seat training begins a new session with its own stats, History and Review' + (saved ? '. Your regular session (' + savedTxt() + ') stays saved: open <b>Settings</b> &gt; <b>Menu</b> to go back to it.' : '. Open <b>Settings</b> &gt; <b>Menu</b> to go back to regular play.') + '</p>';
+            '<p style="text-align:center;font-size:14px" class="muted">Starting Seat training begins a new session with its own stats, History and Review (past ones wait in the <b>Session log</b>)' + (saved ? '. Your regular session (' + savedTxt() + ') stays saved: open <b>Settings</b> &gt; <b>Menu</b> to go back to it.' : '. Open <b>Settings</b> &gt; <b>Menu</b> to go back to regular play.') + '</p>';
           buttons.push(['Start seat training', () => resolve({ mode: 'train' })]);
+          if (LOG.list().length) buttons.push(['Session log', openLog, true]);
         }
         const box = ui.modal(html, buttons, false);
         box.querySelectorAll('#welcome-mode button').forEach((b) => (b.onclick = () => { if (b.dataset.k !== tab) { tab = b.dataset.k; render(); } }));
@@ -8049,10 +8236,26 @@ window.TD = window.TD || {};
 
   // Set up the table for the mode picked in the menu
   function begin(choice) {
+    // Session log > Resume: the session comes back with its mode, seat, games and stakes
+    if (choice.sid) {
+      const e = LOG.entry(choice.sid), live = liveSession(choice.sid), d = live ? null : LOG.load(choice.sid);
+      if (!e || (!live && !d)) { ui.toast('That session could not be loaded'); choice = { mode: ui.training ? 'train' : 'play', resume: !ui.training }; }
+      else {
+        const s = ui.settings;
+        if (e.mode === 'train') { if (e.seat) s.trainSeat = e.seat; if (e.games && e.games[0]) s.trainGame = e.games[0]; }
+        else if (e.games && e.games.length) s.playGames = TD.pickedGames({ games: e.games });
+        ui.setMode(e.mode);
+        game = live || restored(d);
+        if (e.mode === 'play') { playGame = game; TD.store.set(SESSION_KEY, JSON.stringify(LOG.data(game, metaNow()))); }
+        ui.settings.stakes = game.stakes; ui.saveSettings();
+        choice = { mode: e.mode, resume: true, fromLog: true };
+      }
+    }
     ui.setMode(choice.mode);
-    if (choice.mode === 'train') game = newGame(); // a new Seat training session every time
+    if (choice.fromLog) { /* the table is set above */ }
+    else if (choice.mode === 'train') game = newGame(); // a new Seat training session every time
     else if (choice.resume) {
-      if (!playGame) { const d = readSaved(); playGame = newGame(); if (d) playGame.restore(d); }
+      if (!playGame) { const d = readSaved(); playGame = d ? restored(d) : newGame(); }
       game = playGame;
       ui.settings.stakes = game.stakes; ui.saveSettings();
     } else { TD.store.remove(SESSION_KEY); game = playGame = newGame(); }
@@ -8063,7 +8266,8 @@ window.TD = window.TD || {};
     clearLog();
     const p = TD.pickedGames(ui.settings);
     const gname = p.length > 1 ? 'Limit ' + p.map((k) => TD.GAME_INFO[k].short).join(' / ') + ' Mix, six hands of each' : TD.gameInfo.limitName;
-    if (choice.mode === 'train') ui.log('Seat training from the ' + ui.settings.trainSeat + ': ' + gname + '. A new session.', 'sys');
+    if (choice.fromLog) ui.log('Back to your ' + (choice.mode === 'train' ? 'Seat training session from the ' + ui.settings.trainSeat : 'session') + ': ' + gname + ', hand #' + (game.handNo + 1) + ' next.', 'sys');
+    else if (choice.mode === 'train') ui.log('Seat training from the ' + ui.settings.trainSeat + ': ' + gname + '. A new session.', 'sys');
     else if (choice.resume && game.handNo > 0) ui.log('Back to your session: ' + gname + ', hand #' + (game.handNo + 1) + ' next.', 'sys');
     else ui.log('Welcome to the Lago Room. ' + gname + '.', 'sys');
   }
@@ -8071,7 +8275,8 @@ window.TD = window.TD || {};
     ui.menuRequested = false;
     ui.toggleDrawer(null);
     ui.clearButtons();
-    begin(await welcome());
+    const sid = ui.pendingResume; ui.pendingResume = null;
+    begin(sid && LOG.entry(sid) ? { sid } : await welcome());
     TD.Sound.init();
   }
 
