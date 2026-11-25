@@ -6353,6 +6353,20 @@ window.TD = window.TD || {};
         // the ones that beat my value bets, plus bluff catchers that beat a snow. A line that stood pat twice and bet
         // after the 2nd draw represents a strong made badugi: worse badugis and three-card hands won't pay it off.
         const pat = strongPatLine(game, p, c, lead0);
+        // Nov 25 (hand report): out of position, I stood pat since the 2nd draw or earlier and bet after it, and he drew
+        // on the last draw. A worse badugi he made won't bet if I check but may call a bet, and a better one might not
+        // raise, so betting gains the calls from worse badugis and loses little to better ones. Value bet a 9 badugi or
+        // better; a ten mixes; a jack is too thin (only queens and kings are worse, and they rarely call), so jacks and
+        // worse check and bluff-catch, along with the tens that check.
+        if (!c.ip && oppDrew && pat && pat.strong && t >= lv('7')) {
+          const myLine = 'I stood pat ' + (p.draws[0] === 0 ? 'on every draw' : 'since the 2nd draw') + ' and bet out of position, and he drew on the last draw. A worse badugi he made won\'t bet if I check, but it may call a bet; a better badugi might not raise, and would bet anyway if I checked.';
+          if (t <= lv('9')) {
+            if (tier <= 7 && c.canRaise && !isCallingStation(game, c.opp) && R() < 0.2) { p.bot.crPlan = 3; return act('check', 'Check the ' + c.txt + ', planning to check-raise. Notes: usually bet the strongest badugis here, but sometimes check-raise them, so a player who drew can\'t bet every time I check without fear of a raise.', 'check-raise'); }
+            return act('bet', 'Bet the ' + c.txt + ' for value. ' + myLine + ' So betting picks up the calls from his worse badugis and costs little against his better ones: value bet a 9 badugi or better. Jacks are too thin to bet (too few worse badugis call), and tens mix.', 'value');
+          }
+          if (t <= lv('T') && R() < 0.5) return act('bet', 'Bet the ' + c.txt + ' for value (mixed, about half the time). ' + myLine + ' A ten badugi is close: worse badugis can still call, but fewer than with a 9. So tens mix bets and checks, and the ones that check bluff-catch.', 'value');
+          return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. ' + myLine + (t <= lv('T') ? ' A ten badugi is close, so it mixes bets and checks (about half each); this time it checks.' : ' But a ' + (t <= lv('J') ? 'jack' : t <= lv('Q') ? 'queen' : 'king') + ' badugi is too thin to bet: too few worse badugis are left to call it, while better ones call or raise.') + ' After this line my checks are jack badugis or worse and some tens, so they call a bet: he bets his better badugis and bluffs some missed draws.');
+        }
         const Ec = mcEquity(game, p, { mode: 'bet', hypoCall: true, leadMul: lead0 && lead0.seat === p.seat ? 1.3 : 0.6, pat });
         const need = c.ip ? 0.53 : 0.56;
         if (tier <= 6 || Ec >= need) {
@@ -6430,6 +6444,12 @@ window.TD = window.TD || {};
     }
     // Chase (Nov 21): a few check-raise bluffs with my roughest badugis, so the check-raising range isn't only the nuts
     if (c.N === 1 && !c.ip && c.iChecked && c.made && t >= lv('Q') && c.canRaise && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !isCallingStation(game, c.opp) && R() < 0.12) return act('raise', 'Check-raise bluff with the ' + c.txt + '. Notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest badugis are the bluffs, and a worse-than-expected badugi he bet may fold.', 'bluff');
+    // Nov 25: after standing pat since the 2nd draw and betting out of position, my river checks are jack badugis or
+    // worse (and some tens), and they call one bet from a player who drew as bluff catchers
+    if (c.N === 1 && !c.ip && c.iChecked && c.made && c.lvl === 1 && p.draws[2] === 0 && c.opp.draws[2] > 0) {
+      const pl = strongPatLine(game, p, c, leadInto(game, 3));
+      if (pl && pl.strong) return act('call', 'Call with the ' + c.txt + ', a bluff catcher. I stood pat and bet since the 2nd draw, then checked: my checks here are jack badugis or worse and some tens, so they have to call one bet, or every missed draw could bluff me off the pot. His bet is a better badugi or a missed draw bluffing (a worse badugi would have checked behind); ' + priceTxt(c) + ', so a bluff now and then is enough.', 'bluff-catch');
+    }
     if (c.made && tier === 7 && c.lvl >= 2) return act('call', 'Call the raise with the ' + c.txt + '. Greenstein: sevens get tenuous — against a tight player, bet a rough seven and just call a raise.');
     const bluffy = c.opp && c.opp.isHuman ? clamp((userPosterior(game).riverBluff - 0.12) * 0.6, 0, 0.08) : 0;
     // Chase (Nov 22): a three-card hand facing a river bet from a player who stood pat on the last draw only beats a
@@ -6567,7 +6587,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 99;
+  TD.VERSION = 100;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
