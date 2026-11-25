@@ -2745,6 +2745,12 @@ window.TD = window.TD || {};
     };
   }
 
+  // Brian Rast's big blind mix (Chase, Nov 25): top third of the BB's one-card draws flat 10%, the rest 50%
+  function bbOneMix(sc, opts) {
+    const top = sc >= (A5 ? 94 : 90);
+    const flat = !opts.canRaise || R() < (top ? 0.1 : 0.5);
+    return { flat, why: 'Mixed (Brian Rast): from the big blind, the one-card draws I play are flat-called some of the time so a call doesn\'t announce a weak draw. ' + (top ? 'In the top third of them, this one flats 10% of the time and 3-bets 90%.' : 'Outside the top third of them, this one flats half the time and 3-bets half the time.') };
+  }
   function predraw(game, p, opts) {
     const info = TD.predrawInfo(p.hand);
     const c = predrawCtx(game, p);
@@ -2841,7 +2847,12 @@ window.TD = window.TD || {};
         // ToP ch. 4: big blind defence follows the ante structure too (the openers' ranges and the price both move)
         if (c.openerPos === 'SB' && c.opps === 1) {
           const s48 = anteShift(game, 'BB', 48);
-          if ((agg || (info.kind === 'one' && mem.flexAgg !== false && sc >= 48 + s48)) && opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet — Notes: when continuing with a one-card draw facing an open, always 3-bet rather than flat.', 'value');
+          if (info.kind === 'one' && mem.flexAgg !== false && (agg || sc >= 48 + s48)) {
+            const mix = bbOneMix(sc, opts);
+            if (mix.flat) { mem.rastFlat = true; return act('call', 'Blind vs blind with ' + d + ': flat-call and draw one. ' + mix.why, 'balance'); }
+            return act('raise', 'Blind vs blind with ' + d + ': 3-bet and draw one. ' + mix.why, 'value');
+          }
+          if (agg && opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet — Notes: when continuing with a one-card draw facing an open, always 3-bet rather than flat.', 'value');
           if (sc >= 48 + s48) return act('call', 'BB vs SB heads-up with ' + d + '. Notes: call one more bet with anything remotely playable (even a 3-card draw to 3-4) — position plus 3-to-1 odds.' + (sc < 48 ? anteNote(game, 'BB', s48) : ''));
           return act('fold', 'BB vs SB: ' + d + ' is not even remotely playable.' + (sc >= 48 ? anteNote(game, 'BB', s48) : ''));
         }
@@ -2853,12 +2864,14 @@ window.TD = window.TD || {};
         const sB = anteShift(game, 'BB', openRef('BTN'));
         const inBB = inRange(info, 'BTN', sB), inBBStd = inRange(info, 'BTN', 0);
         const bbNote = inBB !== inBBStd ? anteNote(game, 'BB', sB) : '';
-        // Chase's notes (Brian Rast): the one exception to always 3-betting a one-card draw — in the big blind
-        // against an early-position open, keep a balanced flat-calling range of one-card draws that includes
-        // some premium ones (so a flat call doesn't announce a weak draw)
-        if (['LJ', 'HJ'].includes(c.openerPos) && info.kind === 'one' && mem.flexAgg !== false && (agg || inBB) && R() < 0.35) {
-          mem.rastFlat = true;
-          return act('call', 'BB vs the ' + c.openerPos + ' open with ' + d + ': flat-call and draw one (mixed). Notes (Brian Rast): against an early-position open, the big blind keeps a balanced range of flat-called one-card draws, including some premium ones, instead of 3-betting all of them.', 'balance');
+        // Chase (Nov 25), from Brian Rast: from the big blind, the one-card draws it plays mix flat-calling in, so a
+        // call doesn't announce a weak draw: the top third of them (2-7 score 90+, A-5 94+: about a third of the
+        // one-card draws in the BB defence range) flat 10% of the time and 3-bet 90%; the rest flat half the time
+        const oneBB = info.kind === 'one' && mem.flexAgg !== false && (agg || inBB);
+        if (oneBB) {
+          const mix = bbOneMix(sc, opts);
+          if (mix.flat) { mem.rastFlat = true; return act('call', 'BB vs the ' + c.openerPos + ' open with ' + d + ': flat-call and draw one. ' + mix.why, 'balance'); }
+          return act('raise', 'BB vs the ' + c.openerPos + ' open with ' + d + ': 3-bet and draw one. ' + mix.why + bbNote, 'value');
         }
         if ((agg || (oneOrPat && inBB)) && opts.canRaise) return act('raise', 'BB with ' + d + ': 3-bet. ' + (agg ? aggWhy : 'MMG: from the blinds, 3-bet the one-card draws and pat hands you play rather than flat-calling them.') + bbNote, 'value');
         // SS2: with a really strong draw in the BB against a late-position raiser, punish him by reraising — kept
@@ -4854,6 +4867,7 @@ window.TD = window.TD || {};
   const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
   const WHICH = ['1st', '2nd', '3rd'];
   const LATE = ['CO', 'BTN', 'SB'];
+  const OPENER_DEF = ['LJ', 'HJ', 'CO']; // Chase (Nov 24): these openers defend 3-bets with every hand they open
   function act(type, reason, tag) { return { type, reason, tag }; }
   function opponentsOf(game, p) { return game.activePlayers().filter((q) => q !== p); }
   function isIP(game, p, opps) { return opps.every((q) => game.actOrder(q.seat) < game.actOrder(p.seat)); }
@@ -4926,7 +4940,14 @@ window.TD = window.TD || {};
   // facing a single raise
   // MMG: pat badugis never cold-call a raise (3-bet them); two-card draws never 3-bet; one-card draws are
   // often 3-bet (Chase's lowball notes: 3-bet rather than flat a one-card draw against an open)
-  function threeBetRange(i, opPos) {
+  // Chase (Nov 24): no player cold-calls a raise planning to draw one: one-card draws are 3-bet or folded (the big
+  // blind's defence is separate). v88 had the button 3-bet three-card sevens and eights against a CO open, and v89
+  // had it cold-call the sevens; once the CO defends every hand it opens against a 3-bet, sims with these bots (350
+  // paired deals each, big bets per hand vs folding, drawing one) gave 7-4-2 call +0.24 / 3-bet -0.01, 7-5-3 +0.11 /
+  // +0.01, 7-6-5 +0.06 / -0.09, 8-4-A +0.10 / -0.18, 8-6-4 -0.02 / -0.24, 8-4-2 -0.26 / -0.27, 9-4-A -0.16 / -0.51,
+  // 9-6-A -0.30 / -0.56. The calls are marginal, so these hands fold.
+  const bbTopDraw = (i) => i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('2'));
+  function threeBetRange(i, opPos, myPos) {
     const late = LATE.includes(opPos);
     if (i.kind === 'pat') return i.t <= (late ? lv('K') : lv('Q'));
     if (i.kind === 'three') return i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('4')) || (late && i.t === lv('6'));
@@ -4934,7 +4955,7 @@ window.TD = window.TD || {};
   }
   function coldCallRange(i, opPos) { // in position, not in the blinds: no two-card hands, no pat hands
     const late = LATE.includes(opPos);
-    if (i.kind === 'three') return i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'));
+    if (i.kind === 'three') return false; // Chase (Nov 24): never cold-call a raise planning to draw one: 3-bet or fold
     return false;
   }
   function bbDefendRange0(i, opPos, multi) {
@@ -4954,7 +4975,7 @@ window.TD = window.TD || {};
   }
   function callThreeBetRange0(i, invested, late) {
     if (i.kind === 'pat') return i.t <= (invested >= 2 ? lv('Q') : lv('J')); // most players drop queen and king badugis to a raise and a reraise
-    if (i.kind === 'three') return invested >= 1 ? (i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'))) : (i.t <= lv('5') && i.s2 <= lv('4'));
+    if (i.kind === 'three') return invested >= 1 ? (i.t <= lv('6') || (late && i.t === lv('7') && i.s2 <= lv('5'))) : false; // Chase (Nov 24): with nothing in, never cold-call a 3-bet to draw one (those draws 4-bet instead)
     // Chase (Nov 23): nobody cold-calls a 3-bet (or 4-bet) planning to draw two, the big blind included; a two-card
     // draw from the BB is only worth calling one more small bet when it closes the action. (The opener's two-card
     // draws facing a 3-bet have their own rule in the betting code.)
@@ -5003,11 +5024,12 @@ window.TD = window.TD || {};
     const late = LATE.includes(model.opener);
     switch (model.key) {
       case 'open': return rfi(i, model.pos) ? 1 : rfi(i, LOOSER[model.pos] || 'BTN') ? (h ? 0.8 : 0.3) : out;
-      case '3bet': return threeBetRange(i, 'BTN') ? 1 : (h && callThreeBetRange(i, 1, true)) ? 0.5 : out;
+      case '3bet': return threeBetRange(i, 'BTN') ? 1 : (model.pos === 'BB' && i.kind === 'three' && !i.broken && i.t <= lv('7')) ? 0.5 : (h && callThreeBetRange(i, 1, true)) ? 0.5 : out;
       case '4bet': return fourBetRange(i) ? 1 : threeBetRange(i, 'BTN') ? 0.25 : out;
       case 'call': return coldCallRange(i, model.opener || 'CO') ? (threeBetRange(i, model.opener) ? 0.25 : 1) : h && bbDefendRange(i, 'BTN') ? 0.6 : out;
-      case 'bbdefend': return bbDefendRange(i, model.opener || 'BTN') ? (threeBetRange(i, model.opener) ? 0.3 : 1) : out * 1.5;
-      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (i.kind === 'two' && model.opener === model.pos && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
+      case 'bbdefend': if (i.kind === 'three' && !i.broken && i.t <= lv('7')) return bbTopDraw(i) ? 0.1 : 0.5;
+        return bbDefendRange(i, model.opener || 'BTN') ? (threeBetRange(i, model.opener) ? 0.3 : 1) : out * 1.5;
+      case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (model.opener === model.pos && OPENER_DEF.includes(model.pos) && rfi(i, model.pos)) ? 1 : (i.kind === 'two' && model.opener === model.pos && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
       case 'limp': return rfi(i, 'BTN') ? 0.6 : 0.25;
       case 'bbcheck': return threeBetRange(i, 'BTN') ? 0.25 : 1;
       default: return 1;
@@ -5428,20 +5450,39 @@ window.TD = window.TD || {};
         if (R() < kr) return act('raise', '3-bet the ' + op + ' raise from ' + where + ' with ' + d + ', planning to stand pat. ' + unbr + (kr >= 0.999 ? vsWhat : vsWhat + ' it mixes: 3-bet ' + Math.round(kr * 100) + '% of the time, fold the rest.'), 'value');
         return act('fold', 'Fold ' + d + ' from ' + where + ' to the ' + op + ' raise. ' + unbr + vsWhat + (kr <= 0.001 ? ' it folds.' : ' it mixes: fold ' + Math.round((1 - kr) * 100) + '% of the time, 3-bet the rest.'));
       }
+      // Chase (Nov 25), from Brian Rast: from the big blind, the one-card draws it plays (three-card sevens and better)
+      // mix flat-calling in, so a call doesn't announce a weak draw: the top third of them (fives and better, and
+      // 6-2-A) flat 10% of the time and 3-bet 90%; the rest flat and 3-bet half the time each. Either way it draws one.
+      if (pos === 'BB' && opts.canRaise && i.kind === 'three' && !i.broken && i.t <= lv('7') && bbDefendRange(i, op, multi)) {
+        const top = bbTopDraw(i), fr = top ? 0.1 : 0.5;
+        const dd = describe(Object.assign({}, i, { breakTo: null }));
+        const mixWhy = 'Mixed (Brian Rast): from the big blind, the one-card draws I play are flat-called some of the time so a call doesn\'t announce a weak draw. ' + (top ? 'In the top third of them, this one flats 10% of the time and 3-bets 90%.' : 'Outside the top third of them, this one flats half the time and 3-bets half the time.');
+        mem.keepTri = keyOf(i.keep);
+        if (R() < fr) {
+          mem.keepTriWhy = 'as planned when I flat-called from the big blind.';
+          return act('call', 'Flat-call the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'balance');
+        }
+        mem.keepTriWhy = 'as planned when I 3-bet from the big blind.';
+        return act('raise', '3-bet the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'value');
+      }
       if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('K'))) {
-        if (pos !== 'SB' && pos !== 'BB' && i.kind !== 'pat' && smooth(i) && R() < 0.12) return act('call', 'Flat the ' + op + ' raise with ' + d + ' in position — a strong hand in the calling range keeps it from being easy to play against (Mastering Mixed Games: one-card draws are 3-bet or sometimes cold-called).');
         return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Notes: 3-bet rather than flat a one-card draw).'), 'value');
       }
       if (pos === 'BB') {
+        // Chase (Nov 24): the eights and nines the big blind defends with call and draw two (its one-card draws, sevens
+        // and better, are mixed above)
+        if (bbDefendRange(i, op, multi) && i.kind === 'three') {
+          mem.drawTwoFirst = true;
+          return act('call', 'Defend the big blind against the ' + op + ' raise with ' + describe(Object.assign({}, i, { breakTo: null })) + ', planning to throw the ' + TD.RANK_WORD[i.t].toLowerCase() + ' and draw two at the first draw. From the big blind a one-card draw is raised, never flat-called, so a three-card hand that only calls draws two.');
+        }
         if (bbDefendRange(i, op, multi)) return act('call', 'Defend the big blind against the ' + op + ' raise with ' + d + '. Greenstein: in the blinds, draw one to a seven and sometimes an eight; the weakest are 8-6-5 or a two-card 5-4.');
         return act('fold', 'Fold ' + d + ' in the big blind to the ' + op + ' raise.');
       }
       if (pos === 'SB') {
-        if (i.kind === 'three' && LATE.includes(op) && i.t <= lv('6') && R() < 0.6) return act('call', 'Call the ' + op + ' raise from the small blind with ' + d + '.');
         return act('fold', 'Fold ' + d + ' from the small blind — out of position (notes: playing out of position is very difficult) it is 3-bet or fold.');
       }
       if (coldCallRange(i, op) && !(multi && i.kind === 'three' && i.t >= lv('7'))) return act('call', 'Cold-call the ' + op + ' raise with ' + d + (isIP(game, p, opponentsOf(game, p).filter((q) => q.seat !== c.opener).concat(game.players[c.opener])) ? ' in position.' : '.'));
-      return act('fold', 'Fold ' + d + ' to the ' + op + ' raise' + (i.kind === 'two' ? ' — Greenstein: it is usually not profitable to call raises with two-card hands outside the blinds.' : '.'));
+      return act('fold', 'Fold ' + d + ' to the ' + op + ' raise' + (i.kind === 'two' ? ' — Greenstein: it is usually not profitable to call raises with two-card hands outside the blinds.' : i.kind === 'three' ? '. Facing a raise, a one-card draw is 3-bet or folded, never cold-called; this one is not strong enough to 3-bet.' : '.'));
     }
     // facing a 3-bet
     if (c.level === 3) {
@@ -5454,12 +5495,28 @@ window.TD = window.TD || {};
       if (i.kind === 'pat' && i.t >= lv('Q') && (pos === 'BB' || pos === 'SB') && !c.iRaised) {
         const under = lvSortAscCards(i.keep).slice(0, 3), uTop = Math.max(...under.map(TD.rankOf));
         const rio = 'From the blinds facing a raise and a 3-bet, a ' + TD.RANK_WORD[i.t].toLowerCase() + ' badugi is too weak to play pat. Reverse implied odds: I act first on every street against the strongest part of both ranges (linear to the nuts), and I\'m often already dead to a better pat hand. Playing every badugi the same way predraw doesn\'t mean every badugi is played.';
-        if (uTop <= lv('6')) { mem.breakFirst = keyOf(under); return act('call', 'Call the 3-bet with ' + d + ', planning to break it to ' + hstr(under) + ' on the first draw. ' + rio + ' The strong three-card hand underneath is worth drawing to.'); }
+        if (uTop <= lv('6')) { mem.breakFirst = keyOf(under); if (opts.canRaise) return act('raise', '4-bet with ' + d + ', planning to break it to ' + hstr(under) + ' on the first draw. ' + rio + ' The strong three-card hand underneath is worth drawing to, and from the blinds a hand that continues planning to draw one is raised, never flat-called.', 'value'); return act('call', 'Call the 3-bet with ' + d + ', planning to break it to ' + hstr(under) + ' on the first draw. ' + rio + ' The strong three-card hand underneath is worth drawing to.'); }
         return act('fold', 'Fold ' + d + ' to the raise and 3-bet. ' + rio + ' With no strong three-card hand underneath to break to, fold.');
       }
       if (opts.canRaise && fourBetRange(i)) return act('raise', '4-bet with ' + d + (i.kind === 'pat' ? '. Mastering Mixed Games: play every badugi the same way predraw, so raising doesn\'t give away which ones are strong.' : '.'), 'value');
+      if (opts.canRaise && i.kind === 'three' && c.invested === 0 && i.t <= lv('5') && i.s2 <= lv('4')) return act('raise', '4-bet with ' + d + '. With nothing in yet, a one-card draw is never cold-called against a raise and a 3-bet: three wheel cards 4-bet, the rest fold.', 'value');
       if (opts.canRaise && i.kind === 'three' && i.t <= lv('5') && R() < 0.5) return act('raise', '4-bet with ' + d + '. Mastering Mixed Games: with three wheel cards, cap or call at your discretion (mixed).', 'value');
       const inv = c.invested;
+      // Chase (Nov 24): an opener in the LJ, HJ or CO facing a 3-bet defends at least MDF, and doesn't fold any hand
+      // that is a profitable call. Sims with these bots (CO open, button 3-bet, 1,500 deals): every group the CO used to
+      // fold won by calling instead (two-card draws +0.64, pat Q/K badugis +0.77 big bets per hand). Three-card sevens
+      // and eights call and draw one: +1.35 (sevens) and +0.80 (eights) against folding, vs +0.56 and +0.40 calling and
+      // drawing two. Nines (too few hands to tell) keep the usual plan and draw two.
+      if (p.seat === c.opener && OPENER_DEF.includes(pos)) {
+        const price = opts.toCall > 0 ? ' Getting ' + (opts.pot / opts.toCall).toFixed(1) + '-to-1, it needs only about ' + Math.round(100 * opts.toCall / (opts.pot + opts.toCall)) + '% equity.' : '';
+        const mdf = ' As the opener facing a 3-bet I defend at least the minimum defense frequency and don\'t fold any hand that is a profitable call; simulations with these bots found every hand I open wins more calling the 3-bet than folding.';
+        if (i.kind === 'three' && !i.broken && i.t >= lv('7') && i.t <= lv('8')) {
+          mem.keepTri = keyOf(i.keep);
+          mem.keepTriWhy = 'as planned when I called the 3-bet. In the simulations, an opener calling a 3-bet with a three-card ' + TD.RANK_WORD[i.t].toLowerCase() + ' won about ' + (i.t === lv('7') ? '0.8' : '0.4') + ' big bets per hand more drawing one than throwing the ' + TD.RANK_WORD[i.t].toLowerCase() + ' and drawing two.';
+          return act('call', 'Call the 3-bet with ' + describe(Object.assign({}, i, { breakTo: null })) + ', planning to draw one at the first draw.' + mdf + price);
+        }
+        return act('call', 'Call the 3-bet with ' + d + '.' + mdf + price);
+      }
       // Chase (Nov 22): a two-card draw I opened, facing a predraw 3-bet, has a lot of raw equity against the 3-bet
       // range (3-2 about 38%, even 6-4 about 33%, needing about 14% at 6-to-1). In position it always continues:
       // acting last helps it realize that equity. Out of position the steals fold and only the best two-card
@@ -5473,13 +5530,19 @@ window.TD = window.TD || {};
         if (two.t <= lv('3')) return act('call', 'Call the 3-bet with ' + d + ', one of the best two-card draws (3-2, 3-A, 2-A). Out of position only the best two-card draws continue against a predraw 3-bet.' + price + (price ? ', it' : ' It') + ' has enough equity against the 3-bet range to call.');
         return act('fold', 'Fold ' + d + ' to the 3-bet. Out of position facing a predraw 3-bet, the two-card steals fold; only the best two-card draws (3-2, 3-A, 2-A) continue.');
       }
-      if (callThreeBetRange(i, inv, late)) return act('call', 'Call the 3-bet with ' + d + '.');
+      // Chase (Nov 24): from the blinds, a one-card draw that continues against a 3-bet is reraised, never flat-called
+      if ((pos === 'BB' || pos === 'SB') && i.kind === 'three' && opts.canRaise && callThreeBetRange0(i, inv, late)) {
+        mem.keepTri = keyOf(i.keep);
+        mem.keepTriWhy = 'as planned when I 4-bet from the blinds: a one-card draw that continues there is raised, never flat-called.';
+        return act('raise', '4-bet with ' + describe(Object.assign({}, i, { breakTo: null })) + ', planning to draw one. From the blinds, every one-card draw that continues is raised and reraised, never flat-called.', 'value');
+      }
+      if (callThreeBetRange(i, inv, late)) { if ((pos === 'BB' || pos === 'SB') && i.kind === 'three') mem.drawTwoFirst = true; return act('call', 'Call the 3-bet with ' + d + '.'); }
       if (i.kind === 'two') return act('fold', 'Fold ' + d + ' to the 3-bet. From any seat, the big blind included, don\'t cold-call a 3-bet planning to draw two; a two-card draw is only worth calling from the big blind for one more small bet when that closes the action.');
       return act('fold', 'Fold ' + d + ' to the 3-bet' + (i.kind === 'pat' && i.t >= lv('Q') ? ' — Greenstein: most players don\'t play queen or king badugis facing a raise and a reraise.' : '.'));
     }
     // four bets (the cap: a bet and three raises, heads-up too)
     if (opts.canRaise && (capRange(i) || (i.kind === 'three' && i.t <= lv('5') && R() < 0.5))) return act('raise', (c.level >= 4 ? 'Cap it' : 'Raise') + ' with ' + d + '. Mastering Mixed Games: with three wheel cards or a jack-or-better badugi, cap with all the badugis; cap or call with the one-card draws.', 'value');
-    if (callThreeBetRange(i, Math.max(1, c.invested), true) || (c.invested >= 2 && opts.headsUp && (i.kind !== 'two' || i.t <= lv('4')))) return act('call', 'Call with ' + d + ' — already ' + plural(c.invested, 'bet') + ' in.');
+    if ((c.invested > 0 || i.kind !== 'three') && callThreeBetRange(i, Math.max(1, c.invested), true) || (c.invested >= 2 && opts.headsUp && (i.kind !== 'two' || i.t <= lv('4')))) return act('call', 'Call with ' + d + ' — already ' + plural(c.invested, 'bet') + ' in.');
     return act('fold', 'Fold ' + d + ' to four bets.');
   }
 
@@ -5539,7 +5602,7 @@ window.TD = window.TD || {};
     if (!roughTri(top)) return null;
     const ls = lvDesc(top.keep), w = TD.RANK_WORD[ls[0]].toLowerCase();
     const smooth = ls[0] <= lv('8') && ls[1] <= lv('4');
-    const rate = KEEP_RATE(ls[0], ls[1]), pct = Math.round(rate * 100) + '%';
+    const rate = mem && mem.drawTwoFirst ? 0 : KEEP_RATE(ls[0], ls[1]), pct = Math.round(rate * 100) + '%';
     const pat = cands.find((x) => x.n === 0);
     const sub = cands.find((x) => x.n === 2 && x.keep.every((c) => top.keep.includes(c)));
     const keepPat = pat && lvDesc(pat.keep)[1] > lv('6'); // the only reason to break it was the rough three-card
@@ -5677,6 +5740,16 @@ window.TD = window.TD || {};
       const bf = cands.find((x) => x.n === 1 && keyOf(x.keep) === mem.breakFirst);
       mem.breakFirst = null;
       if (bf) return { discard: keepIdx(hand, bf.keep), reason: '1st draw: break the ' + hn.short + ' badugi and draw one to ' + hstr(bf.keep) + ', as planned when I called the 3-bet. From the blinds against a raise and a 3-bet, a ' + TD.RANK_WORD[lvDesc(hand)[0]].toLowerCase() + ' badugi is too weak to stand pat; the strong three-card hand underneath is the better hand to play.', tag: '' };
+    }
+    // Chase (Nov 24): a three-card seven or eight I 3-bet from the button against a CO open: draw one, as planned
+    if (k === 0 && mem.keepTri) {
+      const kt = cands.find((x) => x.n === 1 && keyOf(x.keep) === mem.keepTri);
+      mem.keepTri = null;
+      const why = mem.keepTriWhy; mem.keepTriWhy = null;
+      if (kt) {
+        mem.drawPlan = null;
+        return { discard: keepIdx(hand, kt.keep), reason: '1st draw: draw one to ' + hstr(kt.keep) + ', ' + (why || 'as planned when I 3-bet the CO open from the button. In the simulations, drawing one here won about half a big bet per hand more than throwing the ' + TD.RANK_WORD[lvDesc(kt.keep)[0]].toLowerCase() + ' and drawing two.'), tag: '' };
+      }
     }
     const bestDraw = cands.find((x) => x.n > 0);
     const pat = cands.find((x) => x.n === 0);
@@ -6298,7 +6371,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 87;
+  TD.VERSION = 92;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
