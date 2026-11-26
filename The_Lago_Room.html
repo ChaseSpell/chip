@@ -89,7 +89,6 @@ body.theme-dark {
   --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
   --serif: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
 }
-body.four-color { --suit-c: #138a3b !important; --suit-d: #1b5fd1 !important; }
 
 /* ---------------- layout tokens (design px; the stage is scaled to fit) ---------------- */
 body.landscape {
@@ -249,12 +248,12 @@ body.portrait .felt-crest { width: 200px; height: 200px; }
 .card { --cw: var(--hero-cw); --ch: var(--hero-ch); position: absolute; width: var(--cw); height: var(--ch); font-size: calc(var(--cw) / 100); border-radius: 8em; }
 .card.sm { --cw: var(--bot-cw); --ch: var(--bot-ch); }
 .card.face { background: var(--card-face); color: var(--suit-s); box-shadow: 0 0 0 1.6em var(--card-edge), 0 6em 14em rgba(0,0,0,0.35); }
-body.theme-classic .card.face { box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1em var(--card-edge), 0 5em 12em rgba(0,0,0,0.45); }
-body.theme-dark .card.face { box-shadow: 0 0 0 1.4em #000; }
+body.deck-classic .card.face { box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 0 0 1em var(--card-edge), 0 5em 12em rgba(0,0,0,0.45); }
+body.deck-dark .card.face { box-shadow: 0 0 0 1.4em #000; }
 .card.face.su-h { color: var(--suit-h); } .card.face.su-d { color: var(--suit-d); } .card.face.su-c { color: var(--suit-c); }
 .card .cr { position: absolute; left: 7em; top: 4em; display: flex; flex-direction: column; align-items: center; line-height: 1; }
 .card .cr .rk { font-size: 36em; font-weight: 800; letter-spacing: -1px; font-family: "Segoe UI", system-ui, Roboto, Arial, sans-serif; }
-body.theme-classic .card .cr .rk { font-family: var(--serif); font-weight: 700; }
+body.deck-classic .card .cr .rk { font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; font-weight: 700; }
 .card .cr svg { width: 22em; height: 22em; margin-top: 2em; fill: currentColor; }
 .card .cr.br { left: auto; top: auto; right: 7em; bottom: 4em; transform: rotate(180deg); }
 .card .pip { position: absolute; left: 50%; top: 57%; width: 50em; height: 50em; transform: translate(-50%, -50%); fill: currentColor; }
@@ -266,7 +265,7 @@ body.theme-classic .card .cr .rk { font-family: var(--serif); font-weight: 700; 
 .card.sm .cr.br, .card.sm .face-letter, .card.sm .face-frame { display: none; }
 .card.sm .pip { width: 44em; height: 44em; left: 64%; top: 70%; }
 .card.back { background: var(--card-back); box-shadow: inset 0 0 0 4em var(--card-back-border), 0 0 0 1em rgba(0,0,0,0.5), 0 4em 10em rgba(0,0,0,0.4); }
-body.theme-dark .card.back { box-shadow: inset 0 0 0 3em var(--card-back-border); }
+body.deck-dark .card.back { box-shadow: inset 0 0 0 3em var(--card-back-border); }
 
 /* hero hand */
 #hero-cards { position: absolute; }
@@ -658,7 +657,6 @@ body.theme-retro {
   --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
   --serif: Arial, "Helvetica Neue", Helvetica, sans-serif;
 }
-body.theme-retro.four-color { --suit-c: #128a35 !important; --suit-d: #1b5fd1 !important; }
 body.theme-retro { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; }
 
 /* room: night city through tall windows, blue curtains, red carpet below */
@@ -764,10 +762,10 @@ body.theme-retro .seat .bubble.raise, body.theme-retro .seat .bubble.bet, body.t
 body.theme-retro #hero-cards { z-index: 2; }
 
 /* cards: plain white faces, big corner rank and suit */
-body.theme-retro .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.55), 0 5em 12em rgba(0,0,0,0.45); }
-body.theme-retro .card .cr .rk { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-weight: 700; font-size: 40em; letter-spacing: -2px; }
-body.theme-retro .card.sm .cr .rk { font-size: 50em; }
-body.theme-retro .card .face-frame { opacity: 0.18; }
+body.deck-retro .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.55), 0 5em 12em rgba(0,0,0,0.45); }
+body.deck-retro .card .cr .rk { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-weight: 700; font-size: 40em; letter-spacing: -2px; }
+body.deck-retro .card.sm .cr .rk { font-size: 50em; }
+body.deck-retro .card .face-frame { opacity: 0.18; }
 
 /* pot, bets and dealer button: white amounts on the felt, no pills */
 body.theme-retro #pot .pot-amt, body.theme-retro .bet .amt { text-shadow: 0 1px 2px #000, 0 0 4px rgba(0,0,0,0.7); padding-left: 4px; padding-right: 4px; }
@@ -862,7 +860,6 @@ body.theme-stars {
   --serif: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   font-family: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
-body.theme-stars.four-color { --suit-c: #1a8f2f !important; --suit-d: #1f6fe0 !important; }
 
 /* room: dark navy, lighter behind the table, faint crossing floor lines */
 body.theme-stars #room { background:
@@ -950,31 +947,31 @@ body.theme-stars .seat .draws i { border-radius: 6px; border: 1px solid rgba(255
 body.theme-stars .seat .draws i.done { border: 1px solid #5a5a5a; }
 body.theme-stars .seat .draws i.next { border: 1px dashed #6cc4ff; }
 
-/* cards: white, a big index in the top corner, the pips (or a court panel) in a framed panel on the right */
-body.theme-stars .card { border-radius: 7em; }
-body.theme-stars .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.3), 0 4em 10em rgba(0,0,0,0.45); }
-body.theme-stars .card .cr { left: 4em; top: 3em; }
-body.theme-stars .card .cr .rk { font-family: "Roboto Condensed", "Arial Narrow", sans-serif-condensed, Roboto, Arial, sans-serif; font-weight: 400; font-size: 40em; letter-spacing: -0.08em; }
-body.theme-stars .card .cr svg { width: 24em; height: 24em; margin-top: 5em; }
-body.theme-stars .card.sm .cr .rk { font-size: 44em; }
-body.theme-stars .card .cr .rk.t10 { display: inline-block; transform: scaleX(0.74); letter-spacing: -0.1em; margin: 0 -0.12em; }
-body.theme-stars .card.sm .cr svg { width: 26em; height: 26em; margin-top: 4em; }
-body.theme-stars .card .cr.br, body.theme-stars .card .pip, body.theme-stars .card .face-letter, body.theme-stars .card .face-frame { display: none; }
+/* Stars white cards (v108, from the white faces in Chase's screenshots; a card style of its own since v113): white, a big index in the top corner, the pips (or a court panel) in a framed panel on the right */
+body.deck-starswhite .card { border-radius: 7em; }
+body.deck-starswhite .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.3), 0 4em 10em rgba(0,0,0,0.45); }
+body.deck-starswhite .card .cr { left: 4em; top: 3em; }
+body.deck-starswhite .card .cr .rk { font-family: "Roboto Condensed", "Arial Narrow", sans-serif-condensed, Roboto, Arial, sans-serif; font-weight: 400; font-size: 40em; letter-spacing: -0.08em; }
+body.deck-starswhite .card .cr svg { width: 24em; height: 24em; margin-top: 5em; }
+body.deck-starswhite .card.sm .cr .rk { font-size: 44em; }
+body.deck-starswhite .card .cr .rk.t10 { display: inline-block; transform: scaleX(0.74); letter-spacing: -0.1em; margin: 0 -0.12em; }
+body.deck-starswhite .card.sm .cr svg { width: 26em; height: 26em; margin-top: 4em; }
+body.deck-starswhite .card .cr.br, body.deck-starswhite .card .pip, body.deck-starswhite .card .face-letter, body.deck-starswhite .card .face-frame { display: none; }
 .card .pp { display: none; }
-body.theme-stars .card .pp { display: block; position: absolute; left: 31em; right: 5em; top: 12em; bottom: 8em; border: 1em solid #d4d4d4; border-radius: 3em;
+body.deck-starswhite .card .pp { display: block; position: absolute; left: 31em; right: 5em; top: 12em; bottom: 8em; border: 1em solid #a9b0e6; border-radius: 3em;
   background: linear-gradient(180deg, #ffffff 60%, #f1f1f1); }
-body.theme-stars .card.sm .pp { left: 33em; top: 10em; }
-body.theme-stars .card .pp svg { position: absolute; fill: currentColor; }
-body.theme-stars .card .pp .pi { width: 17em; height: 17em; transform: translate(-50%, -50%); }
-body.theme-stars .card .pp .pi.f { transform: translate(-50%, -50%) rotate(180deg); }
-body.theme-stars .card .pp .pa { left: 50%; top: 50%; width: 40em; height: 40em; transform: translate(-50%, -50%); }
-body.theme-stars .card .pp.court { border-color: #c9a227;
+body.deck-starswhite .card.sm .pp { left: 33em; top: 10em; }
+body.deck-starswhite .card .pp svg { position: absolute; fill: currentColor; }
+body.deck-starswhite .card .pp .pi { width: 17em; height: 17em; transform: translate(-50%, -50%); }
+body.deck-starswhite .card .pp .pi.f { transform: translate(-50%, -50%) rotate(180deg); }
+body.deck-starswhite .card .pp .pa { left: 50%; top: 50%; width: 40em; height: 40em; transform: translate(-50%, -50%); }
+body.deck-starswhite .card .pp.court { border-color: #c9a227;
   background: repeating-linear-gradient(45deg, rgba(232, 194, 74, 0.28) 0 4em, transparent 4em 8em), repeating-linear-gradient(-45deg, rgba(208, 2, 27, 0.10) 0 4em, transparent 4em 8em), #ffffff;
   box-shadow: inset 0 0 0 3em #ffffff, inset 0 0 0 4em #c9a227; }
-body.theme-stars .card .pp.court .cl { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 52em; line-height: 1; }
-body.theme-stars .card .pp.court .cs { width: 14em; height: 14em; }
-body.theme-stars .card .pp.court .cs.a { left: 7em; top: 7em; }
-body.theme-stars .card .pp.court .cs.b { right: 7em; bottom: 7em; transform: rotate(180deg); }
+body.deck-starswhite .card .pp.court .cl { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 52em; line-height: 1; }
+body.deck-starswhite .card .pp.court .cs { width: 14em; height: 14em; }
+body.deck-starswhite .card .pp.court .cs.a { left: 7em; top: 7em; }
+body.deck-starswhite .card .pp.court .cs.b { right: 7em; bottom: 7em; transform: rotate(180deg); }
 
 /* pot and bets: the amount in a dark pill (beside the chips for a bet, above them for the pot) */
 body.theme-stars #pot .pot-amt { order: -1; margin: 0 0 6px; border: none; font-weight: 500; padding: 2px 16px; }
@@ -1032,6 +1029,79 @@ body.theme-stars .fs-top { background: #1d1e2b; }
 body.theme-stars .mbtn:not(.ghost) { background: linear-gradient(180deg, #7a2a2b 0%, #6a1b1d 45%, #5c1416 55%, #4a0d0f 100%); border-color: #2a0000; color: #ffffff; border-radius: 10px; }
 body.theme-stars .splash-head h1, body.theme-stars .modal h2, body.theme-stars .fs-top .fs-title { font-weight: 700; color: #ffffff; }
 body.theme-stars .continue-card, body.theme-stars .mode-tile.on { background: rgba(108, 196, 255, 0.10); }
+
+/* ---------------- card styles (v113, Chase's ask): the cards are their own choice, apart from the look ----------------
+   body.deck-<style> is set from Menu > Appearance > Cards ("Match look" uses the look's own cards).
+   These come last so they win over the card colours in each look's block above. */
+body.deck-classic {
+  --card-face: linear-gradient(160deg, #fffdf7 0%, #f6efdf 60%, #ece1c8 100%); --card-edge: rgba(60, 40, 20, 0.45);
+  --card-back: radial-gradient(circle at 50% 50%, rgba(243, 220, 160, 0.55) 0 7%, transparent 8%), repeating-linear-gradient(45deg, rgba(243, 220, 160, 0.18) 0 2px, transparent 2px 9px), repeating-linear-gradient(-45deg, rgba(243, 220, 160, 0.18) 0 2px, transparent 2px 9px), linear-gradient(160deg, #7d1a2b, #4a0c18);
+  --card-back-border: #f1e6cf;
+  --suit-s: #15110f; --suit-c: #15110f; --suit-h: #c0142c; --suit-d: #c0142c;
+}
+body.deck-light {
+  --card-face: #ffffff; --card-edge: #7d8794;
+  --card-back: repeating-linear-gradient(45deg, rgba(255,255,255,0.18) 0 3px, transparent 3px 10px), #2457a8;
+  --card-back-border: #ffffff;
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+}
+body.deck-dark {
+  --card-face: #ffffff; --card-edge: #000000;
+  --card-back: repeating-linear-gradient(45deg, rgba(255, 201, 77, 0.10) 0 3px, transparent 3px 10px), #3a424e;
+  --card-back-border: #8a95a5;
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+}
+body.deck-retro {
+  --card-face: #ffffff; --card-edge: rgba(0, 0, 0, 0.55);
+  --card-back: repeating-linear-gradient(45deg, rgba(255,255,255,0.16) 0 2px, transparent 2px 10px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.16) 0 2px, transparent 2px 10px), linear-gradient(160deg, #2257bf, #0b2560);
+  --card-back-border: #ffffff;
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+}
+/* both Stars card styles share the red back: a white rim, the red field crossed by two faint lighter bands */
+body.deck-stars, body.deck-starswhite {
+  --card-face: #ffffff; --card-edge: rgba(0, 0, 0, 0.3);
+  --card-back: linear-gradient(118deg, transparent 0 36%, rgba(255, 210, 205, 0.13) 36% 50%, transparent 50%), linear-gradient(62deg, transparent 0 50%, rgba(255, 210, 205, 0.13) 50% 64%, transparent 64%), radial-gradient(ellipse 80% 60% at 50% 30%, rgba(255, 255, 255, 0.07), transparent 70%), #b2403f;
+  --card-back-border: #fbf7f7;
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+  /* Stars (coloured) faces: the whole card takes its suit's colour */
+  --jb-s: #3d3d40; --jb-h: #a8282b; --jb-d: #a8282b; --jb-c: #3d3d40;
+}
+body.four-color { --suit-c: #138a3b; --suit-d: #1b5fd1; }
+body.four-color.deck-retro { --suit-c: #128a35; --suit-d: #1b5fd1; }
+body.four-color.deck-stars, body.four-color.deck-starswhite { --suit-c: #1a8f2f; --suit-d: #1f6fe0; --jb-d: #2462ad; --jb-c: #2c7f30; }
+body.deck-stars .card.back, body.deck-starswhite .card.back { box-shadow: inset 0 0 0 3.5em var(--card-back-border), 0 0 0 1em rgba(0, 0, 0, 0.55), 0 4em 10em rgba(0, 0, 0, 0.4); }
+
+/* Stars cards (v113, from Chase's screenshot): coloured faces lit from the top, a small rank and suit in the corner,
+   a big white serif rank filling the rest */
+.card .jr { display: none; }
+body.deck-stars .card { border-radius: 7em; }
+body.deck-stars .card.face { --jb: var(--jb-s); color: #ffffff;
+  background: radial-gradient(ellipse 130% 55% at 35% 0%, rgba(255, 255, 255, 0.20), transparent 70%), linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 42%, rgba(0, 0, 0, 0.34) 100%), var(--jb);
+  box-shadow: inset 0 0 0 0.8em rgba(255, 255, 255, 0.16), 0 0 0 1em rgba(0, 0, 0, 0.55), 0 4em 10em rgba(0, 0, 0, 0.45); }
+body.deck-stars .card.face.su-h { --jb: var(--jb-h); } body.deck-stars .card.face.su-d { --jb: var(--jb-d); } body.deck-stars .card.face.su-c { --jb: var(--jb-c); }
+body.deck-stars .card .cr { left: 5em; top: 4em; }
+body.deck-stars .card .cr .rk { font-family: Georgia, "Times New Roman", Times, serif; font-weight: 700; font-size: 30em; letter-spacing: 0; text-shadow: 0 1em 2em rgba(0, 0, 0, 0.35); }
+body.deck-stars .card .cr svg { width: 22em; height: 22em; margin-top: 3em; filter: none; }
+body.deck-stars .card .cr .rk.t10 { display: inline-block; transform: scaleX(0.72); margin: 0 -0.14em; }
+body.deck-stars .card .jr { display: block; position: absolute; left: 24%; right: 2%; bottom: 3%; text-align: center; line-height: 1;
+  font-family: Georgia, "Times New Roman", Times, serif; font-weight: 700; font-size: 84em; color: #ffffff; text-shadow: 0 0.03em 0.06em rgba(0, 0, 0, 0.45); }
+body.deck-stars .card .jr.t10 { transform: scaleX(0.66); transform-origin: 50% 50%; letter-spacing: -0.04em; left: 14%; right: -8%; }
+body.deck-stars .card .cr.br, body.deck-stars .card .pip, body.deck-stars .card .face-letter, body.deck-stars .card .face-frame, body.deck-stars .card .pp { display: none; }
+body.deck-stars .card.sm .cr { left: 5em; top: 3em; }
+body.deck-stars .card.sm .cr .rk { font-size: 34em; }
+body.deck-stars .card.sm .cr svg { width: 26em; height: 26em; }
+body.deck-stars .card.sm .jr { font-size: 76em; left: 26%; bottom: 2%; }
+
+/* the Cards picker in the menu: a face and a back for each style */
+.deck-pick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+@media (max-width: 560px) { .deck-pick { grid-template-columns: repeat(3, 1fr); } }
+.deck-pick .theme-opt .sw { background: rgba(127, 127, 127, 0.14); gap: 5px; }
+.deck-pick .theme-opt .sw span.dk { width: 26px; height: 36px; border-radius: 4px; position: relative; overflow: hidden; display: block; border: none; padding: 0; font-size: 14px; }
+.deck-pick .dk.f b { position: absolute; left: 3px; top: 1px; font-size: 14px; line-height: 1; }
+.deck-pick .dk.f svg { position: absolute; width: 11px; height: 11px; fill: currentColor; }
+.deck-pick .dk.f em { position: absolute; left: 11px; right: 2px; top: 5px; bottom: 3px; border: 1px solid #a9b0e6; border-radius: 2px; }
+.deck-pick .dk.f i { position: absolute; right: 2px; bottom: 1px; font-style: normal; font-weight: 700; font-size: 22px; line-height: 1; }
+.deck-pick .auto-l { font-size: 12px; font-weight: 700; opacity: 0.8; }
 
 </style>
 </head>
@@ -7256,7 +7326,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 112;
+  TD.VERSION = 113;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -7435,6 +7505,12 @@ window.TD = window.TD || {};
   ];
   const THEME_COLORS = { classic: '#160a08', light: '#e9edf2', dark: '#0b0d10', retro: '#0a1530', stars: '#1d1c2a' };
   const THEMES = ['classic', 'light', 'dark', 'retro', 'stars'];
+  // Card styles (v113, Chase's ask): picked apart from the look; 'auto' (Match look) uses the look's own cards.
+  // Stars is the coloured deck from his screenshot; Stars white is the v108 white Stars card.
+  const DECKS = ['classic', 'light', 'dark', 'retro', 'stars', 'starswhite'];
+  const deckOf = (s) => (s.deck && s.deck !== 'auto' && DECKS.includes(s.deck)) ? s.deck : (DECKS.includes(s.theme) ? s.theme : 'classic');
+  // these card styles come with the four-colour deck switched on (it can still be turned off)
+  const FOUR_COLOR_DECKS = ['retro', 'stars', 'starswhite'];
 
   /* ---------------- sound ---------------- */
   const Sound = {
@@ -7484,7 +7560,8 @@ window.TD = window.TD || {};
     const corner = '<span class="rk' + (rk === '10' ? ' t10' : '') + '">' + rk + '</span><svg><use href="#su-' + s + '"/></svg>';
     let center = '<svg class="pip"><use href="#su-' + s + '"/></svg>';
     if (r >= 11 && r <= 13) center = '<div class="face-frame"></div><div class="face-letter">' + ch + '</div>';
-    el.innerHTML = '<div class="cr">' + corner + '</div>' + center + '<div class="cr br">' + corner + '</div>' + pipPanel(r, s, ch);
+    el.innerHTML = '<div class="cr">' + corner + '</div>' + center + '<div class="cr br">' + corner + '</div>' + pipPanel(r, s, ch) +
+      '<div class="jr' + (rk === '10' ? ' t10' : '') + '">' + rk + '</div>'; // Stars cards' big rank (hidden in the other card styles)
     return el;
   }
   // Stars (v108): the card's picture panel - the pips in their usual places, a court panel for J Q K
@@ -7548,7 +7625,7 @@ window.TD = window.TD || {};
   class UI {
     constructor() {
       const saved = (() => { try { return JSON.parse(store.get('lago27.settings') || '{}'); } catch (e) { return {}; } })();
-      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', stakes: null, seatTrain: null, mode: 'play', trainSeat: null, trainGame: null, playGames: null, playSeats: 6 }, saved);
+      this.settings = Object.assign({ speed: 'normal', fourColor: false, sound: true, autoMuck: true, autoDeal: true, coach: true, zoom: true, everySeat: false, tapToShow: false, seatView: 'rotate', godMode: false, theme: 'classic', deck: 'auto', stakes: null, seatTrain: null, mode: 'play', trainSeat: null, trainGame: null, playGames: null, playSeats: 6 }, saved);
       // Game modes (Chase, Nov 24): regular play and Seat training are separate modes picked in the menu.
       // mode: the one being played; trainSeat / trainGame: Seat training's seat and its one game;
       // playGames: the games picked for regular play. seatTrain (what the table reads) is set only in Seat training.
@@ -7661,6 +7738,8 @@ window.TD = window.TD || {};
       b.classList.toggle('four-color', !!this.settings.fourColor);
       b.classList.toggle('god-on', !!this.settings.godMode);
       THEMES.forEach((t) => b.classList.toggle('theme-' + t, this.settings.theme === t));
+      const dk = deckOf(this.settings);
+      DECKS.forEach((d) => b.classList.toggle('deck-' + d, dk === d));
       // the Retro theme moves the side seats' cards: lay the table out again when it is switched on or off
       const rt = ['retro', 'stars'].includes(this.settings.theme) ? this.settings.theme : 'std'; // Stars has its own layout too
       if (this._rt !== undefined && this._rt !== rt && this.mode && document.getElementById('seat-0')) {
@@ -8883,6 +8962,8 @@ window.TD = window.TD || {};
         themeOpt('dark', 'Dark', '#0b0d10', '#171b21', 'inherit') +
         themeOpt('retro', 'FTP', 'linear-gradient(180deg,#0e1a44 0 42%,#b3121b 42% 100%)', 'radial-gradient(ellipse at 50% 40%,#2fb33f,#157a23)', 'inherit') +
         themeOpt('stars', 'Stars', 'linear-gradient(180deg,#2b2e42,#1a1926)', 'radial-gradient(ellipse at 50% 40%,#13702e,#0e5a24)', 'inherit') + '</div>' +
+        '<div class="setting" style="border-bottom:none;padding-bottom:0"><div class="lbl">Cards<small>Any card style works with any look. Match look uses the look\'s own cards.</small></div></div>' +
+        '<div class="theme-pick deck-pick" id="deck-pick">' + this.deckOpts() + '</div>' +
         '<div class="setting"><div class="lbl">Four-colour deck<small>Blue diamonds, green clubs — easier to spot flushes</small></div>' + sw('fourColor', s.fourColor) + '</div>' +
         '<div class="set-group">Table</div>' +
         '<div class="setting"><div class="lbl">Games<small>' + (train
@@ -8951,15 +9032,53 @@ window.TD = window.TD || {};
         if (k === 'zoom' || k === 'everySeat') syncEvery();
         if (wasEvery !== isEvery && live()) this.toast(isEvery ? 'Play every seat starts with the next hand' : 'Play every seat ends after this hand');
       }));
-      $$('.theme-opt', m).forEach((b) => (b.onclick = () => {
-        s.theme = b.dataset.theme;
-        // Retro plays with the four-colour deck (green clubs, blue diamonds), as on the old online tables; the switch can turn it off
-        if ((s.theme === 'retro' || s.theme === 'stars') && !s.fourColor) { s.fourColor = true; const fc = m.querySelector('.switch[data-k="fourColor"]'); if (fc) fc.classList.add('on'); }
+      // FTP and both Stars card styles come with the four-colour deck (green clubs, blue diamonds), as on those online tables; the switch can turn it off
+      const fourOn = () => { if (FOUR_COLOR_DECKS.includes(deckOf(s)) && !s.fourColor) { s.fourColor = true; const fc = m.querySelector('.switch[data-k="fourColor"]'); if (fc) fc.classList.add('on'); } };
+      const bindDecks = () => $$('#deck-pick .theme-opt', m).forEach((b) => (b.onclick = () => {
+        s.deck = b.dataset.deck;
+        fourOn();
         this.saveSettings();
-        $$('.theme-opt', m).forEach((x) => x.classList.toggle('on', x === b));
+        $$('#deck-pick .theme-opt', m).forEach((x) => x.classList.toggle('on', x === b));
+      }));
+      bindDecks();
+      $$('.theme-opt[data-theme]', m).forEach((b) => (b.onclick = () => {
+        s.theme = b.dataset.theme;
+        fourOn();
+        this.saveSettings();
+        $$('.theme-opt[data-theme]', m).forEach((x) => x.classList.toggle('on', x === b));
+        // Match look's picture follows the look
+        const dp = $('#deck-pick', m); if (dp) { dp.innerHTML = this.deckOpts(); bindDecks(); }
       }));
       $$('#set-game button', m).forEach((b) => (b.onclick = () => { this.toggleGame(b.dataset.k); this.markGameButtons($$('#set-game button', m)); }));
       $('#btn-stakes', m).onclick = () => this.showStakes();
+    }
+
+    // Menu > Appearance > Cards: a face (ace of spades) and a back for each card style
+    deckOpts() {
+      const s = this.settings, cur = s.deck && s.deck !== 'auto' && DECKS.includes(s.deck) ? s.deck : 'auto';
+      const sp = '<svg style="left:4px;top:16px"><use href="#su-s"/></svg>';
+      const face = {
+        classic: '<span class="dk f" style="background:linear-gradient(160deg,#fffdf7,#ece1c8);color:#15110f;box-shadow:0 0 0 1px rgba(60,40,20,.5);font-family:Palatino,Georgia,serif"><b>A</b>' + sp + '</span>',
+        light: '<span class="dk f" style="background:#fff;color:#111;box-shadow:0 0 0 1px #7d8794;font-family:system-ui,Roboto,Arial,sans-serif"><b>A</b>' + sp + '</span>',
+        dark: '<span class="dk f" style="background:#fff;color:#111;box-shadow:0 0 0 1px #000;font-family:system-ui,Roboto,Arial,sans-serif"><b>A</b>' + sp + '</span>',
+        retro: '<span class="dk f" style="background:#fff;color:#111;box-shadow:0 0 0 1px rgba(0,0,0,.6);font-family:Arial,sans-serif"><b style="font-size:16px">A</b>' + sp + '</span>',
+        stars: '<span class="dk f" style="background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.34)),#3d3d40;color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.6);font-family:Georgia,serif"><b style="font-size:10px">A</b><svg style="left:3px;top:12px;width:8px;height:8px"><use href="#su-s"/></svg><i>A</i></span>',
+        starswhite: '<span class="dk f" style="background:#fff;color:#111;box-shadow:0 0 0 1px rgba(0,0,0,.35);font-family:Arial,sans-serif"><b style="font-weight:400;font-size:12px;left:2px">A</b><svg style="left:2px;top:14px;width:8px;height:8px"><use href="#su-s"/></svg><em></em></span>'
+      };
+      const back = {
+        classic: 'radial-gradient(circle,rgba(243,220,160,.55) 0 12%,transparent 14%),linear-gradient(160deg,#7d1a2b,#4a0c18);box-shadow:inset 0 0 0 2px #f1e6cf',
+        light: '#2457a8;box-shadow:inset 0 0 0 2px #fff',
+        dark: '#3a424e;box-shadow:inset 0 0 0 2px #8a95a5',
+        retro: 'linear-gradient(160deg,#2257bf,#0b2560);box-shadow:inset 0 0 0 2px #fff',
+        stars: 'linear-gradient(118deg,transparent 0 36%,rgba(255,210,205,.16) 36% 50%,transparent 50%),linear-gradient(62deg,transparent 0 50%,rgba(255,210,205,.16) 50% 64%,transparent 64%),#b2403f;box-shadow:inset 0 0 0 2px #fbf7f7'
+      };
+      back.starswhite = back.stars;
+      const opt = (k, label) => {
+        const d = k === 'auto' ? deckOf(Object.assign({}, s, { deck: 'auto' })) : k;
+        return '<button class="theme-opt' + (cur === k ? ' on' : '') + '" data-deck="' + k + '"><div class="sw">' + face[d] +
+          '<span class="dk" style="background:' + back[d] + '"></span></div><div>' + label + '</div></button>';
+      };
+      return opt('auto', 'Match look') + opt('classic', 'Classic') + opt('light', 'Light') + opt('dark', 'Dark') + opt('retro', 'FTP') + opt('stars', 'Stars') + opt('starswhite', 'Stars white');
     }
 
     showStakes() {
