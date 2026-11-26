@@ -3975,7 +3975,13 @@ window.TD = window.TD || {};
     // hand, just call with a draw (improved or not — his bet can be a pat hand that 3-bets a check-raise)
     const lp = c.p.bot.leadPlan;
     if (lp && lp.st === c.st && toCall > 0 && c.lvl === 1) {
-      if (c.made && nextDraw === 0 && c.canRaise) return act('raise', 'Check-raise with ' + mk(c.hn.short) + ' as planned. MMG: after checking to the player who drew fewer cards, check-raise when you are pat.', 'check-raise');
+      if (c.made && nextDraw === 0 && c.canRaise) {
+        // Nov 25: when he drew too (a card ahead of my draw, so his bet is automatic), the check-raise goes by my equity
+        // against that betting range, the same line as the card-ahead raise (cardAheadRaise)
+        const ah = cardAheadRaise(c, { always: true });
+        if (ah) return ah;
+        return act('raise', 'Check-raise with ' + mk(c.hn.short) + ' as planned. MMG: after checking to the player who drew fewer cards, check-raise when you are pat.', 'check-raise');
+      }
       if (nextDraw <= 2) {
         return act('call', lp.disguise ? 'Just call, as planned: keep the improved draw (' + hstr(c.keepNow) + ') disguised as a rough one.'
           : 'Call with ' + (c.drawing ? 'the draw to ' + hstr(c.keepNow) : mk(c.hn.short)) + '. MMG: after checking to the player who drew fewer cards, call his bet with a draw — check-raising one only gets 3-bet by his pat hands.', lp.disguise ? 'trap' : '');
@@ -4122,20 +4128,26 @@ window.TD = window.TD || {};
   }
 
   // Pat, facing his lone bet after a draw where I drew two or more and he drew too (heads-up, a draw still to come).
-  function cardAheadRaise(c) {
+  // In position this raises his bet; out of position, after checking to him (he is a card ahead of my draw, so he bets
+  // automatically), it is the check-raise. opt.always: return a call below the line too (the check-raise plan).
+  function cardAheadRaise(c, opt) {
+    opt = opt || {};
     if (!c.opp || c.toCall === 0 || c.lvl !== 1 || !c.canRaise || !c.made || c.nextDraw !== 0 || c.dRem < 1) return null;
     if (c.iBet || !(c.myLast >= 2) || !(c.oppLast >= 1) || c.opp.allIn || c.p.bot.snow) return null;
     // the freeze range keeps its own half-and-half mix in position before the last draw (freezeRule)
     if (c.ip && c.st === 2 && ['freeze', 'rough'].includes(freezeClass(c))) return null;
     const E2 = mcEquity(c.game, c.p, { mode: 'bet', aheadBet: true });
     const f = clamp((E2 - AHEAD_LO) / (AHEAD_HI - AHEAD_LO), 0, 1);
-    if (f <= 0) return null;
+    if (f <= 0 && !opt.always) return null;
+    const cr = !c.ip && c.game.actions.some((a) => a.street === c.st && a.seat === c.p.seat && a.type === 'check');
     const shareTxt = 'Pat ' + mk(c.hn.short) + ' facing his bet after he drew ' + c.oppLast + ' and I drew ' + c.myLast + '. He bets every hand that needs fewer than ' + c.myLast + ' cards (he is a card ahead of my draw), so his range is mostly ' + (c.myLast >= 3 ? 'one- and two-card draws' : 'one-card draws') + ', and my pat hand is a card ahead of them: about ' + Math.round(E2 * 100) + '% against his betting range.';
     const rough = c.hn.top >= 9 ? ' Breaking it to draw would be too rough here.' : '';
-    if (R() < f) {
-      return act('raise', 'Raise, planning to stand pat. ' + shareTxt + ' Being a card ahead, bet or raise: the raise makes the pot bigger when I win.' + rough + (f < 1 ? ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.' : ''), 'card-ahead');
+    const mixTxt = ' Close to the line, so this hand mixes: ' + (cr ? 'check-raise ' : 'raise ') + Math.round(f * 100) + '%, call otherwise.';
+    if (f > 0 && R() < f) {
+      return act('raise', (cr ? 'Check-raise' : 'Raise') + ', planning to stand pat. ' + shareTxt + ' Being a card ahead, bet or raise: the ' + (cr ? 'check-raise' : 'raise') + ' makes the pot bigger when I win.' + rough + (f < 1 ? mixTxt : ''), cr ? 'check-raise' : 'card-ahead');
     }
-    return act('call', 'Call and stand pat. ' + shareTxt + ' Close to the line, so this hand mixes: raise ' + Math.round(f * 100) + '%, call otherwise.', 'card-ahead');
+    if (f <= 0) return act('call', 'Call. ' + shareTxt.replace(', and my pat hand is a card ahead of them', '') + ' A ' + (cr ? 'check-raise' : 'raise') + ' needs about ' + Math.round(AHEAD_LO * 100) + '% or more against that range (mixed up to ' + Math.round(AHEAD_HI * 100) + '%), so this hand just calls.', 'card-ahead');
+    return act('call', 'Call and stand pat. ' + shareTxt + mixTxt, 'card-ahead');
   }
   const AHEAD_LO = 0.40, AHEAD_HI = 0.47;
   function turnRules(c) {
@@ -4170,6 +4182,15 @@ window.TD = window.TD || {};
     // SS2: always check to an opponent who is a card ahead (he bets automatically)
     if (opp && toCall === 0 && c.cardBehind && !c.made) {
       return act('check', 'He is a card ahead (drew ' + c.oppLast + ', I still need ' + nextDraw + '): check. SS2: when he needs fewer cards than you, just check — he will bet anyway (checking blind is fine).');
+    }
+    // Nov 25 (hand report, all three games): I was a card behind going into this round (drew two or more to his one or
+    // more) and made a pat hand out of position. He is a card ahead of my draw, so he bets automatically: check every
+    // time and decide on the check-raise when he bets, from my equity against that automatic betting range (cardAheadRaise:
+    // raise at 47% or more, mixed down to 40%, call below). Check-calling a rough eight here gives up the raise he pays.
+    if (opp && !ip && toCall === 0 && c.made && nextDraw === 0 && myLast >= 2 && c.oppLast >= 1 && c.dRem >= 1) {
+      p.bot.behindCR = c.st;
+      const f = clamp((c.E - AHEAD_LO) / (AHEAD_HI - AHEAD_LO), 0, 1);
+      return act('check', 'Made ' + mk(hn.short) + ' after being a card behind (I drew ' + myLast + ', he drew ' + c.oppLast + '): check, planning to check-raise. He is a card ahead of my draw, so he bets every hand when checked to; my pat hand is about ' + Math.round(c.E * 100) + '% against that range' + (f >= 1 ? ', enough to check-raise every time.' : f > 0 ? ', close to the line, so the check-raise mixes (about ' + Math.round(f * 100) + '%).' : ', short of the check-raise line, so I plan to call.'), f > 0 ? 'check-raise' : '');
     }
     // SS2: I was a card behind going into this round and made my hand — check-raise (strong) or check-call (rough)
     if (opp && !ip && toCall === 0 && c.made && nextDraw === 0 && myLast > c.oppLast) {
@@ -4207,6 +4228,7 @@ window.TD = window.TD || {};
       return act('bet', (nextDraw === 0 ? 'Pat ' + mk(hn.short) : 'Drawing ' + nextDraw) + ' vs opponents drawing ' + c.oppsLast.join(', ') + ': bet. SS2: needing fewer cards than him, bet whatever your position — free cards are too costly with one draw to come.', 'card-ahead');
     }
     if (p.bot.checkCall === c.st && toCall > 0 && c.lvl === 1) return act('call', 'Check-call as planned with ' + mk(hn.short) + ', then stay pat.');
+    if (p.bot.behindCR === c.st && toCall > 0) { const ah = cardAheadRaise(c, { always: true }); if (ah) return ah; }
     // SS2: raise with a seven, 8-5 or 8-6 — especially multiway, to pressure the drawers
     if (toCall > 0 && c.lvl === 1 && c.canRaise && strongPat && (c.N >= 2 || !ip || rs[0] <= 7 || rs[1] <= 5)) {
       return act('raise', 'Raise with ' + mk(hn.short) + ' — probably the best hand. SS2: sevens, 8-5s and even 8-6s are usually best — raise' + (c.N >= 2 ? '; multiway it\'s even more important, to make the drawers pay two bets.' : '.'), 'value');
@@ -6603,7 +6625,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 103;
+  TD.VERSION = 104;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
