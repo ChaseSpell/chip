@@ -3873,6 +3873,10 @@ window.TD = window.TD || {};
     return raises.some((a, i) => a.seat === o.seat && (i > 0 || ['LJ', 'HJ'].includes(game.posName(o.seat))));
   }
   const cardsKey = (cs) => cs.slice().sort((a, b) => a - b).join(',');
+  // did I call, bet or raise on betting round `st` (the one just before draw `st`)?
+  function paidThisStreet(game, p, st) {
+    return game.actions.some((a) => a.street === st && a.seat === p.seat && (a.type === 'call' || a.type === 'bet' || a.type === 'raise'));
+  }
   function decideDraw(game, p) {
     const k = game.drawRound, d = 3 - k;
     const hand = p.hand, mem = p.bot;
@@ -4010,6 +4014,17 @@ window.TD = window.TD || {};
         firstNote = ' Not drawing one to ' + hstr(r0.keep) + '. Never draw one to a nine or worse on the second draw. ' + (r[0] === 9 && r[1] === 8 ? 'A 9-8 draw is too rough' : r[0] >= 10 ? 'A ' + TD.RANK_WORD[r[0]].toLowerCase() + ' draw is too rough' : 'Drawing two to ' + hstr(cands.find((c) => c.n === 2).keep) + ' has the implied odds of making a wheel or another very strong hand') + ', so throw the ' + TD.RANK_WORD[r[0]].toLowerCase() + ' and draw two again.';
       }
     }
+    // Chase (Nov 24, and Nov 26 hand #8), all three games: never call a bet or raise after the 1st draw and then draw
+    // three. The betting decision already folds when its plan is a three-card draw, but the plan can change at the
+    // draw (an opponent drew in front of me), so once I have put money in on this street I draw two at most.
+    let noThree = false;
+    if (k >= 1 && cands.some((c) => c.n >= 3) && cands.some((c) => c.n <= 2) && paidThisStreet(game, p, k)) {
+      noThree = true;
+      const three = cands.find((c) => c.n >= 3);
+      const wasPick = three === cands[0];
+      cands = cands.filter((c) => c.n <= 2);
+      if (wasPick) firstNote = ' Not drawing three to ' + hstr(three.keep) + ': I put money in after the ' + (k === 1 ? '1st' : '2nd') + ' draw, and calling a bet or raise then only makes sense with a hand that draws two or fewer, so this hand plays as the draw it called with.';
+    }
     let choice = cands[0];
     let reason = '';
     let tag = '';
@@ -4117,7 +4132,8 @@ window.TD = window.TD || {};
     if (!reason && plan) {
       const planned = cands.find((c) => cardsKey(c.keep) === plan.key);
       const inFront = opps.filter((o) => o.draws.length > k);
-      if (planned && !inFront.length) {
+      // with the three-card draw ruled out, the draw the call was based on stands even after someone drew in front
+      if (planned && (!inFront.length || noThree)) {
         choice = planned;
         reason = buildDrawReason(game, p, planned, null, hand, hn, k, opps, ip).replace(/\.$/, '') + ', as planned when I ' + plan.act + ' (the draw that decision was based on).';
       } else if (inFront.length) {
@@ -4396,14 +4412,18 @@ window.TD = window.TD || {};
     const all = [];
     for (let i = 0; i < 52; i++) all.push(i);
     const pool = new Pool(all);
-    const mine = TD.strengthNow(p.hand, c.dRem);
+    // on the river the exact hand value ranks the hands (lower is better): strengthNow scores every pair alike, which
+    // put a pair of eights after drawing one to an eight mid-range instead of at the bottom (Nov 26, hand #8)
+    const river = c.dRem <= 0;
+    const val = (h) => (river ? -TD.evalHand(h) : TD.strengthNow(h, c.dRem));
+    const mine = val(p.hand);
     const budget = game.fastForward ? 20 : 60, minIt = game.fastForward ? 60 : 160, maxIt = 400;
     const t0 = performance.now();
     let above = 0, n = 0;
     for (let it = 0; it < maxIt; it++) {
       if (it >= minIt && (it & 15) === 0 && performance.now() - t0 > budget) break;
       pool.reset();
-      const s = TD.strengthNow(sampleOpponent(model, pool), c.dRem);
+      const s = val(sampleOpponent(model, pool));
       if (s > mine + 1e-9) above++;
       else if (s >= mine - 1e-9) above += 0.5;
       n++;
@@ -5080,6 +5100,8 @@ window.TD = window.TD || {};
         if (R() < 0.7 + shift) return act('call', lab + ': call with ' + mk(hn.long) + '. Notes: call most of the time with a queen through a pair of deuces.' + userBluffNote(game, opp, shift), 'mdf');
         return act('fold', lab + ': fold ' + mk(hn.long) + ' this time (mixed — notes say call "most of the time").' + (shift < 0 ? userBluffNote(game, opp, shift) : ''));
       }
+      const br = bottomBluffRaise(c, lab);
+      if (br) return br;
       if (c.potOdds < 0.07) return act('call', 'Huge pot: call as a bluff-catcher.');
       return act('fold', lab + ': fold ' + mk(hn.long) + '.');
     }
@@ -5196,6 +5218,43 @@ window.TD = window.TD || {};
       return act('call', 'Both pat and he bets: call with ' + mk(hn.short) + '. ' + why, binds ? 'mdf' : '');
     }
     return null;
+  }
+
+  // (Nov 26, hand #8, all three games) Facing a river bet after we both drew: the best bluff-raise candidates are the
+  // very bottom of my range, the busted hands with no showdown value (a pair after drawing one), and among them the
+  // ones whose cards block his good hands: wheel cards I paired or threw away. A pair of eights after drawing one to
+  // 8-5-4-2 is the worst hand that draw can make. Those hands raise at a GTO-sized frequency (bluffs about 1/(P+1)
+  // of the value raises, P = the pot in bets after the raise) and fold the rest of the time.
+  function riverBlockers(p, hand) {
+    const cnt = {};
+    for (const x of hand) { const r = TD.rankOf(x); cnt[r] = (cnt[r] || 0) + 1; }
+    let dup = 0;
+    for (const r in cnt) if (+r <= 8 && cnt[r] >= 2) dup += cnt[r] - 1;
+    const thrown = (p.discards || []).filter((x) => TD.rankOf(x) <= 7).length;
+    return { n: dup + thrown, dup, thrown };
+  }
+  function riverBlockTxt(b) {
+    const parts = [];
+    if (b.dup) parts.push(b.dup === 1 ? 'a low card I paired' : b.dup + ' low cards I paired');
+    if (b.thrown) parts.push(b.thrown === 1 ? 'a wheel card I threw away' : b.thrown + ' wheel cards I threw away');
+    return parts.join(' and ');
+  }
+  function bottomBluffRaise(c, lab) {
+    const { game, p, hn } = c;
+    if (!c.opp || c.toCall <= 0 || c.lvl !== 1 || !c.canRaise || c.iBet || hn.cat === 0 || c.allInOpp) return null;
+    if (isCallingStation(game, c.opp)) return null;
+    const share = selfShareAbove(c);
+    if (share < 0.85) return null;
+    const b = riverBlockers(p, c.hand);
+    if (!b.n) return null;
+    const P = (c.pot + c.toCall + c.unit) / c.unit;
+    let f = 0.2 * 11 / (P + 1) * (0.6 + 0.25 * Math.min(4, b.n));
+    if (c.opp.isHuman) f *= clamp(1 + (userPosterior(game).riverFold - 0.35) * 3.5, 0.25, 2.5);
+    f = clamp(f * BLUFF_F, 0.04, 0.35);
+    const pctS = Math.round(share * 100);
+    const why = 'It is the bottom of my range here (about ' + pctS + '% of the hands I play this way are stronger)' + (c.myLast === 1 && hn.cat === 1 ? ': after drawing one, every card that doesn\'t pair me beats it, so it has no showdown value.' : ', with no showdown value.') + ' It also blocks his good hands with ' + riverBlockTxt(b) + '. The worst hands with the most blockers are the best bluff candidates, and they bluff-raise at a GTO frequency (about ' + Math.round(f * 100) + '% here) so my river raises stay balanced';
+    if (R() < f) return act('raise', lab + ': bluff-raise with ' + mk(hn.long) + '. ' + why + '.', 'bluff');
+    return act('fold', lab + ': fold ' + mk(hn.long) + ' this time. ' + why + '; the rest of the time it folds.', 'balance');
   }
 
   // exact price of a call: pot odds and the break-even share they require
@@ -6690,6 +6749,16 @@ window.TD = window.TD || {};
       }
       if (cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
     }
+    // Chase (Nov 24, and Nov 26 hand #8), all three games: never call a bet or raise after the 1st draw and then draw
+    // three. The betting decision folds when its plan is a three-card draw, but the plan can change at the draw, so
+    // once I have put money in on this street I draw two at most.
+    let noThreeNote = '';
+    if (k >= 1 && cands.some((x) => x.n >= 3) && cands.some((x) => x.n <= 2) &&
+      game.actions.some((a) => a.street === k && a.seat === p.seat && (a.type === 'call' || a.type === 'bet' || a.type === 'raise'))) {
+      const three = cands.find((x) => x.n >= 3);
+      if (three === cands[0]) noThreeNote = ' Not drawing three to ' + hstr(three.keep) + ': I put money in after the ' + (k === 1 ? '1st' : '2nd') + ' draw, and calling a bet or raise then only makes sense with a hand that draws two or fewer.';
+      cands = cands.filter((x) => x.n <= 2);
+    }
     let choice = cands[0], reason = '', tag = '';
     // last draw, with a badugi: against players who are still drawing, stand pat (they haven't made one)
     if (k === 2 && pat && drewThis.length === opps.length && drewThis.every((n) => n > 0) && opps.length === 1) {
@@ -6699,7 +6768,7 @@ window.TD = window.TD || {};
     if (bk) {
       const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
       mem.drawPlan = null;
-      return { discard: keepIdx(hand, bk.choice.keep), reason: WHICH[k] + ' draw: ' + desc(bk.choice) + (plan0 && plan0.key === keyOf(bk.choice.keep) ? ', as planned when I ' + plan0.act : '') + '.' + bk.why, tag: '' };
+      return { discard: keepIdx(hand, bk.choice.keep), reason: WHICH[k] + ' draw: ' + desc(bk.choice) + (plan0 && plan0.key === keyOf(bk.choice.keep) ? ', as planned when I ' + plan0.act : '') + '.' + bk.why + noThreeNote, tag: '' };
     }
     // close calls: simulate. The betting round before this draw already made the same choice (mem.drawPlan),
     // and the call or bet was based on it, so keep to it unless something new happened since (someone drew
@@ -6726,7 +6795,7 @@ window.TD = window.TD || {};
         ? ' Breaking the rough ' + hn.short + ': Greenstein — with a king (or queen) and three low cards, throw the high card; that incomplete beats other incompletes, while the high badugi loses to other badugis.'
         : ' Breaking the ' + hn.short + ' badugi (notes: rough badugis don\'t have robust equity).';
     } else if (choice.n >= 2 && k === 0 && cands.some((x) => x.n === 1)) reason += ' Building from the bottom up.';
-    return { discard: keepIdx(hand, choice.keep), reason, tag };
+    return { discard: keepIdx(hand, choice.keep), reason: reason + noThreeNote, tag };
   }
 
   /* ---------------- betting after the draws ---------------- */
@@ -7198,6 +7267,22 @@ window.TD = window.TD || {};
     // against the user it moves with the snows actually shown down.
     // Chase (Nov 23): facing a pat hand's river bet after I drew, my raising range (value raises) also needs bluffs,
     // 1 for every X value raises, X = the odds he gets to call the raise
+    // (Nov 26, hand #8, all three games) after we both drew on the last draw, facing his bet: the best bluff-raise
+    // candidates are the bottom of my range (a busted draw with no showdown value) holding the most low cards he needs.
+    // They bluff-raise at a GTO-sized frequency (bluffs about 1/(P+1) of the value raises) and otherwise fold.
+    if (!c.made && c.toCall > 0 && c.lvl === 1 && c.canRaise && !c.iBet && c.N === 1 && c.opp && p.draws[2] > 0 && c.opp.draws[2] > 0 && !c.opp.allIn && !isCallingStation(game, c.opp)) {
+      const nb = seenLow(p, lv('5'));
+      const share = nb >= 3 ? selfShareAbove(c) : 0;
+      if (share >= 0.85) {
+        const P = (c.pot + c.toCall + c.unit) / c.unit;
+        let f = 0.2 * 11 / (P + 1) * (0.6 + 0.25 * Math.min(4, nb - 2));
+        if (c.opp.isHuman) f *= clamp(1 + (userPosterior(game).riverFold - 0.35) * 3.5, 0.25, 2.5);
+        f = clamp(f, 0.04, 0.35);
+        const why = 'it is the bottom of my range here (about ' + Math.round(share * 100) + '% of the hands I play this way are stronger), with no showdown value, and it blocks his badugis with ' + seenTxt(p, lv('5')) + ' (fives or lower). The worst hands with the most blockers are the best bluff candidates, and they bluff-raise at a GTO frequency (about ' + Math.round(f * 100) + '% here) so my river raises stay balanced';
+        if (R() < f) return act('raise', 'Bluff-raise with the ' + c.txt + ': ' + why + '.', 'bluff');
+        if (c.E < c.potOdds) return act('fold', 'Fold the ' + c.txt + ' this time: ' + why + '; the rest of the time it folds.', 'balance');
+      }
+    }
     if (!c.made && c.toCall > 0 && c.lvl === 1 && c.canRaise && !c.iBet && c.opp && patBluffOK(c, p)) {
       const X = (c.pot + c.toCall + c.unit) / c.unit, f = patBluff(p, 'raise', X);
       if (R() < f) return act('raise', 'Bluff-raise with ' + c.txt + '. ' + gtoTxt(X, 'raise', f, 'bluff'), 'bluff');
@@ -7326,7 +7411,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 113;
+  TD.VERSION = 114;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
