@@ -7146,7 +7146,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 108;
+  TD.VERSION = 109;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -7222,7 +7222,7 @@ window.TD = window.TD || {};
         side, side, top, side, side
       ],
       bets: [{ x: 800, y: 562 }, { x: 425, y: 545 }, { x: 445, y: 352 }, { x: 800, y: 306 }, { x: 1155, y: 352 }, { x: 1175, y: 545 }],
-      dealer: [{ x: 628, y: 800 }, { x: 336, y: 612 }, { x: 420, y: 264 }, { x: 665, y: 178 }, { x: 1180, y: 264 }, { x: 1264, y: 612 }],
+      dealer: [{ x: 730, y: 576 }, { x: 338, y: 534 }, { x: 364, y: 410 }, { x: 708, y: 282 }, { x: 1236, y: 410 }, { x: 1262, y: 534 }],
       pot: { x: 800, y: 436 }, stub: { x: 800, y: 410 }, muck: { x: 800, y: 410 },
       hero: { left: 510, top: 606, cw: 108, ch: 150, spacing: 118 },
       bot: { w: 58, h: 80, spacing: 30, rot: 4 }, chip: 40, banner: { x: 800, y: 520 }
@@ -7245,7 +7245,7 @@ window.TD = window.TD || {};
         r, r, { cards: { x: 16, y: -40 }, pills: { x: -32, y: 76 }, bubble: { x: -32, y: -19 }, label: { x: -32, y: 118 } }, l, l
       ],
       bets: [{ x: 800, y: 566 }, { x: 440, y: 575 }, { x: 500, y: 360 }, { x: 800, y: 276 }, { x: 1100, y: 360 }, { x: 1160, y: 575 }],
-      dealer: [{ x: 990, y: 800 }, { x: 420, y: 650 }, { x: 455, y: 300 }, { x: 620, y: 160 }, { x: 1145, y: 300 }, { x: 1180, y: 650 }],
+      dealer: [{ x: 680, y: 576 }, { x: 344, y: 522 }, { x: 374, y: 352 }, { x: 920, y: 254 }, { x: 1226, y: 352 }, { x: 1256, y: 522 }],
       pot: { x: 800, y: 410 }, stub: { x: 800, y: 400 }, muck: { x: 800, y: 400 },
       hero: { left: 510, top: 606, cw: 108, ch: 150, spacing: 118 },
       bot: { w: 58, h: 80, spacing: 28, rot: 0 }, chip: 40, banner: { x: 800, y: 520 }
@@ -7266,7 +7266,7 @@ window.TD = window.TD || {};
         side, side
       ],
       bets: [{ x: 800, y: 576 }, { x: 452, y: 560 }, { x: 456, y: 330 }, { x: 800, y: 296 }, { x: 1144, y: 330 }, { x: 1148, y: 560 }],
-      dealer: [{ x: 1040, y: 800 }, { x: 418, y: 612 }, { x: 418, y: 262 }, { x: 958, y: 112 }, { x: 1182, y: 262 }, { x: 1182, y: 612 }],
+      dealer: [{ x: 686, y: 576 }, { x: 414, y: 510 }, { x: 358, y: 380 }, { x: 706, y: 244 }, { x: 1242, y: 380 }, { x: 1186, y: 510 }],
       // stub/muck are not drawn: cards are dealt from, and discarded to, the middle of the table
       pot: { x: 800, y: 410 }, stub: { x: 800, y: 380 }, muck: { x: 800, y: 380 },
       hero: { left: 510, top: 606, cw: 108, ch: 150, spacing: 118 },
@@ -7292,7 +7292,7 @@ window.TD = window.TD || {};
           l, l
         ],
         bets: [{ x: 450, y: tBot - 36 }, { x: 375, y: yLo - 22 }, { x: 375, y: yUp + 84 }, { x: 450, y: tTop + 354 }, { x: 525, y: yUp + 84 }, { x: 525, y: yLo - 22 }],
-        dealer: [{ x: 470, y: H - 350 }, { x: 318, y: yLo + 60 }, { x: 318, y: yUp - 60 }, { x: 290, y: tTop + 62 }, { x: 582, y: yUp - 60 }, { x: 582, y: yLo + 60 }],
+        dealer: [{ x: 362, y: tBot - 96 }, { x: 320, y: yLo + 38 }, { x: 316, y: yUp + 14 }, { x: 554, y: tTop + 156 }, { x: 584, y: yUp + 14 }, { x: 580, y: yLo + 38 }],
         pot: { x: 450, y: Math.round(cy + 30) }, stub: { x: 450, y: Math.round(cy) }, muck: { x: 450, y: Math.round(cy) },
         hero: { left: 40, top: H - 610, cw: 156, ch: 218, spacing: 166 },
         bot: { w: 66, h: 92, spacing: 28, rot: 0 }, chip: 40, banner: { x: 450, y: Math.round(cy + 175) }
@@ -7309,7 +7309,9 @@ window.TD = window.TD || {};
         side, side
       ],
       bets: [{ x: 450, y: tBot - 36 }, { x: 320, y: yLo - 22 }, { x: 320, y: yUp + 40 }, { x: 450, y: tTop + 354 }, { x: 580, y: yUp + 40 }, { x: 580, y: yLo - 22 }],
-      dealer: [{ x: 50, y: H - 288 }, { x: 252, y: yLo - 34 }, { x: 252, y: yUp - 34 }, { x: 600, y: tTop + 62 }, { x: 648, y: yUp - 34 }, { x: 648, y: yLo - 34 }],
+      dealer: isRetro()
+        ? [{ x: 370, y: tBot - 64 }, { x: 270, y: yLo + 66 }, { x: 258, y: yUp - 44 }, { x: 584, y: tTop + 154 }, { x: 642, y: yUp - 44 }, { x: 630, y: yLo + 66 }]
+        : [{ x: 388, y: tBot - 98 }, { x: 262, y: yLo + 40 }, { x: 262, y: yUp - 22 }, { x: 584, y: tTop + 154 }, { x: 638, y: yUp - 22 }, { x: 638, y: yLo + 40 }],
       pot: { x: 450, y: Math.round(cy + 30) }, stub: { x: 450, y: Math.round(cy) }, muck: { x: 450, y: Math.round(cy) },
       hero: { left: 40, top: H - 610, cw: 156, ch: 218, spacing: 166 },
       bot: { w: 66, h: 92, spacing: 30, rot: 4 }, chip: 38, banner: { x: 450, y: Math.round(cy + 175) }
