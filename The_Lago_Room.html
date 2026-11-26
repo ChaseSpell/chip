@@ -1594,6 +1594,11 @@ window.TD = window.TD || {};
     if (DEUCELESS_ONE.includes(m)) return true;
     return 31 - Math.clz32(m) + 2 >= (A5 ? 8 : 9);
   }
+  // Never draw to a jack low or worse in 2-7, on any draw round, and never to a ten low or worse in A-5 (Nov 26, from a
+  // 2-7 hand report: drawing to make a queen low is never correct on any draw round and absurd on the 1st draw; then
+  // "in 2-7 it's never correct to draw to a Jack either... for A-5, you would never draw to a T low or worse"). Both are
+  // level 11 and up (2-7 jack, A-5 ten). A draw never keeps such a card; standing pat with such a hand is still allowed.
+  const ROUGH_KEEP = (1 << 9) | (1 << 10) | (1 << 11) | (1 << 12);
   function buildDP() {
     const avail = new Uint8Array(13);
     for (let d = 1; d <= 3; d++) {
@@ -1634,7 +1639,7 @@ window.TD = window.TD || {};
       const bs = bestSub[d], ba = bestArg[d];
       for (let m = 0; m < 8192; m++) {
         if (POP[m] > 5) { bs[m] = -1; ba[m] = 0; continue; }
-        const ok = POP[m] <= 4 && !(d === 3 && weakFirstOne(m));
+        const ok = POP[m] <= 4 && !(m & ROUGH_KEEP) && !(d === 3 && weakFirstOne(m));
         let best = ok ? Vd[m] : -1, arg = ok ? m : 0;
         for (let b = 0; b < 13; b++) {
           if (m & (1 << b)) {
@@ -1970,7 +1975,7 @@ window.TD = window.TD || {};
     RANK_CH, RANK_WORD, RANK_PLURAL, SUIT_CH, CAT, POP,
     rankOf, suitOf, rch, cardStr, rankMaskOf, maskRanksAsc, maskStr, patternMask, isStraightMask,
     eval27, evalCat, handName, sortForDisplay, qualityOf, isMadeLow, Q5, PATV,
-    V, bestSub, bestArg, bestOfSize, deadV, weakFirstOne, cardsForMask, policyKeep, policyDrawCount, strengthNow,
+    V, bestSub, bestArg, bestOfSize, deadV, weakFirstOne, ROUGH_KEEP, cardsForMask, policyKeep, policyDrawCount, strengthNow,
     PSCORE, PKIND, PBEST, predrawInfo, predrawScoreFast, patScoreOf, newDeck, shuffle, STRAIGHTISH
   });
  }
@@ -3101,8 +3106,16 @@ window.TD = window.TD || {};
       this.a.forEach((c, i) => { this.pos[c] = i; });
     }
     reset() { this.top = this.n; }
+    take(c) { // remove one known card from the pool
+      const j = this.pos[c];
+      if (j < 0 || j >= this.top) return;
+      const a = this.a, t = --this.top, o = a[t];
+      a[t] = c; a[j] = o; this.pos[c] = t; this.pos[o] = j;
+    }
+    snap() { return { a: this.a.slice(), pos: this.pos.slice(), top: this.top }; }
+    restore(sn) { this.a.set ? this.a.set(sn.a) : sn.a.forEach((c, i) => { this.a[i] = c; }); this.pos.set(sn.pos); this.top = sn.top; }
     draw() {
-      const i = (R() * this.top) | 0;
+      const i = ((this.rng || R)() * this.top) | 0;
       const t = --this.top;
       const a = this.a, c = a[i], o = a[t];
       a[i] = o; a[t] = c; this.pos[o] = i; this.pos[c] = t;
@@ -3344,6 +3357,7 @@ window.TD = window.TD || {};
      opt.mode 'draw' : evaluating keeping opt.keep at the current draw */
   let EQ_CACHE = null; // shared equity results while the coach samples a decision many times
   function mcEquity(game, p, opt) {
+    if (opt.keeps) return mcEquityRaw(game, p, opt); // paired comparison: not cached
     const ckey = EQ_CACHE ? opt.mode + '|' + (opt.keep ? opt.keep.slice().sort((a, b) => a - b).join(',') : '') + '|' + (opt.patForever ? 1 : 0) + (opt.hypoCall ? '|call' : '') + (opt.aheadBet ? '|ahead' : '') : null;
     if (ckey && ckey in EQ_CACHE) return EQ_CACHE[ckey];
     const v = mcEquityRaw(game, p, opt);
@@ -3365,40 +3379,57 @@ window.TD = window.TD || {};
     const budget = game.fastForward ? 25 : (opt.budget || 110);
     const minIt = game.fastForward ? 64 : 120;
     const t0 = performance.now();
-    let total = 0, n = 0;
+    let n = 0;
     const doneMe0 = p.draws.length + (opt.mode === 'draw' ? 1 : 0);
+    // opt.keeps: several keeps scored against the same sampled opponent hands (paired, so a close call between draws
+    // is decided by the draws and not by simulation noise); returns one share per keep
+    const keeps = opt.keeps || [opt.mode === 'draw' ? opt.keep : null];
+    const tot = keeps.map(() => 0);
     for (let it = 0; it < baseIters; it++) {
       if (it >= minIt && (it & 15) === 0 && performance.now() - t0 > budget) break;
       pool.reset();
-      const hands = [null];
-      const done = [doneMe0];
-      for (const m of models) {
-        const h = sampleOpponent(m, pool);
-        hands.push(h); done.push(m.draws.length);
-      }
-      hands[0] = opt.mode === 'draw' ? drawInto(null, opt.keep, pool) : p.hand.slice();
-      for (let k = 0; k < 3; k++) {
-        for (let j = 0; j < hands.length; j++) {
-          if (done[j] > k) continue;
-          const d = 3 - k;
-          if (!(j === 0 && opt.patForever)) {
-            const keep = TD.policyKeep(hands[j], d);
-            if (keep.length < 5) hands[j] = drawInto(hands[j], keep, pool);
+      const opp0 = [];
+      for (const m of models) opp0.push(sampleOpponent(m, pool));
+      // paired keeps: the same deck order and the same random stream for each keep (common random numbers), so the
+      // keeps see the same cards come off the deck as far as their draws allow
+      const sn = keeps.length > 1 ? pool.snap() : null, seed = (R() * 4294967296) >>> 0;
+      for (let q = 0; q < keeps.length; q++) {
+        if (sn) { pool.restore(sn); pool.rng = mulberry(seed); }
+        const hands = [null].concat(opp0), done = [doneMe0].concat(models.map((m) => m.draws.length));
+        hands[0] = keeps[q] ? drawInto(null, keeps[q], pool) : p.hand.slice();
+        for (let k = 0; k < 3; k++) {
+          for (let j = 0; j < hands.length; j++) {
+            if (done[j] > k) continue;
+            const d = 3 - k;
+            if (!(j === 0 && opt.patForever)) {
+              const keep = TD.policyKeep(hands[j], d);
+              if (keep.length < 5) hands[j] = drawInto(hands[j], keep, pool);
+            }
+            done[j]++;
           }
-          done[j]++;
         }
+        const mv = TD.evalHand(hands[0]);
+        let lose = false, ties = 1;
+        for (let j = 1; j < hands.length; j++) {
+          const v = TD.evalHand(hands[j]);
+          if (v < mv) { lose = true; break; }
+          if (v === mv) ties++;
+        }
+        tot[q] += lose ? 0 : 1 / ties;
       }
-      const mv = TD.evalHand(hands[0]);
-      let lose = false, ties = 1;
-      for (let j = 1; j < hands.length; j++) {
-        const v = TD.evalHand(hands[j]);
-        if (v < mv) { lose = true; break; }
-        if (v === mv) ties++;
-      }
-      total += lose ? 0 : 1 / ties;
       n++;
     }
-    return n ? total / n : 0;
+    pool.rng = null;
+    const res = tot.map((t) => (n ? t / n : 0));
+    return opt.keeps ? res : res[0];
+  }
+  function mulberry(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   // Before the river a bet does two jobs (Janda, from Chase's notes): it builds the pot in case I win, and it denies
@@ -3821,14 +3852,17 @@ window.TD = window.TD || {};
     const out = [];
     const useDead = !!(p && TD.deadV);
     if (POP[D] === 5 && TD.isMadeLow(hand)) out.push({ n: 0, keep: hand.slice(), val: TD.PATV[d - 1][D], kind: 'pat' });
+    // a draw never keeps a jack or worse in 2-7 (a ten or worse in A-5): drawing to make a jack low or worse is never
+    // right, on any draw (TD.ROUGH_KEEP; the draw values in cards.js never choose such a keep either)
+    const rough = TD.ROUGH_KEEP || 0;
     for (let k = 4; k >= 0; k--) {
-      if (k > POP[D]) continue;
-      let r = TD.bestOfSize(D, k, d);
+      if (k > POP[D] || k > POP[D & ~rough]) continue;
+      let r = TD.bestOfSize(D & ~rough, k, d);
       if (r.mask < 0) continue;
       let plain = r.mask;
       if (useDead && k >= 1) {
         // every keep of this size, valued with the dead cards
-        const bits = []; for (let i = 0; i < 13; i++) if (D & (1 << i)) bits.push(1 << i);
+        const bits = []; for (let i = 0; i < 13; i++) if (D & ~rough & (1 << i)) bits.push(1 << i);
         let best = -1, arg = -1;
         const pick = (st, left, cur) => {
           if (!left) { const v = TD.deadV(cur, d, deadCounts(p.discards, hand, cur)); if (v > best) { best = v; arg = cur; } return; }
@@ -4154,8 +4188,11 @@ window.TD = window.TD || {};
         const lastOpp = opps.map((o) => o.draws[o.draws.length - 1]).filter((x) => x !== undefined);
         const deadWheel = p.discards.filter((x) => TD.rankOf(x) <= 7).length + hasBlockers(hand);
         const mx = (ks) => (ks.length ? Math.max(...ks.map(TD.rankOf)) : 0);
-        for (const c of pool) {
-          let e = mcEquity(game, p, { mode: 'draw', keep: c.keep, budget: 90, iters: opps.length === 1 ? 420 : 300 });
+        // all the keeps against the same sampled opponents (paired), so noise doesn't pick a clearly worse draw
+        const eqs = mcEquity(game, p, { mode: 'draw', keeps: pool.map((c) => c.keep), budget: 90 * pool.length, iters: opps.length === 1 ? 900 : 600 });
+        for (let q = 0; q < pool.length; q++) {
+          const c = pool[q];
+          let e = eqs[q];
           c.eq = e;
           let adj = e;
           if (opps.length === 1 && ip && c.n >= 1) adj += 0.02; // implied odds on the river in position
@@ -4192,7 +4229,8 @@ window.TD = window.TD || {};
     // no simulated equity numbers in the explanation: only say which close alternative was weighed
     // only a real close call is called one: the simulations must have the two within a small margin (Chase, Nov 20)
     const sc = (x) => (x.adj !== undefined ? x.adj : x.eq);
-    const isClose = choice.eq !== undefined && alt && alt.eq !== undefined && sc(choice) - sc(alt) < Math.max(0.025, 0.1 * Math.abs(sc(choice)));
+    // (the keeps are simulated paired, against the same opponent hands, so a smaller margin is still a real one)
+    const isClose = choice.eq !== undefined && alt && alt.eq !== undefined && sc(choice) - sc(alt) < Math.max(0.02, 0.06 * Math.abs(sc(choice)));
     const eqTxt = isClose
       ? ' (a close call: preferred to ' + (alt.n === 0 ? 'standing pat' : alt.keep.length ? 'drawing ' + alt.n + ' to ' + hstr(alt.keep) : 'drawing five') + ' in the AI\'s simulations)'
       : '';
@@ -5394,8 +5432,8 @@ window.TD = window.TD || {};
     p.coach = rec.mem;
     if (same) return { same: true, aiKeep, userKeep };
     const it = opponentsOf(game, p).length === 1 ? 600 : 400;
-    const eqAI = mcEquity(game, p, { mode: 'draw', keep: aiKeep, iters: it, budget: 120, patForever: false });
-    const eqUser = mcEquity(game, p, { mode: 'draw', keep: userKeep, iters: it, budget: 120, patForever: false });
+    // both keeps against the same sampled opponents (paired), so "about equally well" means the draws really are close
+    const [eqAI, eqUser] = mcEquity(game, p, { mode: 'draw', keeps: [aiKeep, userKeep], iters: it, budget: 240, patForever: false });
     return { same: false, aiKeep, userKeep, eqAI, eqUser };
   }
 
@@ -7383,8 +7421,8 @@ window.TD = window.TD || {};
     p.coach = rec.mem;
     if (same) return { same: true, aiKeep, userKeep };
     const it = opponentsOf(game, p).length === 1 ? 600 : 400;
-    const eqAI = mcEquity(game, p, { mode: 'draw', keep: aiKeep, iters: it, budget: 120 });
-    const eqUser = mcEquity(game, p, { mode: 'draw', keep: userKeep, iters: it, budget: 120 });
+    // both keeps against the same sampled opponents (paired), so "about equally well" means the draws really are close
+    const [eqAI, eqUser] = mcEquity(game, p, { mode: 'draw', keeps: [aiKeep, userKeep], iters: it, budget: 240 });
     return { same: false, aiKeep, userKeep, eqAI, eqUser };
   }
 
@@ -7411,7 +7449,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 114;
+  TD.VERSION = 115;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -8928,7 +8966,7 @@ window.TD = window.TD || {};
         body += '<div class="cn-line">You' + (pl && !pl.isHuman ? ' as ' + escapeHTML(pl.name) : '') + ': <b>' + escapeHTML(n.user) + '</b> &nbsp;·&nbsp; AI: <b>' + escapeHTML(n.ai) + '</b>' + (n.dist && n.verdict !== 'agree' ? ' <span class="muted">(' + escapeHTML(n.dist) + ')</span>' : '') + '</div>';
         // no simulated equity percentages here; only the comparison and exact arithmetic (the price of a call)
         if (n.phase === 'draw' && n.eqAI !== undefined && n.verdict !== 'agree') {
-          body += '<div class="cn-line muted">' + (n.eqUser >= n.eqAI - 0.02 ? 'In the AI\'s simulations the two choices did about equally well.' : 'In the AI\'s simulations its choice did clearly better than yours.') + '</div>';
+          body += '<div class="cn-line muted">' + (n.eqUser > n.eqAI + 0.02 ? 'In the AI\'s simulations your choice did better than its own.' : n.eqUser >= n.eqAI - 0.02 ? 'In the AI\'s simulations the two choices did about equally well.' : 'In the AI\'s simulations its choice did clearly better than yours.') + '</div>';
         }
         if (n.phase === 'bet' && n.toCall && n.potOdds && n.verdict !== 'agree') {
           const pot = n.toCall / n.potOdds - n.toCall;
