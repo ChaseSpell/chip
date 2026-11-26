@@ -3927,6 +3927,23 @@ window.TD = window.TD || {};
       if (opps.length === 1 && !ip && rsD[0] === 11) {
         return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the jack and draw to ' + hstr(oneC.keep) + '. SS2: out of position, without knowing whether he draws or stands pat, always draw with a jack.', tag: '' };
       }
+      // Three or more players to the last draw (Nov 26, from a 2-7 hand report): a rough pat hand rarely holds up
+      // against two players drawing one, so break it and aim for a nine or better (one level lower in A-5, which
+      // the card levels already give). A jack or worse breaks whenever a nine-or-better draw is under it; a ten
+      // breaks most of the time when an eight-or-better draw is under it (paired sims: close, so it mixes) and
+      // otherwise stays with the simulations below. Sims: tests/pat_jack_sim.js.
+      if (opps.length >= 2 && rsD[0] >= 10) {
+        const underTop = Math.max(...oneC.keep.map(TD.rankOf));
+        const W = (r) => mk(TD.RANK_WORD[r].toLowerCase()); // the actual card's word (not shifted again in A-5)
+        const nOpp = opps.length === 2 ? 'two players' : opps.length + ' players';
+        if (rsD[0] >= 11 && underTop <= 9) {
+          return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the ' + W(rsD[0]) + ' and draw to ' + hstr(oneC.keep) + '. Three or more players to the last draw: a pat ' + W(rsD[0]) + ' is too unlikely to hold up against ' + nOpp + ' who can each make a better hand with one card, and the draw under it is a good one, so breaking has the higher EV. Standing pat would also leave me guessing on the river while they know whether they got there, which is where the Fundamental Theorem of Poker says the mistakes get made.', tag: '' };
+        }
+        if (rsD[0] === 10 && underTop <= 8) {
+          if (R() < 0.6) return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the ' + W(10) + ' and draw to ' + hstr(oneC.keep) + '. Three or more players to the last draw: a pat ' + W(10) + ' usually isn\'t good enough to win a multiway pot, so draw to make a ' + W(9) + ' or better. It is close with a draw this smooth, so I sometimes stand pat instead.', tag: '' };
+          return { discard: [], reason: '3rd draw: stand pat with ' + mk(hn.short) + '. Multiway a pat ' + W(10) + ' usually breaks to aim for a ' + W(9) + ' or better, but with a smooth ' + W(10) + ' it is close, so I mix in standing pat.', tag: '' };
+        }
+      }
       if (opps.length >= 2 && rsD[0] <= 9 && waiting + stillDrawing >= 2) {
         return { discard: [], reason: '3rd draw: stand pat with ' + mk(hn.short) + '. SS2: three-way against two drawers, pat any nine or better — it is the favourite.', tag: '' };
       }
@@ -7146,7 +7163,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 109;
+  TD.VERSION = 110;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
