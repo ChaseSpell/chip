@@ -12,7 +12,9 @@
    The Lago Room — Limit 2-7 Triple Draw
    Layouts: portrait (phones, 900 x variable design px) and landscape
    (1600 x 900 design px), scaled to fit the screen.
-   Themes: Classic (burgundy salon), Light (high-legibility), Dark (minimal).
+   Themes: Classic (burgundy salon), Light (high-legibility), Dark (minimal),
+   Retro (v105: an old online card room, green felt in a red-carpet room over a night city),
+   Stars (v108: a modern online card room, black pill nameplates on a navy floor).
    ===================================================================== */
 
 /* ---------------- theme tokens ---------------- */
@@ -125,7 +127,8 @@ body.portrait .land-only, body.landscape .port-only { display: none !important; 
 
 /* ---------------- room (classic only) ---------------- */
 #room { position: fixed; inset: 0; overflow: hidden; background: var(--bg); }
-body:not(.theme-classic) #room > div { display: none; }
+body:not(.theme-classic) #room > div:not(.rr) { display: none; }
+body:not(.theme-retro) #room > .rr { display: none; }
 .room-wall { position: absolute; inset: 0;
   background:
     radial-gradient(ellipse 60% 40% at 50% 0%, rgba(255, 196, 120, 0.18), transparent 70%),
@@ -620,6 +623,415 @@ body.theme-classic .fs-top { background: #1d0c0a; }
   .mode-tiles { margin-top: 12px; }
 }
 
+/* =====================================================================
+   Retro theme (v105, Chase's ask): the look of a mid-2000s online card room.
+   Bright green felt with a thin dark rim, a red-carpet octagon floor, tall
+   windows onto a night city with blue curtains, black nameplates in chrome
+   frames with a cartoon player above each, white four-colour cards and glossy
+   navy buttons. All drawn with gradients and inline SVG; no blur filters or
+   blend modes (they drew "static" on Chase's phone, see v103).
+   ===================================================================== */
+body.theme-retro {
+  --bg: #07101f;
+  --text: #ffffff; --text-dim: rgba(222, 233, 248, 0.82); --muted: rgba(200, 214, 235, 0.6);
+  --num: #ffffff; --accent: #3d9bff; --accent-hi: #b9d4f2; --accent-lo: #3a5a85; --on-accent: #ffffff;
+  --panel-bg: rgba(10, 18, 34, 0.92); --panel-line: #5b7398; --panel-solid: #0c1628;
+  --plate-bg: #0a0a0a; --plate-border: #c9d1da; --plate-shadow: 0 4px 10px rgba(0,0,0,0.6);
+  --avatar-ring: #c9d1da;
+  --felt-bg: radial-gradient(ellipse 62% 64% at 50% 44%, #33b844 0%, #22a034 42%, #188a28 74%, #10701d 100%);
+  --felt-line: transparent; --logo: rgba(0, 60, 12, 0.30);
+  --rail-bg: linear-gradient(180deg, #6a1a12 0%, #3a0a07 45%, #1c0403 100%);
+  --track-bg: transparent;
+  --label-bg: transparent; --label-text: #ffffff; --label-border: transparent;
+  --pill-bg: #142038; --pill-text: #ffffff; --pill-border: #c9d1da;
+  --pill-empty-bg: rgba(0, 0, 0, 0.55); --pill-empty-text: rgba(255, 255, 255, 0.4);
+  --pill-pat-bg: #ffd24a; --pill-pat-text: #1b1300;
+  --bubble-bg: #0c1628; --bubble-text: #ffffff; --bubble-raise: linear-gradient(180deg, #ffe07a, #e0a52a);
+  --btn-fold: linear-gradient(180deg, #3b5786 0%, #1a2d50 47%, #0a1528 53%, #102040 100%);
+  --btn-call: var(--btn-fold); --btn-raise: var(--btn-fold); --btn-draw: var(--btn-fold); --btn-neutral: var(--btn-fold);
+  --btn-raise-text: #ffffff;
+  --card-face: #ffffff; --card-edge: rgba(0, 0, 0, 0.55);
+  --card-back: repeating-linear-gradient(45deg, rgba(255,255,255,0.16) 0 2px, transparent 2px 10px), repeating-linear-gradient(-45deg, rgba(255,255,255,0.16) 0 2px, transparent 2px 10px), linear-gradient(160deg, #2257bf, #0b2560);
+  --card-back-border: #ffffff;
+  --good: #7ff09a; --bad: #ff7b7b; --turn: rgba(80, 170, 255, 0.75);
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+  --serif: Arial, "Helvetica Neue", Helvetica, sans-serif;
+}
+body.theme-retro.four-color { --suit-c: #128a35 !important; --suit-d: #1b5fd1 !important; }
+body.theme-retro { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; }
+
+/* room: night city through tall windows, blue curtains, red carpet below */
+#room > .rr { position: absolute; pointer-events: none; }
+.rr-sky { inset: 0; background: linear-gradient(180deg, #2c4660 0%, #7d8e94 14%, #d7b27a 26%, #3a1a12 28%, #2a0a08 100%); }
+.rr-city { left: 0; right: 0; top: 0; width: 100%; height: 28%; }
+.rr-frames { left: 0; right: 0; top: 0; height: 28%;
+  background:
+    linear-gradient(180deg, #121318 0, #3a3d45 12px, #8b9099 16px, #23252b 22px, transparent 22px),
+    linear-gradient(0deg, #15161b 0, #565a63 6px, #c9cdd4 10px, #6d717a 14px, #1b1c22 20px, transparent 20px),
+    linear-gradient(90deg, #15161b, #6d717a 25%, #e4e7ec 45%, #8b9099 65%, #15161b) 8.2% 0 / 18px 100% no-repeat,
+    linear-gradient(90deg, #15161b, #6d717a 25%, #e4e7ec 45%, #8b9099 65%, #15161b) 35% 0 / 14px 100% no-repeat,
+    linear-gradient(90deg, #15161b, #6d717a 25%, #e4e7ec 45%, #8b9099 65%, #15161b) 65% 0 / 14px 100% no-repeat,
+    linear-gradient(90deg, #15161b, #6d717a 25%, #e4e7ec 45%, #8b9099 65%, #15161b) 91.8% 0 / 18px 100% no-repeat; }
+/* the outer panes are on the room's angled walls: darker, with a sloping rail */
+.rr-frames::before, .rr-frames::after { content: ''; position: absolute; top: 0; bottom: 0; width: 8.6%;
+  background: linear-gradient(var(--a), transparent 0 46%, #23252b 46% 48%, #a4a9b1 48% 50%, #23252b 50% 52%, transparent 52%), rgba(6, 10, 24, 0.42); }
+.rr-frames::before { left: 0; --a: 160deg; }
+.rr-frames::after { right: 0; --a: 200deg; }
+.rr-curtain { top: 0; height: 31%; width: 4.5%; min-width: 34px; border-bottom: 4px solid #0e2257;
+  background: linear-gradient(90deg, rgba(0,0,0,0.35), transparent 40%, rgba(0,0,0,0.25)),
+    repeating-linear-gradient(90deg, #1f4fb4 0 7px, #3a78dc 7px 15px, #2459c0 15px 20px, #14388c 20px 26px); }
+.rr-curtain.l { left: 9%; clip-path: polygon(0 0, 100% 0, 80% 70%, 100% 100%, 0 100%); }
+.rr-curtain.r { right: 9%; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 20% 70%); }
+.rr-carpet { left: 0; right: 0; bottom: 0; top: 28%; border-top: 8px solid #2a2c33;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 120, 110, 0.10) 0 2px, transparent 2px 4px, rgba(70, 0, 4, 0.42) 4px 7px, transparent 7px 64px),
+    repeating-linear-gradient(-45deg, rgba(255, 120, 110, 0.10) 0 2px, transparent 2px 4px, rgba(70, 0, 4, 0.42) 4px 7px, transparent 7px 64px),
+    linear-gradient(180deg, #a3101a, #7c0a12); }
+
+/* table: tan-edged red-carpet octagon, thin dark rim, bright green felt */
+#table .floor { display: none; }
+body.theme-retro #table .floor { display: block; position: absolute; inset: -1px -261px -200px -259px; background: #d8c49a;
+  clip-path: polygon(8.9% 0, 91.1% 0, 100% 12.6%, 100% 46.6%, 72.5% 100%, 27.5% 100%, 0 46.6%, 0 12.6%); }
+body.theme-retro #table .floor::before { content: ''; position: absolute; inset: 0;
+  clip-path: polygon(8.9% 0, 91.1% 0, 100% 12.6%, 100% 42.2%, 70.2% 100%, 29.8% 100%, 0 42.2%, 0 12.6%);
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 120, 110, 0.10) 0 2px, transparent 2px 4px, rgba(70, 0, 4, 0.42) 4px 7px, transparent 7px 64px),
+    repeating-linear-gradient(-45deg, rgba(255, 120, 110, 0.10) 0 2px, transparent 2px 4px, rgba(70, 0, 4, 0.42) 4px 7px, transparent 7px 64px),
+    radial-gradient(ellipse 46% 52% at 50% 52%, #9a0d16 0%, #d01a22 60%, #c4141f 80%, #9e0f18 100%); }
+body.portrait.theme-retro #table .floor { inset: -60px -90px -110px -90px; clip-path: polygon(22% 0, 78% 0, 100% 12%, 100% 88%, 78% 100%, 22% 100%, 0 88%, 0 12%); }
+body.portrait.theme-retro #table .floor::before { clip-path: polygon(22% 0, 78% 0, 100% 12%, 100% 88%, 78% 100%, 22% 100%, 0 88%, 0 12%); }
+body.theme-retro #table .shadow { inset: -6px -16px -26px -16px; background: radial-gradient(closest-side, rgba(0,0,0,0.5) 80%, rgba(0,0,0,0.22) 92%, transparent 100%); }
+body.theme-retro #table .rail { box-shadow: inset 0 2px 1px rgba(255,255,255,0.18), 0 6px 16px rgba(0,0,0,0.55); }
+body.theme-retro #table .racetrack { display: none; }
+body.theme-retro #table .felt { inset: 11px; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.55), inset 0 0 0 4px rgba(120, 220, 120, 0.25), inset 0 14px 30px rgba(0,0,0,0.25); }
+body.theme-retro .felt-logo .ln1 { font-weight: 900; font-style: italic; letter-spacing: 8px; }
+body.theme-retro .felt-logo .ln2 { font-weight: 700; }
+body.landscape.theme-retro .felt-logo .ln1 { font-size: 58px; }
+body.theme-retro .felt-crest { width: 230px; height: 230px; opacity: 1; }
+body.landscape.theme-retro .felt-crest { top: 42%; }
+
+/* top bar: dark glossy corner panels with small uppercase blue-grey text */
+body.theme-retro #brand .t1 { font-weight: 900; font-style: italic; color: #ffffff; text-shadow: 0 2px 3px rgba(0,0,0,0.8); }
+body.theme-retro #brand .crest { color: #dfe8f4; }
+body.theme-retro #brand .t2 { color: #b9cbe6; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+body.theme-retro .tb { border-radius: 8px; background: linear-gradient(180deg, #33476c 0%, #17243f 48%, #0b1426 52%, #0f1c36 100%); border-color: #6f87ad; color: #c3d3ea;
+  text-transform: uppercase; letter-spacing: 1px; font-size: 13px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 3px 8px rgba(0,0,0,0.5); }
+body.theme-retro .tb svg { stroke: #c3d3ea; }
+body.theme-retro #infobar { color: #e6eef9; text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8); }
+body.theme-retro .ib-btn { background: rgba(10, 20, 40, 0.75); border-color: #8fa6c8; color: #e6eef9; }
+
+/* seats: black nameplate in a chrome frame, the cartoon player stands behind it (cards in front of the cartoon) */
+body.theme-retro.landscape { --plate-w: 214px; --hero-plate-w: 260px; --plate-h: 80px; --toon: 136px; --chip: 40px; }
+body.theme-retro.portrait { --plate-w: 214px; --toon: 136px; }
+body.theme-retro.landscape.compact { --toon: 122px; }
+.seat .avatar .toon { display: none; }
+body.theme-retro .seat .plate { z-index: auto; background: none; border: none; box-shadow: none !important; border-radius: 14px; justify-content: center; padding: 0 10px; }
+body.theme-retro .seat .plate::before { content: ''; position: absolute; inset: -5px -9px -3px -9px; z-index: 3;
+  clip-path: polygon(0 0, 100% 0, 100% 34%, 96.5% 44%, 96.5% 80%, 92% 100%, 8% 100%, 3.5% 80%, 3.5% 44%, 0 34%);
+  background: linear-gradient(180deg, #9a9fa7 0%, #50545b 22%, #2b2e33 50%, #464a51 78%, #17191c 100%); }
+body.theme-retro .seat .plate::after { content: ''; position: absolute; inset: 3px 4px 4px 4px; z-index: 3; border-radius: 9px;
+  background: linear-gradient(180deg, #262626 0%, #090909 45%, #000 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 1px #0a0a0a; }
+body.theme-retro .seat .ptext { position: relative; z-index: 4; flex: none; max-width: 100%; align-items: center; text-align: center; }
+body.theme-retro .seat .pname { font-weight: 400; color: #ffffff; max-width: calc(var(--plate-w) - 28px); }
+body.theme-retro .seat.hero .pname { max-width: calc(var(--hero-plate-w) - var(--avatar) - 40px); }
+body.theme-retro .seat .pstack { font-weight: 800; color: #ffffff; letter-spacing: 0; }
+body.theme-retro .seat .avatar { position: absolute; left: 50%; bottom: calc(100% - 10px); z-index: 1; width: var(--toon); height: var(--toon);
+  transform: translateX(-50%); background: none; box-shadow: none; border-radius: 0; }
+body.theme-retro .seat .avatar .ini, body.theme-retro .seat .timer { display: none !important; }
+body.theme-retro .seat .avatar .toon { display: block; width: 100%; height: 100%; }
+/* the top seat's cartoon stands to the left of its plate (no room above it) */
+body.portrait.theme-retro .seat[data-v="3"] .avatar { left: auto; right: calc(100% - 6px); bottom: auto; top: 50%; transform: translateY(-58%); }
+/* your own seat: the cartoon sits in a round chrome frame on the plate (your big cards are above it) */
+body.theme-retro .seat.hero .plate { justify-content: flex-start; gap: 12px; }
+body.theme-retro .seat.hero .avatar { position: relative; left: auto; bottom: auto; top: auto; transform: none; z-index: 4; flex: none;
+  width: var(--avatar); height: var(--avatar); border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 35%, #4f6fa8, #1a2a4c);
+  box-shadow: 0 0 0 3px #c9d1da, 0 0 0 4px #111; }
+body.theme-retro .seat.hero .avatar .toon { width: 118%; height: 118%; margin: 2% 0 0 -9%; }
+body.theme-retro .seat.hero .ptext { align-items: flex-start; text-align: left; }
+body.theme-retro .seat .pos { z-index: 5; top: auto; bottom: calc(var(--fs-pos) * -0.8); right: -10px; border-radius: 999px; border: 2px solid #c9d1da;
+  background: radial-gradient(circle at 50% 35%, #3a3f48, #0b0d12); color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+body.theme-retro .seat .allin { z-index: 5; }
+body.theme-retro .seat.turn .plate::after { box-shadow: inset 0 0 0 3px var(--accent), 0 0 0 1px #0a0a0a; }
+body.theme-retro .seat.turn .plate::before { background: linear-gradient(180deg, #cfe6ff 0%, #5d9be0 30%, #2a5aa0 60%, #8cc2ff 100%); }
+body.theme-retro .seat.winner .plate::before { background: linear-gradient(180deg, #fff3c4 0%, #ffd24a 35%, #b8860b 70%, #ffe27a 100%); }
+body.theme-retro .seat.glow .plate::after { animation: seatGlow 1.4s ease-in-out infinite; }
+body.theme-retro .seat .draws i.done { box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+body.theme-retro .seat .hand-label { background: #0c1628; border-color: #c9d1da; }
+body.theme-retro .seat .hand-label.win { background: #ffd24a; color: #1b1300; border-color: #ffd24a; }
+body.theme-retro .seat .bubble { border: 2px solid #8fa6c8; }
+body.theme-retro .seat .bubble.raise, body.theme-retro .seat .bubble.bet, body.theme-retro .seat .bubble.cap { border-color: #b07a12; }
+body.theme-retro #hero-cards { z-index: 2; }
+
+/* cards: plain white faces, big corner rank and suit */
+body.theme-retro .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.55), 0 5em 12em rgba(0,0,0,0.45); }
+body.theme-retro .card .cr .rk { font-family: Arial, "Helvetica Neue", Helvetica, sans-serif; font-weight: 700; font-size: 40em; letter-spacing: -2px; }
+body.theme-retro .card.sm .cr .rk { font-size: 50em; }
+body.theme-retro .card .face-frame { opacity: 0.18; }
+
+/* pot, bets and dealer button: white amounts on the felt, no pills */
+body.theme-retro #pot .pot-amt, body.theme-retro .bet .amt { text-shadow: 0 1px 2px #000, 0 0 4px rgba(0,0,0,0.7); padding-left: 4px; padding-right: 4px; }
+body.theme-retro .bet { flex-direction: column; gap: 2px; }
+body.theme-retro .chipstack { gap: 2px; }
+body.theme-retro .chip { border-radius: 0; background: none; box-shadow: none; --e: #ffffff; --e2: #ffffff; --tx: #1a1f3a; }
+body.theme-retro .chip::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--ch) / 2);
+  border-radius: 0 0 50% 50% / 0 0 calc(var(--ch) / 2) calc(var(--ch) / 2);
+  background: linear-gradient(90deg, rgba(0,0,0,0.45), transparent 28%, transparent 70%, rgba(0,0,0,0.5)),
+    linear-gradient(90deg, var(--c) 0 9%, var(--e) 9% 17%, var(--c) 17% 33%, var(--e2) 33% 41%, var(--c) 41% 59%, var(--e) 59% 67%, var(--c) 67% 83%, var(--e2) 83% 91%, var(--c) 91%);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.6); }
+body.theme-retro .chip i { position: absolute; left: 0; top: 0; width: 100%; height: var(--ch); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(closest-side, #ffffff 0 50%, var(--c) 53% 72%, transparent 74%),
+    repeating-conic-gradient(from 10deg, var(--e) 0 12deg, var(--c) 12deg 30deg, var(--e2) 30deg 42deg, var(--c) 42deg 60deg);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.45);
+  font: normal 800 calc(var(--chip) * 0.24) / 1 Arial, sans-serif; color: var(--tx); letter-spacing: -0.5px; }
+body.theme-retro .chip.c1 { --c: #2a3db8; --e2: #d42a30; }
+body.theme-retro .chip.c5 { --c: #d4541c; }
+body.theme-retro .chip.c25 { --c: #4b44b8; }
+body.theme-retro .chip.c100 { --c: #1d1d22; }
+body.theme-retro .chip.c500 { --c: #6b2f9a; }
+body.theme-retro .chip.c1000 { --c: #e2b21e; --e: #1d1d22; --e2: #1d1d22; }
+body.theme-retro .chip.c5000 { --c: #e07a1f; --e2: #2a3db8; }
+body.theme-retro .chip.c25000 { --c: #178f8f; }
+body.theme-retro .bet .amt, body.theme-retro #pot .pot-amt { font-weight: 700; }
+body.theme-retro #pot .pot-game { opacity: 0.85; text-shadow: 0 1px 2px #000; }
+body.theme-retro #dealer-btn { background: radial-gradient(circle at 40% 35%, #ffffff, #e9e9e9 60%, #b9b9b9); box-shadow: 0 0 0 2px #444, 0 3px 6px rgba(0,0,0,0.6); color: #111; }
+body.theme-retro #banner { background: rgba(8, 14, 28, 0.92); border-color: #8fa6c8; }
+
+/* buttons: glossy navy, white uppercase */
+body.theme-retro .abtn { border: 2px solid #8fa6c8; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 4px 10px rgba(0,0,0,0.6); text-shadow: 0 1px 2px rgba(0,0,0,0.7) !important; }
+body.theme-retro .abtn small { text-transform: none; letter-spacing: 0; }
+body.theme-retro .pre { background: linear-gradient(180deg, #1c2a46, #0a1426); border-color: #6f87ad; color: #dfe8f4; text-transform: uppercase; letter-spacing: 1px; }
+body.theme-retro #action-panel .msg { color: #e6eef9; text-shadow: 0 1px 2px #000; }
+
+/* dealer log: the light blue chat box in the corner */
+body.theme-retro #log-panel { background: #e6eef8; border: 2px solid #8fa6c8; box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
+body.theme-retro #log-panel .lh { background: linear-gradient(180deg, #33476c, #0f1c36); color: #c3d3ea; border-bottom-color: #8fa6c8; }
+body.theme-retro #log { color: #13213a; }
+body.theme-retro #log .hand, body.theme-retro #log .show { color: #1d4f9a; }
+body.theme-retro #log .win { color: #13803a; }
+body.theme-retro #log .draw { color: #2a64c8; }
+body.theme-retro #log .sys { color: #5a6b84; }
+body.theme-retro #log::-webkit-scrollbar-thumb { background: #8fa6c8; }
+
+/* menus */
+body.theme-retro .modal { background: linear-gradient(180deg, #16223c, #0a1222); border-color: #8fa6c8; }
+body.theme-retro #modal-root.full { background: linear-gradient(180deg, #0f1a44 0%, #0a1430 45%, #060c1c 100%); }
+body.theme-retro .fs-top { background: #0c1630; }
+body.theme-retro .mbtn { background: linear-gradient(180deg, #3b5786 0%, #1a2d50 47%, #0a1528 53%, #102040 100%); border-color: #8fa6c8; color: #ffffff;
+  text-transform: uppercase; letter-spacing: 1px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.3); }
+body.theme-retro .splash-head h1, body.theme-retro .modal h2, body.theme-retro .fs-top .fs-title { font-weight: 900; font-style: italic; color: #ffffff; }
+body.theme-retro .continue-card, body.theme-retro .mode-tile.on { background: rgba(61, 155, 255, 0.12); }
+.theme-pick { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 560px) { .theme-pick { grid-template-columns: repeat(3, 1fr); } }
+
+/* =====================================================================
+   Stars theme (v108, Chase's ask): the look of a modern online card room.
+   A dark navy room with faint floor lines, a wide green oval with a thick
+   black rail, black pill nameplates (name above a thin line, stack in green
+   below) with a round picture on the end toward the table, red card backs
+   tucked behind the top of each plate, white cards with a big corner index
+   and a pip panel, chips seen from a low angle with the amount in a dark
+   pill, dark red action buttons. All drawn here; no site name, logo or art.
+   No blur filters or blend modes (v103).
+   ===================================================================== */
+body.theme-stars {
+  --bg: #1d1c2a;
+  --text: #ffffff; --text-dim: rgba(225, 228, 240, 0.8); --muted: rgba(200, 205, 220, 0.6);
+  --num: #9be27f; --accent: #6cc4ff; --accent-hi: #a9dcff; --accent-lo: #3a5f80; --on-accent: #0b1220;
+  --panel-bg: rgba(22, 23, 34, 0.94); --panel-line: #3e4157; --panel-solid: #191a26;
+  --plate-bg: #141414; --plate-border: #4a4a4a; --plate-shadow: 0 0 0 1px #000, 0 5px 12px rgba(0,0,0,0.65);
+  --avatar-ring: #5a5a5a;
+  --felt-bg: radial-gradient(ellipse 58% 60% at 50% 45%, #136c2d 0%, #116328 50%, #0f5924 80%, #0b4d1e 100%);
+  --felt-line: transparent; --logo: rgba(255, 255, 255, 0.07);
+  --rail-bg: linear-gradient(180deg, #111114 0%, #1e1d22 28%, #25242a 58%, #33353a 86%, #3e4145 100%);
+  --track-bg: repeating-conic-gradient(from 0deg, #17171b 0 1deg, #29292f 1deg 2deg);
+  --label-bg: rgba(0, 0, 0, 0.32); --label-text: #ffffff; --label-border: transparent;
+  --pill-bg: #1b1b1b; --pill-text: #ffffff; --pill-border: #5a5a5a;
+  --pill-empty-bg: rgba(0, 0, 0, 0.42); --pill-empty-text: rgba(255, 255, 255, 0.32);
+  --pill-pat-bg: #f0c419; --pill-pat-text: #1b1300;
+  --bubble-bg: #151515; --bubble-text: #6cc4ff; --bubble-raise: #151515;
+  --btn-fold: radial-gradient(ellipse 90% 70% at 50% 0%, rgba(255,255,255,0.12), transparent 62%), linear-gradient(180deg, #7a2a2b 0%, #6a1b1d 45%, #5c1416 55%, #4a0d0f 100%);
+  --btn-call: var(--btn-fold); --btn-raise: var(--btn-fold); --btn-draw: var(--btn-fold); --btn-neutral: var(--btn-fold);
+  --btn-raise-text: #ffffff;
+  --card-face: #ffffff; --card-edge: rgba(0, 0, 0, 0.3);
+  --card-back: radial-gradient(ellipse 26% 20% at 50% 50%, rgba(110, 18, 20, 0.30) 0 70%, transparent 74%), linear-gradient(180deg, #b44d4c 0%, #a24443 55%, #943c3b 100%);
+  --card-back-border: #f4f0f0;
+  --good: #9be27f; --bad: #ff7b7b; --turn: rgba(134, 216, 42, 0.6);
+  --suit-s: #111111; --suit-c: #111111; --suit-h: #d0021b; --suit-d: #d0021b;
+  --serif: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: Roboto, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+body.theme-stars.four-color { --suit-c: #1a8f2f !important; --suit-d: #1f6fe0 !important; }
+
+/* room: dark navy, lighter behind the table, faint crossing floor lines */
+body.theme-stars #room { background:
+  repeating-linear-gradient(62deg, transparent 0 150px, rgba(255,255,255,0.03) 150px 152px),
+  repeating-linear-gradient(-62deg, transparent 0 150px, rgba(255,255,255,0.03) 150px 152px),
+  radial-gradient(ellipse 75% 70% at 50% 42%, #2c2f44 0%, #25273a 40%, #1e1d2c 75%, #17161f 100%); }
+
+/* table: thick black rail (deeper at the bottom), a ridged inner lip, flat green felt */
+body.theme-stars #table .shadow { inset: -10px -26px -46px -26px; background: radial-gradient(closest-side, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0.25) 92%, transparent 100%); }
+body.theme-stars #table .rail { box-shadow: inset 0 2px 1px rgba(255,255,255,0.10), 0 0 0 1px #08080a, 0 8px 18px rgba(0,0,0,0.55); }
+body.theme-stars #table .racetrack { inset: 12px 24px 26px 24px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.6); }
+body.theme-stars #table .felt { inset: 18px 32px 36px 32px; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.55), inset 0 0 18px 6px rgba(0,0,0,0.32); }
+body.theme-stars #table .felt::after { display: none; }
+body.theme-stars .felt-crest, body.theme-stars .felt-logo .ln2 { display: none !important; }
+body.theme-stars .felt-logo { top: 44% !important; bottom: auto !important; transform: translate(-50%, -50%); }
+body.theme-stars .felt-logo .ln1 { font-family: "Arial Black", Roboto, "Segoe UI", Arial, sans-serif; font-weight: 900; letter-spacing: 3px; text-indent: 0; font-size: 64px !important; }
+body.portrait.theme-stars .felt-logo { top: 40% !important; }
+body.portrait.theme-stars .felt-logo .ln1 { font-size: 50px !important; }
+body.theme-stars .felt-logo .ln1::before { content: '\2660\00a0'; }
+body.theme-stars .felt-logo .ln1::after { content: '\00a0ROOM'; }
+
+/* top bar: plain white title, small glossy black buttons */
+body.theme-stars #brand .t1 { font-weight: 700; color: #ffffff; letter-spacing: 2px; }
+body.theme-stars #brand .crest { color: #cfd3dc; }
+body.theme-stars #brand .t2 { color: #9aa0b2; }
+body.theme-stars .tb { border-radius: 6px; border: 1px solid #5a5a5a; color: #ffffff; text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px;
+  background: linear-gradient(180deg, #3d3d3d 0%, #202020 48%, #0a0a0a 52%, #141414 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 2px 6px rgba(0,0,0,0.6); }
+body.portrait.theme-stars .tb, body.landscape.compact.theme-stars .tb { border-radius: 10px; }
+body.theme-stars .tb svg { stroke: #e6e6e6; }
+body.theme-stars #infobar { color: #c3c7d3; }
+body.theme-stars .ib-btn { border-color: #6a6f80; color: #e6e6e6; }
+
+/* seats: a black pill plate with a bevelled grey edge, the round picture on the end toward the table */
+body.theme-stars.landscape { --plate-w: 280px; --hero-plate-w: 300px; --plate-h: 84px; --sav: 104px; --fs-name: 23px; --fs-stack: 26px;
+  --pill-w: 42px; --pill-h: 32px; --fs-pill: 21px; --chip: 40px; }
+body.theme-stars.landscape.compact { --fs-name: 25px; --fs-stack: 29px; }
+body.theme-stars.portrait { --plate-w: 230px; --sav: 104px; --chip: 40px; }
+body.theme-stars .seat .plate { justify-content: center; gap: 0; padding: 0 calc(var(--sav) - 26px) 0 14px; border: 3px solid transparent;
+  background:
+    linear-gradient(180deg, transparent calc(50% - 1px), #333 calc(50% - 1px), #333 calc(50% + 1px), transparent calc(50% + 1px)) padding-box,
+    linear-gradient(180deg, #262626 0%, #141414 46%, #0c0c0c 54%, #171717 100%) padding-box,
+    linear-gradient(180deg, #9a9a9a 0%, #4a4a4a 30%, #2a2a2a 62%, #161616 100%) border-box; }
+body.theme-stars .seat[data-v="0"] .plate, body.theme-stars .seat[data-v="4"] .plate, body.theme-stars .seat[data-v="5"] .plate { padding: 0 14px 0 calc(var(--sav) - 26px); }
+body.theme-stars .seat .ptext { flex: 1; align-items: center; text-align: center; gap: 7px; line-height: 1; }
+body.theme-stars .seat .pname { font-weight: 700; color: #ffffff; max-width: 100%; }
+body.theme-stars .seat .pstack { font-weight: 500; color: #9be27f; letter-spacing: 0; }
+body.theme-stars .seat .avatar { position: absolute; top: 50%; right: calc(20px - var(--sav) / 2); left: auto; transform: translateY(-50%); z-index: 4;
+  width: var(--sav); height: var(--sav); overflow: hidden; background: radial-gradient(circle at 50% 30%, #5d6a86, #222838);
+  box-shadow: 0 0 0 3px #5a5a5a, 0 0 0 4px #0b0b0b, 0 4px 10px rgba(0,0,0,0.6); }
+body.theme-stars .seat[data-v="0"] .avatar, body.theme-stars .seat[data-v="4"] .avatar, body.theme-stars .seat[data-v="5"] .avatar { right: auto; left: calc(20px - var(--sav) / 2); }
+body.theme-stars .seat .avatar .ini, body.theme-stars .seat .timer { display: none !important; }
+body.theme-stars .seat .avatar .toon { display: block; width: 112%; height: 112%; margin: 10% 0 0 0; flex: none; }
+body.theme-stars .seat.folded .plate { opacity: 1; filter: none; }
+body.theme-stars .seat.folded .pname { color: #8a8a8a; }
+body.theme-stars .seat.folded .pstack { color: #5d8a4c; }
+body.theme-stars .seat.folded .avatar { opacity: 0.5; }
+/* the player to act: a green time bar under the plate */
+body.theme-stars .seat.turn .plate { border-color: transparent; box-shadow: var(--plate-shadow); }
+body.theme-stars .seat.turn .avatar { box-shadow: 0 0 0 3px #bfbfbf, 0 0 0 4px #0b0b0b, 0 4px 10px rgba(0,0,0,0.6); }
+body.theme-stars .seat.turn .plate::after { content: ''; position: absolute; left: 22%; right: 32%; top: calc(100% + 1px); height: 11px; border-radius: 0 0 5px 5px;
+  background: repeating-linear-gradient(90deg, #86d82a 0 12px, #4e8f14 12px 14px); box-shadow: 0 0 0 2px #1b1b1b; }
+body.theme-stars .seat[data-v="0"].turn .plate::after, body.theme-stars .seat[data-v="4"].turn .plate::after, body.theme-stars .seat[data-v="5"].turn .plate::after { left: 32%; right: 22%; }
+body.theme-stars .seat.turn.thinking .plate::after { animation: starsBar 1.2s linear infinite; }
+@keyframes starsBar { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+body.theme-stars .seat.winner .plate { box-shadow: 0 0 0 3px #f0c419, 0 0 24px rgba(240, 196, 25, 0.55); }
+body.theme-stars .seat .pos { top: auto; bottom: -13px; right: auto; left: 12px; z-index: 5; padding: 1px 8px; border-radius: 999px; border: 1px solid #5a5a5a;
+  background: #1e1e1e; color: #d8d8d8; font-size: calc(var(--fs-pos) * 0.9); }
+body.theme-stars .seat[data-v="0"] .pos, body.theme-stars .seat[data-v="4"] .pos, body.theme-stars .seat[data-v="5"] .pos { left: auto; right: 12px; }
+body.theme-stars .seat .allin { z-index: 5; }
+/* the action shows on the plate's name line, in light blue */
+body.theme-stars .seat .bubble { background: #151515; color: #6cc4ff; border-radius: 8px; box-shadow: none; padding: 0 8px; min-width: 150px; text-align: center;
+  font-size: var(--fs-name); font-weight: 700; line-height: 1.45; }
+body.theme-stars .seat .bubble.raise, body.theme-stars .seat .bubble.bet, body.theme-stars .seat .bubble.cap, body.theme-stars .seat .bubble.draw { background: #151515; color: #6cc4ff; }
+body.theme-stars .seat .bubble.fold, body.theme-stars .seat .bubble.muck { background: #151515; color: #9a9a9a; }
+body.theme-stars .seat .bubble.pat { background: #151515; color: #f0c419; }
+body.portrait.theme-stars .seat .bubble { min-width: 130px; }
+/* while the action shows, the name steps aside (browsers without :has() just draw the action over the name) */
+body.theme-stars .seat:has(.bubble.show) .pname { visibility: hidden; }
+@supports selector(:has(a)) { body.theme-stars .seat .bubble, body.theme-stars .seat .bubble.raise, body.theme-stars .seat .bubble.bet, body.theme-stars .seat .bubble.cap,
+  body.theme-stars .seat .bubble.draw, body.theme-stars .seat .bubble.fold, body.theme-stars .seat .bubble.muck, body.theme-stars .seat .bubble.pat { background: transparent; } }
+body.theme-stars .seat .hand-label { background: #0d0d0d; border: 1px solid #5a5a5a; color: #ffffff; }
+body.theme-stars .seat .hand-label.win { background: #f0c419; color: #111; border-color: #f0c419; }
+body.theme-stars .seat .draws { gap: 5px; }
+body.theme-stars .seat .draws i { border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); }
+body.theme-stars .seat .draws i.done { border: 1px solid #5a5a5a; }
+body.theme-stars .seat .draws i.next { border: 1px dashed #6cc4ff; }
+
+/* cards: white, a big index in the top corner, the pips (or a court panel) in a framed panel on the right */
+body.theme-stars .card { border-radius: 7em; }
+body.theme-stars .card.face { box-shadow: 0 0 0 1em rgba(0,0,0,0.3), 0 4em 10em rgba(0,0,0,0.45); }
+body.theme-stars .card .cr { left: 4em; top: 3em; }
+body.theme-stars .card .cr .rk { font-family: "Roboto Condensed", "Arial Narrow", sans-serif-condensed, Roboto, Arial, sans-serif; font-weight: 400; font-size: 40em; letter-spacing: -0.08em; }
+body.theme-stars .card .cr svg { width: 24em; height: 24em; margin-top: 5em; }
+body.theme-stars .card.sm .cr .rk { font-size: 44em; }
+body.theme-stars .card .cr .rk.t10 { display: inline-block; transform: scaleX(0.74); letter-spacing: -0.1em; margin: 0 -0.12em; }
+body.theme-stars .card.sm .cr svg { width: 26em; height: 26em; margin-top: 4em; }
+body.theme-stars .card .cr.br, body.theme-stars .card .pip, body.theme-stars .card .face-letter, body.theme-stars .card .face-frame { display: none; }
+.card .pp { display: none; }
+body.theme-stars .card .pp { display: block; position: absolute; left: 31em; right: 5em; top: 12em; bottom: 8em; border: 1em solid #d4d4d4; border-radius: 3em;
+  background: linear-gradient(180deg, #ffffff 60%, #f1f1f1); }
+body.theme-stars .card.sm .pp { left: 33em; top: 10em; }
+body.theme-stars .card .pp svg { position: absolute; fill: currentColor; }
+body.theme-stars .card .pp .pi { width: 17em; height: 17em; transform: translate(-50%, -50%); }
+body.theme-stars .card .pp .pi.f { transform: translate(-50%, -50%) rotate(180deg); }
+body.theme-stars .card .pp .pa { left: 50%; top: 50%; width: 40em; height: 40em; transform: translate(-50%, -50%); }
+body.theme-stars .card .pp.court { border-color: #c9a227;
+  background: repeating-linear-gradient(45deg, rgba(232, 194, 74, 0.28) 0 4em, transparent 4em 8em), repeating-linear-gradient(-45deg, rgba(208, 2, 27, 0.10) 0 4em, transparent 4em 8em), #ffffff;
+  box-shadow: inset 0 0 0 3em #ffffff, inset 0 0 0 4em #c9a227; }
+body.theme-stars .card .pp.court .cl { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); font-family: Georgia, "Times New Roman", serif; font-weight: 700; font-size: 52em; line-height: 1; }
+body.theme-stars .card .pp.court .cs { width: 14em; height: 14em; }
+body.theme-stars .card .pp.court .cs.a { left: 7em; top: 7em; }
+body.theme-stars .card .pp.court .cs.b { right: 7em; bottom: 7em; transform: rotate(180deg); }
+
+/* pot and bets: the amount in a dark pill (beside the chips for a bet, above them for the pot) */
+body.theme-stars #pot .pot-amt { order: -1; margin: 0 0 6px; border: none; font-weight: 500; padding: 2px 16px; }
+body.theme-stars #pot .pot-game { margin-top: 8px; opacity: 1; background: rgba(0, 0, 0, 0.85); color: #ffffff; padding: 4px 12px; border-radius: 4px; font-size: calc(var(--fs-pot) * 0.55); font-weight: 500; letter-spacing: 0; }
+body.theme-stars .bet { gap: 6px; }
+body.theme-stars .bet .amt { border: none; font-weight: 500; padding: 1px 12px; }
+body.theme-stars .chipstack { gap: 3px; }
+body.theme-stars .chip { border-radius: 0; background: none; box-shadow: none; --e: #f2f2f2; --tx: #222222; }
+body.theme-stars .chip::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--ch) / 2);
+  border-radius: 0 0 50% 50% / 0 0 calc(var(--ch) / 2) calc(var(--ch) / 2);
+  background: linear-gradient(90deg, rgba(0,0,0,0.42), transparent 26%, transparent 70%, rgba(0,0,0,0.48)),
+    linear-gradient(90deg, var(--c) 0 12%, var(--e) 12% 22%, var(--c) 22% 44%, var(--e) 44% 56%, var(--c) 56% 78%, var(--e) 78% 88%, var(--c) 88%);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.55); }
+body.theme-stars .chip i { position: absolute; left: 0; top: 0; width: 100%; height: var(--ch); border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(closest-side, #fafafa 0 56%, #a8a8a8 58%, transparent 61%),
+    repeating-conic-gradient(from 33deg, var(--e) 0 24deg, var(--c) 24deg 90deg);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4);
+  font: normal 800 calc(var(--chip) * 0.25) / 1 Arial, sans-serif; color: var(--tx); letter-spacing: -0.5px; }
+body.theme-stars .chip.c1 { --c: #2340d8; }
+body.theme-stars .chip.c5 { --c: #d42222; }
+body.theme-stars .chip.c25 { --c: #2f9a55; }
+body.theme-stars .chip.c100 { --c: #2a2a2a; }
+body.theme-stars .chip.c500 { --c: #7b3fc4; }
+body.theme-stars .chip.c1000 { --c: #e8b923; }
+body.theme-stars .chip.c5000 { --c: #e2701b; }
+body.theme-stars .chip.c25000 { --c: #4f8fdc; }
+body.theme-stars #dealer-btn { background: radial-gradient(circle closest-side, #d81822 0 56%, #a50f18 58% 60%, #fafafa 63% 90%, #cfcfcf 100%);
+  box-shadow: 0 3px 0 #8d8d8d, 0 5px 8px rgba(0,0,0,0.55); color: #ffffff; font-size: calc(var(--dealer) * 0.4); }
+body.theme-stars #banner { background: rgba(0, 0, 0, 0.88); border-color: #4a4a4a; }
+
+/* buttons: dark red, title case */
+body.theme-stars .abtn { border: 1px solid #2a0000; border-radius: 10px; text-transform: none; color: #ffffff !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 3px 8px rgba(0,0,0,0.6); text-shadow: 0 1px 1px rgba(0,0,0,0.6) !important; }
+body.theme-stars .pre { background: rgba(0, 0, 0, 0.45); border: 1px solid #4a4a4a; border-radius: 8px; color: #ffffff; }
+body.theme-stars .pre .box { border: 2px solid #cfcfcf; border-radius: 3px; background: #ffffff; }
+body.theme-stars .pre.on { border-color: #f0c419; }
+body.theme-stars .pre.on .box { background: #f0c419; border-color: #f0c419; }
+body.theme-stars .pre.on .box::after { border-color: #1b1300; }
+body.theme-stars #action-panel .msg { color: #d8dbe6; }
+
+/* dealer log: a white box with a dark red tab */
+body.theme-stars #log-panel { background: #f4f4f4; border: 1px solid #555; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
+body.theme-stars #log-panel .lh { background: linear-gradient(180deg, #8a2a2b, #5a1112); color: #ffffff; letter-spacing: 1px; border-bottom: 1px solid #333; }
+body.theme-stars #log { color: #1a1a1a; }
+body.theme-stars #log .hand, body.theme-stars #log .show { color: #8a1a1b; }
+body.theme-stars #log .win { color: #13803a; }
+body.theme-stars #log .draw { color: #1d4fa0; }
+body.theme-stars #log .sys { color: #666666; }
+body.theme-stars #log::-webkit-scrollbar-thumb { background: #999999; }
+
+/* menus */
+body.theme-stars .modal { background: linear-gradient(180deg, #262838, #191a26); border-color: #3e4157; }
+body.theme-stars #modal-root.full { background: radial-gradient(ellipse 90% 60% at 50% 0%, #2c2f44 0%, #1e1d2c 60%, #17161f 100%); }
+body.theme-stars .fs-top { background: #1d1e2b; }
+body.theme-stars .mbtn:not(.ghost) { background: linear-gradient(180deg, #7a2a2b 0%, #6a1b1d 45%, #5c1416 55%, #4a0d0f 100%); border-color: #2a0000; color: #ffffff; border-radius: 10px; }
+body.theme-stars .splash-head h1, body.theme-stars .modal h2, body.theme-stars .fs-top .fs-title { font-weight: 700; color: #ffffff; }
+body.theme-stars .continue-card, body.theme-stars .mode-tile.on { background: rgba(108, 196, 255, 0.10); }
+
 </style>
 </head>
 <body class="theme-classic landscape">
@@ -656,6 +1068,83 @@ body.theme-classic .fs-top { background: #1d0c0a; }
           <circle cx="44" cy="35" r="1.5"/><circle cx="76" cy="35" r="1.5"/>
         </g>
       </symbol>
+
+      <!-- Retro theme (v105): six original cartoon players, one per seat -->
+      <symbol id="toon-0" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M10 100 C12 80 30 72 50 72 C70 72 88 80 90 100 Z" fill="#2f6fd6"/>
+        <path d="M36 73 Q50 90 64 73" fill="#1f56b0"/>
+        <rect x="43" y="60" width="14" height="13" fill="#e2a97f"/>
+        <ellipse cx="50" cy="43" rx="20" ry="23" fill="#f1c29a"/>
+        <path d="M30 40 C29 22 42 16 52 17 C64 17 72 26 70 40 C66 30 58 28 50 30 C42 28 36 32 30 40 Z" fill="#3b2516"/>
+        <path d="M25 46 C23 14 77 14 75 46" fill="none" stroke="#222" stroke-width="4"/>
+        <rect x="20" y="39" width="10" height="16" rx="4" fill="#d23a3a"/><rect x="70" y="39" width="10" height="16" rx="4" fill="#d23a3a"/>
+        <path d="M38 39 L45 38 M55 38 L62 39" fill="none"/>
+        <circle cx="42" cy="45" r="3" fill="#161616" stroke="none"/><circle cx="58" cy="45" r="3" fill="#161616" stroke="none"/>
+        <path d="M42 54 Q50 61 58 54" fill="none"/>
+      </g></symbol>
+      <symbol id="toon-1" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M10 100 C12 80 30 72 50 72 C70 72 88 80 90 100 Z" fill="#b8322a"/>
+        <rect x="43" y="60" width="14" height="13" fill="#c98d5e"/>
+        <path d="M38 71 L62 71 L50 86 Z" fill="#f2c94c"/>
+        <ellipse cx="50" cy="45" rx="19" ry="22" fill="#e0a878"/>
+        <path d="M37 41 L45 40 M55 40 L63 41" fill="none"/>
+        <circle cx="43" cy="46" r="2.8" fill="#161616" stroke="none"/><circle cx="57" cy="46" r="2.8" fill="#161616" stroke="none"/>
+        <path d="M39 56 Q45 51 50 55 Q55 51 61 56 Q55 60 50 58 Q45 60 39 56 Z" fill="#6a4426"/>
+        <ellipse cx="50" cy="30" rx="35" ry="7" fill="#a8703a"/>
+        <path d="M33 30 C32 11 41 8 50 13 C59 8 68 11 67 30 Z" fill="#c08445"/>
+        <path d="M33.5 24 L66.5 24 L67 29 L33 29 Z" fill="#5a3a22"/>
+      </g></symbol>
+      <symbol id="toon-2" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M10 100 C12 80 30 72 50 72 C70 72 88 80 90 100 Z" fill="#6b3fa0"/>
+        <path d="M40 72 L50 84 L60 72" fill="#f4f0e8"/>
+        <path d="M29 36 L26 12 L45 27 Z" fill="#f0a040"/><path d="M71 36 L74 12 L55 27 Z" fill="#f0a040"/>
+        <path d="M31 31 L29 18 L39 27 Z" fill="#f4a3b4" stroke="none"/><path d="M69 31 L71 18 L61 27 Z" fill="#f4a3b4" stroke="none"/>
+        <ellipse cx="50" cy="47" rx="24" ry="22" fill="#f0a040"/>
+        <path d="M44 27 L45 33 M50 26 L50 33 M56 27 L55 33" fill="none" stroke="#b86a1a" stroke-width="2.5"/>
+        <rect x="30" y="39" width="17" height="10" rx="3" fill="#111"/><rect x="53" y="39" width="17" height="10" rx="3" fill="#111"/>
+        <path d="M47 43 L53 43" fill="none"/>
+        <path d="M33 41 L38 41" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M56 41 L61 41" fill="none" stroke="#fff" stroke-width="1.5"/>
+        <path d="M47 53 L53 53 L50 56 Z" fill="#f4708e"/>
+        <path d="M44 60 Q47 62 50 57 Q53 62 56 60" fill="none"/>
+        <path d="M24 54 L37 56 M24 60 L37 59 M76 54 L63 56 M76 60 L63 59" fill="none" stroke-width="1.5"/>
+      </g></symbol>
+      <symbol id="toon-3" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M22 66 C14 54 18 30 30 22 C40 12 62 12 72 22 C84 32 86 54 78 66 C74 74 26 74 22 66 Z" fill="#c2482a"/>
+        <path d="M10 100 C12 80 30 72 50 72 C70 72 88 80 90 100 Z" fill="#2f9a5c"/>
+        <rect x="44" y="60" width="12" height="13" fill="#e9b796"/>
+        <ellipse cx="50" cy="45" rx="18" ry="21" fill="#f6cfae"/>
+        <path d="M31 40 C33 22 67 22 69 40 C62 31 57 35 50 30 C43 35 38 31 31 40 Z" fill="#c2482a"/>
+        <circle cx="43" cy="46" r="3" fill="#161616" stroke="none"/><circle cx="57" cy="46" r="3" fill="#161616" stroke="none"/>
+        <path d="M39 42 L41 43.5 M61 42 L59 43.5" fill="none" stroke-width="1.5"/>
+        <path d="M44 56 Q50 61 56 56 Q50 58 44 56 Z" fill="#d0485a"/>
+        <circle cx="32" cy="55" r="2.5" fill="#f2c94c"/><circle cx="68" cy="55" r="2.5" fill="#f2c94c"/>
+      </g></symbol>
+      <symbol id="toon-4" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M10 100 C12 80 30 74 50 74 C70 74 88 80 90 100 Z" fill="#4a5260"/>
+        <circle cx="50" cy="88" r="5" fill="#29e0ff"/>
+        <rect x="42" y="62" width="16" height="13" fill="#8a93a0"/>
+        <path d="M42 66 L58 66 M42 70 L58 70" fill="none" stroke-width="1.5"/>
+        <path d="M50 22 L50 10" fill="none"/><circle cx="50" cy="8" r="4.5" fill="#ff4a4a"/>
+        <rect x="27" y="22" width="46" height="42" rx="9" fill="#b9c2cc"/>
+        <circle cx="25" cy="43" r="4" fill="#8a93a0"/><circle cx="75" cy="43" r="4" fill="#8a93a0"/>
+        <rect x="34" y="34" width="12" height="10" rx="2" fill="#29e0ff"/><rect x="54" y="34" width="12" height="10" rx="2" fill="#29e0ff"/>
+        <rect x="37" y="51" width="26" height="7" rx="2" fill="#333"/>
+        <path d="M43 51 L43 58 M50 51 L50 58 M57 51 L57 58" fill="none" stroke="#b9c2cc" stroke-width="1.5"/>
+      </g></symbol>
+      <symbol id="toon-5" viewBox="0 0 100 100"><g stroke="#161616" stroke-width="2" stroke-linejoin="round">
+        <path d="M10 100 C12 80 30 72 50 72 C70 72 88 80 90 100 Z" fill="#2b2f3a"/>
+        <path d="M40 72 L50 92 L60 72 Z" fill="#ffffff"/>
+        <path d="M47.5 74 L52.5 74 L53.5 86 L50 92 L46.5 86 Z" fill="#b3192e"/>
+        <rect x="43" y="60" width="14" height="13" fill="#d9a07c"/>
+        <ellipse cx="50" cy="45" rx="19" ry="22" fill="#e7b896"/>
+        <circle cx="42" cy="46" r="6.5" fill="#e6f0fa"/><circle cx="58" cy="46" r="6.5" fill="#e6f0fa"/>
+        <path d="M48.5 46 L51.5 46" fill="none"/>
+        <circle cx="42" cy="46.5" r="2.4" fill="#161616" stroke="none"/><circle cx="58" cy="46.5" r="2.4" fill="#161616" stroke="none"/>
+        <path d="M40 57 Q50 52 60 57 Q55 61 50 59 Q45 61 40 57 Z" fill="#a9a9a9"/>
+        <ellipse cx="50" cy="30" rx="31" ry="6" fill="#3a3a44"/>
+        <path d="M34 30 C33 14 41 10 50 14 C59 10 67 14 66 30 Z" fill="#4a4a58"/>
+        <path d="M34.3 24 L65.7 24 L66 29 L34 29 Z" fill="#141414"/>
+      </g></symbol>
       <symbol id="ic-review" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
       <symbol id="ic-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
       <symbol id="ic-log" viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></symbol>
@@ -673,6 +1162,37 @@ body.theme-classic .fs-top { background: #1d0c0a; }
     <div class="room-glow"></div>
     <div class="room-carpet"></div>
     <div class="room-vignette"></div>
+    <!-- Retro theme (v105): an octagonal room with tall windows onto a night city, curtains at the sides -->
+    <div class="rr rr-sky"></div>
+    <svg class="rr rr-city" viewBox="0 0 1600 420" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="rr-skyg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c4660"/><stop offset="0.4" stop-color="#7d8e94"/><stop offset="0.78" stop-color="#d7b27a"/><stop offset="1" stop-color="#f3d595"/></linearGradient>
+        <linearGradient id="rr-goldg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8a5f22"/><stop offset="0.45" stop-color="#f0c766"/><stop offset="0.6" stop-color="#d9a441"/><stop offset="1" stop-color="#6e4a1a"/></linearGradient>
+        <linearGradient id="rr-creamg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b9ab92"/><stop offset="0.5" stop-color="#f4ead6"/><stop offset="1" stop-color="#9c8f78"/></linearGradient>
+        <pattern id="rr-gw" width="10" height="12" patternUnits="userSpaceOnUse"><rect x="2" y="3" width="6" height="6" fill="#ffe7a3"/></pattern>
+        <pattern id="rr-gw2" width="8" height="10" patternUnits="userSpaceOnUse"><rect x="1" y="2" width="5" height="5" fill="#ffd46a"/></pattern>
+        <pattern id="rr-gw3" width="14" height="9" patternUnits="userSpaceOnUse"><rect x="1" y="2" width="11" height="4" fill="#fff3cf" opacity="0.85"/></pattern>
+        <pattern id="rr-gw4" width="6" height="8" patternUnits="userSpaceOnUse"><rect x="1" y="1" width="3" height="5" fill="#7a4e12" opacity="0.55"/></pattern>
+      </defs>
+      <rect width="1600" height="420" fill="url(#rr-skyg)"/>
+      <g fill="#9c8a70" opacity="0.65"><rect x="-20" y="292" width="60" height="128"/><rect x="28" y="318" width="81" height="102"/><rect x="107" y="306" width="74" height="114"/><rect x="170" y="316" width="77" height="104"/><rect x="241" y="308" width="42" height="112"/><rect x="270" y="313" width="66" height="107"/><rect x="329" y="222" width="45" height="198"/><rect x="373" y="299" width="76" height="121"/><rect x="442" y="315" width="80" height="105"/><rect x="510" y="274" width="43" height="146"/><rect x="552" y="296" width="75" height="124"/><rect x="618" y="294" width="66" height="126"/><rect x="681" y="252" width="76" height="168"/><rect x="752" y="282" width="46" height="138"/><rect x="787" y="190" width="46" height="230"/><rect x="831" y="315" width="76" height="105"/><rect x="901" y="194" width="71" height="226"/><rect x="959" y="250" width="89" height="170"/><rect x="1034" y="214" width="77" height="206"/><rect x="1100" y="267" width="59" height="153"/><rect x="1154" y="268" width="84" height="152"/><rect x="1236" y="254" width="76" height="166"/><rect x="1297" y="216" width="61" height="204"/><rect x="1349" y="312" width="78" height="108"/><rect x="1424" y="223" width="72" height="197"/><rect x="1491" y="243" width="88" height="177"/><rect x="1575" y="223" width="71" height="197"/></g>
+      <g><rect x="-10" y="158" width="69" height="262" fill="#7a5a32"/><rect x="-6" y="166" width="61" height="254" fill="url(#rr-gw)"/><rect x="67" y="213" width="100" height="207" fill="#8e6a3c"/><rect x="71" y="221" width="92" height="199" fill="url(#rr-gw2)"/><rect x="179" y="148" width="104" height="272" fill="#5e4428"/><rect x="183" y="156" width="96" height="264" fill="url(#rr-gw3)"/><rect x="288" y="283" width="118" height="137" fill="#a07a44"/><rect x="292" y="291" width="110" height="129" fill="url(#rr-gw)"/><rect x="422" y="231" width="71" height="189" fill="#6c4e2c"/><rect x="426" y="239" width="63" height="181" fill="url(#rr-gw2)"/><rect x="498" y="285" width="68" height="135" fill="#b8925a"/><rect x="502" y="293" width="60" height="127" fill="url(#rr-gw3)"/><rect x="579" y="135" width="99" height="285" fill="#7a5a32"/><rect x="583" y="143" width="91" height="277" fill="url(#rr-gw)"/><rect x="686" y="228" width="117" height="192" fill="#8e6a3c"/><rect x="690" y="236" width="109" height="184" fill="url(#rr-gw2)"/><rect x="815" y="129" width="109" height="291" fill="#5e4428"/><rect x="819" y="137" width="101" height="283" fill="url(#rr-gw3)"/><rect x="925" y="182" width="62" height="238" fill="#a07a44"/><rect x="929" y="190" width="54" height="230" fill="url(#rr-gw)"/><rect x="988" y="144" width="81" height="276" fill="#6c4e2c"/><rect x="992" y="152" width="73" height="268" fill="url(#rr-gw2)"/><rect x="1062" y="285" width="123" height="135" fill="#b8925a"/><rect x="1066" y="293" width="115" height="127" fill="url(#rr-gw3)"/><rect x="1181" y="267" width="96" height="153" fill="#7a5a32"/><rect x="1185" y="275" width="88" height="145" fill="url(#rr-gw)"/><rect x="1290" y="199" width="91" height="221" fill="#8e6a3c"/><rect x="1294" y="207" width="83" height="213" fill="url(#rr-gw2)"/><rect x="1383" y="280" width="123" height="140" fill="#5e4428"/><rect x="1387" y="288" width="115" height="132" fill="url(#rr-gw3)"/><rect x="1501" y="198" width="117" height="222" fill="#a07a44"/><rect x="1505" y="206" width="109" height="214" fill="url(#rr-gw)"/></g>
+      <g>
+        <path d="M300 420 V150 L340 120 L380 150 V420 Z" fill="url(#rr-goldg)"/><rect x="300" y="160" width="80" height="260" fill="url(#rr-gw4)"/>
+        <path d="M1180 420 V110 Q1215 80 1250 110 V420 Z" fill="url(#rr-creamg)"/><rect x="1186" y="120" width="58" height="300" fill="url(#rr-gw4)"/>
+        <path d="M640 420 V200 L700 175 L760 200 V420 Z" fill="url(#rr-goldg)"/><rect x="640" y="205" width="120" height="215" fill="url(#rr-gw4)"/>
+        <rect x="905" y="150" width="70" height="270" fill="url(#rr-creamg)"/><rect x="905" y="155" width="70" height="265" fill="url(#rr-gw3)"/>
+        <rect x="480" y="262" width="34" height="14" rx="3" fill="#ff5fa8" opacity="0.8"/>
+        <rect x="1050" y="240" width="36" height="14" rx="3" fill="#4fd8ff" opacity="0.8"/>
+        <rect x="1410" y="268" width="34" height="14" rx="3" fill="#ff8a3a" opacity="0.8"/>
+      </g>
+      <rect x="0" y="378" width="1600" height="42" fill="#ffcf73" opacity="0.45"/>
+      <rect x="0" y="404" width="1600" height="16" fill="#3a2412"/>
+    </svg>
+    <div class="rr rr-frames"></div>
+    <div class="rr rr-curtain l"></div>
+    <div class="rr rr-curtain r"></div>
+    <div class="rr rr-carpet"></div>
   </div>
 
   <div id="viewport">
@@ -702,6 +1222,7 @@ body.theme-classic .fs-top { background: #1d0c0a; }
       </div>
 
       <div id="table">
+        <div class="floor"></div>
         <div class="shadow"></div>
         <div class="rail"></div>
         <div class="racetrack"></div>
@@ -6625,7 +7146,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 104;
+  TD.VERSION = 108;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -6685,8 +7206,55 @@ window.TD = window.TD || {};
   TD.SessionLog = SessionLog;
 
   /* ---------------- geometry (design px) ---------------- */
+  // Retro theme (v105): the side seats' cards sit a little lower, in front of the cartoon above each nameplate
+  const isRetro = () => document.body.classList.contains('theme-retro');
+  // Retro (v106): the old online table's proportions - a smaller oval, the side players inside the room's corners,
+  // the top player in front of the windows with the cartoon above the plate, bigger chips
+  function retroLandscapeGeo() {
+    const side = { cards: { x: 0, y: -40 }, pills: { x: 0, y: 64 }, bubble: { x: 0, y: -56 }, label: { x: 0, y: 106 } };
+    const top = { cards: { x: 222, y: 4 }, pills: { x: 0, y: 64 }, bubble: { x: 0, y: -56 }, label: { x: 0, y: 106 } };
+    return {
+      mode: 'landscape', W: 1600, H: 900,
+      table: { x: 259, y: 217, w: 1082, h: 483 },
+      seats: [{ x: 800, y: 846 }, { x: 196, y: 579 }, { x: 285, y: 256 }, { x: 800, y: 168 }, { x: 1315, y: 256 }, { x: 1404, y: 579 }],
+      parts: [
+        { cards: null, pills: { x: -240, y: 0 }, bubble: { x: 175, y: 0 }, label: null },
+        side, side, top, side, side
+      ],
+      bets: [{ x: 800, y: 562 }, { x: 425, y: 545 }, { x: 445, y: 352 }, { x: 800, y: 306 }, { x: 1155, y: 352 }, { x: 1175, y: 545 }],
+      dealer: [{ x: 628, y: 800 }, { x: 336, y: 612 }, { x: 420, y: 264 }, { x: 665, y: 178 }, { x: 1180, y: 264 }, { x: 1264, y: 612 }],
+      pot: { x: 800, y: 436 }, stub: { x: 800, y: 410 }, muck: { x: 800, y: 410 },
+      hero: { left: 510, top: 606, cw: 108, ch: 150, spacing: 118 },
+      bot: { w: 58, h: 80, spacing: 30, rot: 4 }, chip: 40, banner: { x: 800, y: 520 }
+    };
+  }
+  // Stars (v108, Chase's ask): the look of a modern online card room. Black pill nameplates with a round
+  // picture on the end toward the table, the cards tucked behind the top of each plate, a wide green oval
+  // with a thick black rail, chips with the amount in a dark pill beside them
+  const isStars = () => document.body.classList.contains('theme-stars');
+  function starsLandscapeGeo() {
+    // the picture sits on the plate's end toward the middle; the action shows on the name line
+    const r = { cards: { x: 16, y: -40 }, pills: { x: -32, y: 76 }, bubble: { x: -32, y: -19 }, label: { x: -32, y: 118 } };
+    const l = { cards: { x: -16, y: -40 }, pills: { x: 32, y: 76 }, bubble: { x: 32, y: -19 }, label: { x: 32, y: 118 } };
+    return {
+      mode: 'landscape', W: 1600, H: 900,
+      table: { x: 230, y: 200, w: 1140, h: 540 },
+      seats: [{ x: 800, y: 846 }, { x: 200, y: 612 }, { x: 250, y: 270 }, { x: 800, y: 152 }, { x: 1350, y: 270 }, { x: 1400, y: 612 }],
+      parts: [
+        { cards: null, pills: { x: -258, y: 0 }, bubble: { x: 32, y: -19 }, label: null },
+        r, r, { cards: { x: 16, y: -40 }, pills: { x: -32, y: 76 }, bubble: { x: -32, y: -19 }, label: { x: -32, y: 118 } }, l, l
+      ],
+      bets: [{ x: 800, y: 566 }, { x: 440, y: 575 }, { x: 500, y: 360 }, { x: 800, y: 276 }, { x: 1100, y: 360 }, { x: 1160, y: 575 }],
+      dealer: [{ x: 990, y: 800 }, { x: 420, y: 650 }, { x: 455, y: 300 }, { x: 620, y: 160 }, { x: 1145, y: 300 }, { x: 1180, y: 650 }],
+      pot: { x: 800, y: 410 }, stub: { x: 800, y: 400 }, muck: { x: 800, y: 400 },
+      hero: { left: 510, top: 606, cw: 108, ch: 150, spacing: 118 },
+      bot: { w: 58, h: 80, spacing: 28, rot: 0 }, chip: 40, banner: { x: 800, y: 520 }
+    };
+  }
   function landscapeGeo() {
-    const side = { cards: { x: 20, y: -86 }, pills: { x: 0, y: 64 }, bubble: { x: 0, y: -50 }, label: { x: 0, y: 106 } };
+    if (isRetro()) return retroLandscapeGeo();
+    if (isStars()) return starsLandscapeGeo();
+    const side = { cards: { x: 20, y: isRetro() ? -50 : -86 }, pills: { x: 0, y: 64 }, bubble: { x: 0, y: -50 }, label: { x: 0, y: 106 } };
     return {
       mode: 'landscape', W: 1600, H: 900,
       table: { x: 220, y: 162, w: 1160, h: 540 },
@@ -6708,7 +7276,28 @@ window.TD = window.TD || {};
   function portraitGeo(H) {
     const tTop = 158, tBot = H - 660, th = tBot - tTop, cy = tTop + th / 2;
     const yUp = Math.round(tTop + th * 0.30 + 22), yLo = Math.round(tTop + th * 0.70 + 6);
-    const side = { cards: { x: 0, y: -104 }, pills: { x: 0, y: 76 }, bubble: { x: 0, y: -58 }, label: { x: 0, y: 128 } };
+    const side = { cards: { x: 0, y: isRetro() ? -66 : -104 }, pills: { x: 0, y: 76 }, bubble: { x: 0, y: -58 }, label: { x: 0, y: 128 } };
+    if (isStars()) {
+      // Stars: the pictures face the table, the cards tuck behind the plates, the actions show on the name line
+      const r = { cards: { x: 16, y: -46 }, pills: { x: -30, y: 84 }, bubble: { x: -30, y: -22 }, label: { x: -30, y: 136 } };
+      const l = { cards: { x: -16, y: -46 }, pills: { x: 30, y: 84 }, bubble: { x: 30, y: -22 }, label: { x: 30, y: 136 } };
+      return {
+        mode: 'portrait', W: 900, H,
+        table: { x: 78, y: tTop, w: 744, h: th },
+        seats: [{ x: 265, y: H - 288 }, { x: 140, y: yLo }, { x: 140, y: yUp }, { x: 450, y: tTop + 62 }, { x: 760, y: yUp }, { x: 760, y: yLo }],
+        parts: [
+          { cards: null, pills: { x: 300, y: 0 }, bubble: { x: 36, y: -22 }, label: null },
+          r, r,
+          { cards: { x: 0, y: 182 }, pills: { x: -30, y: 76 }, bubble: { x: -30, y: -22 }, label: { x: 0, y: 258 } },
+          l, l
+        ],
+        bets: [{ x: 450, y: tBot - 36 }, { x: 375, y: yLo - 22 }, { x: 375, y: yUp + 84 }, { x: 450, y: tTop + 354 }, { x: 525, y: yUp + 84 }, { x: 525, y: yLo - 22 }],
+        dealer: [{ x: 470, y: H - 350 }, { x: 318, y: yLo + 60 }, { x: 318, y: yUp - 60 }, { x: 290, y: tTop + 62 }, { x: 582, y: yUp - 60 }, { x: 582, y: yLo + 60 }],
+        pot: { x: 450, y: Math.round(cy + 30) }, stub: { x: 450, y: Math.round(cy) }, muck: { x: 450, y: Math.round(cy) },
+        hero: { left: 40, top: H - 610, cw: 156, ch: 218, spacing: 166 },
+        bot: { w: 66, h: 92, spacing: 28, rot: 0 }, chip: 40, banner: { x: 450, y: Math.round(cy + 175) }
+      };
+    }
     return {
       mode: 'portrait', W: 900, H,
       table: { x: 78, y: tTop, w: 744, h: th },
@@ -6732,7 +7321,8 @@ window.TD = window.TD || {};
     'linear-gradient(135deg,#7a4b2a,#2a160c)', 'linear-gradient(135deg,#a33347,#3e0c18)', 'linear-gradient(135deg,#2f6f88,#0e2a36)',
     'linear-gradient(135deg,#8c7230,#2e240c)', 'linear-gradient(135deg,#5a3f99,#1c1236)', 'linear-gradient(135deg,#2f8a5c,#0c2e1e)'
   ];
-  const THEME_COLORS = { classic: '#160a08', light: '#e9edf2', dark: '#0b0d10' };
+  const THEME_COLORS = { classic: '#160a08', light: '#e9edf2', dark: '#0b0d10', retro: '#0a1530', stars: '#1d1c2a' };
+  const THEMES = ['classic', 'light', 'dark', 'retro', 'stars'];
 
   /* ---------------- sound ---------------- */
   const Sound = {
@@ -6779,11 +7369,28 @@ window.TD = window.TD || {};
     const rk = ch === 'T' ? '10' : ch;
     el.classList.add('face', 'su-' + s);
     el.dataset.card = c;
-    const corner = '<span class="rk">' + rk + '</span><svg><use href="#su-' + s + '"/></svg>';
+    const corner = '<span class="rk' + (rk === '10' ? ' t10' : '') + '">' + rk + '</span><svg><use href="#su-' + s + '"/></svg>';
     let center = '<svg class="pip"><use href="#su-' + s + '"/></svg>';
     if (r >= 11 && r <= 13) center = '<div class="face-frame"></div><div class="face-letter">' + ch + '</div>';
-    el.innerHTML = '<div class="cr">' + corner + '</div>' + center + '<div class="cr br">' + corner + '</div>';
+    el.innerHTML = '<div class="cr">' + corner + '</div>' + center + '<div class="cr br">' + corner + '</div>' + pipPanel(r, s, ch);
     return el;
+  }
+  // Stars (v108): the card's picture panel - the pips in their usual places, a court panel for J Q K
+  // (hidden in the other looks)
+  const PIP_AT = {
+    2: [[50, 12], [50, 88]], 3: [[50, 12], [50, 50], [50, 88]],
+    4: [[22, 12], [78, 12], [22, 88], [78, 88]], 5: [[22, 12], [78, 12], [50, 50], [22, 88], [78, 88]],
+    6: [[22, 12], [78, 12], [22, 50], [78, 50], [22, 88], [78, 88]],
+    7: [[22, 12], [78, 12], [50, 31], [22, 50], [78, 50], [22, 88], [78, 88]],
+    8: [[22, 12], [78, 12], [50, 31], [22, 50], [78, 50], [50, 69], [22, 88], [78, 88]],
+    9: [[22, 12], [78, 12], [22, 37], [78, 37], [50, 50], [22, 63], [78, 63], [22, 88], [78, 88]],
+    10: [[22, 12], [78, 12], [50, 24], [22, 37], [78, 37], [22, 63], [78, 63], [50, 76], [22, 88], [78, 88]]
+  };
+  function pipPanel(r, s, ch) {
+    const u = '<use href="#su-' + s + '"/>';
+    if (r >= 11 && r <= 13) return '<div class="pp court"><svg class="cs a">' + u + '</svg><div class="cl">' + ch + '</div><svg class="cs b">' + u + '</svg></div>';
+    if (r === 14 || !PIP_AT[r]) return '<div class="pp"><svg class="pa">' + u + '</svg></div>';
+    return '<div class="pp">' + PIP_AT[r].map((p) => '<svg class="pi' + (p[1] > 50 ? ' f' : '') + '" style="left:' + p[0] + '%;top:' + p[1] + '%">' + u + '</svg>').join('') + '</div>';
   }
   function miniCards(cards, dimSet) {
     if (!cards || !cards.length) return '';
@@ -6804,6 +7411,19 @@ window.TD = window.TD || {};
     const shown = cols.slice(0, 4);
     const cs = GEO.chip, step = Math.round(cs * 0.14);
     const maxH = Math.max(...shown.map((c) => c.n), 1);
+    if (isRetro() || isStars()) {
+      // Retro and Stars: chips seen from a low angle - an oval top with the denomination, the striped edge showing under it
+      const ch = Math.round(cs * 0.62), t = Math.max(3, Math.round(cs * 0.15));
+      const lab = (d) => (d >= 1000 ? d / 1000 + 'K' : String(d));
+      return '<div class="chipstack">' + shown.map((col) => {
+        let s = '<div class="chipcol" style="height:' + (ch + maxH * t) + 'px">';
+        for (let i = 0; i < col.n; i++) {
+          s += '<div class="chip c' + col.d + '" style="bottom:' + (i * t) + 'px;height:' + (ch + t) + 'px;--ch:' + ch + 'px">' +
+            (i === col.n - 1 ? '<i>' + lab(col.d) + '</i>' : '<i></i>') + '</div>';
+        }
+        return s + '</div>';
+      }).join('') + '</div>';
+    }
     return '<div class="chipstack">' + shown.map((col) => {
       let s = '<div class="chipcol" style="height:' + (cs + (maxH - 1) * step) + 'px">';
       for (let i = 0; i < col.n; i++) s += '<div class="chip c' + col.d + '" style="bottom:' + (i * step) + 'px"></div>';
@@ -6826,7 +7446,7 @@ window.TD = window.TD || {};
       this.settings.playSeats = Math.max(3, Math.min(6, Math.round(+this.settings.playSeats) || 6)); // regular play: players seated, you included
       if (this.settings.zoom !== false) this.settings.everySeat = false; // play every seat needs Zoom off
       if (!['rotate', 'fixed'].includes(this.settings.seatView)) this.settings.seatView = 'rotate';
-      if (!['classic', 'light', 'dark'].includes(this.settings.theme)) this.settings.theme = 'classic';
+      if (!THEMES.includes(this.settings.theme)) this.settings.theme = 'classic';
       this.settings.game = TD.GAME; // the game being played now
       this.settings.games = TD.pickedGames(this.settings); // the games the player picked (older saves: gameMode)
       this.settings.playGames = Array.isArray(this.settings.playGames) && this.settings.playGames.length ? TD.pickedGames({ games: this.settings.playGames }) : this.settings.games.slice();
@@ -6928,7 +7548,14 @@ window.TD = window.TD || {};
       const b = document.body;
       b.classList.toggle('four-color', !!this.settings.fourColor);
       b.classList.toggle('god-on', !!this.settings.godMode);
-      ['classic', 'light', 'dark'].forEach((t) => b.classList.toggle('theme-' + t, this.settings.theme === t));
+      THEMES.forEach((t) => b.classList.toggle('theme-' + t, this.settings.theme === t));
+      // the Retro theme moves the side seats' cards: lay the table out again when it is switched on or off
+      const rt = ['retro', 'stars'].includes(this.settings.theme) ? this.settings.theme : 'std'; // Stars has its own layout too
+      if (this._rt !== undefined && this._rt !== rt && this.mode && document.getElementById('seat-0')) {
+        GEO = this.mode === 'portrait' ? portraitGeo(this.H) : landscapeGeo();
+        this.relayout();
+      }
+      this._rt = rt;
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute('content', THEME_COLORS[this.settings.theme] || '#160a08');
       Sound.on = !!this.settings.sound;
@@ -6966,6 +7593,7 @@ window.TD = window.TD || {};
         const v = this.vpos(i);
         const s = $('#seat-' + i), a = g.seats[v], pr = g.parts[v];
         s.classList.toggle('hero', v === 0);
+        s.dataset.v = v;
         place(s, a.x, a.y);
         place(s.querySelector('.draws'), pr.pills.x, pr.pills.y);
         place(s.querySelector('.bubble'), pr.bubble.x, pr.bubble.y);
@@ -7013,7 +7641,7 @@ window.TD = window.TD || {};
         el.className = 'seat' + (this.vpos(i) === 0 ? ' hero' : '');
         el.id = 'seat-' + i;
         el.innerHTML = '<div class="cards"></div>' +
-          '<div class="plate"><div class="avatar"><span class="ini"></span><svg class="timer" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34"/></svg></div>' +
+          '<div class="plate"><div class="avatar"><span class="ini"></span><svg class="toon" viewBox="0 0 100 100"><use href="#toon-' + i + '"/></svg><svg class="timer" viewBox="0 0 72 72"><circle cx="36" cy="36" r="34"/></svg></div>' +
           '<div class="ptext"><div class="pname"></div><div class="pstack"></div></div><div class="pos"></div><div class="allin">ALL-IN</div></div>' +
           '<div class="draws"><i></i><i></i><i></i></div><div class="bubble"></div><div class="hand-label"></div>';
         el.querySelector('.avatar').style.setProperty('--av', AVATARS[i]);
@@ -7238,7 +7866,7 @@ window.TD = window.TD || {};
       const pot = $('#pot');
       pot.classList.toggle('empty', total === 0);
       pot.querySelector('.pot-chips').innerHTML = collected > 0 ? chipsHTML(collected) : '';
-      pot.querySelector('.pot-amt').textContent = 'Pot ' + money(total);
+      pot.querySelector('.pot-amt').textContent = (isRetro() ? 'Total Pot: ' : isStars() ? 'Pot: ' : 'Pot ') + money(total);
       const pg = pot.querySelector('.pot-game'); if (pg) pg.textContent = TD.IS_BD ? 'Badugi' : TD.gameInfo.short + ' Triple Draw'; // which game this hand is
       const left = game.stub ? game.stub.length : 0;
       pot.querySelector('.pot-tip').innerHTML = '<b>' + left + '</b> card' + (left === 1 ? '' : 's') + ' left in the stub';
@@ -8138,7 +8766,9 @@ window.TD = window.TD || {};
         '<div class="theme-pick">' +
         themeOpt('classic', 'Classic', 'linear-gradient(180deg,#3a1714,#120706)', '#7a1627', 'inherit') +
         themeOpt('light', 'Light', '#e9edf2', '#5c9b74', 'inherit') +
-        themeOpt('dark', 'Dark', '#0b0d10', '#171b21', 'inherit') + '</div>' +
+        themeOpt('dark', 'Dark', '#0b0d10', '#171b21', 'inherit') +
+        themeOpt('retro', 'FTP', 'linear-gradient(180deg,#0e1a44 0 42%,#b3121b 42% 100%)', 'radial-gradient(ellipse at 50% 40%,#2fb33f,#157a23)', 'inherit') +
+        themeOpt('stars', 'Stars', 'linear-gradient(180deg,#2b2e42,#1a1926)', 'radial-gradient(ellipse at 50% 40%,#13702e,#0e5a24)', 'inherit') + '</div>' +
         '<div class="setting"><div class="lbl">Four-colour deck<small>Blue diamonds, green clubs — easier to spot flushes</small></div>' + sw('fourColor', s.fourColor) + '</div>' +
         '<div class="set-group">Table</div>' +
         '<div class="setting"><div class="lbl">Games<small>' + (train
@@ -8208,7 +8838,10 @@ window.TD = window.TD || {};
         if (wasEvery !== isEvery && live()) this.toast(isEvery ? 'Play every seat starts with the next hand' : 'Play every seat ends after this hand');
       }));
       $$('.theme-opt', m).forEach((b) => (b.onclick = () => {
-        s.theme = b.dataset.theme; this.saveSettings();
+        s.theme = b.dataset.theme;
+        // Retro plays with the four-colour deck (green clubs, blue diamonds), as on the old online tables; the switch can turn it off
+        if ((s.theme === 'retro' || s.theme === 'stars') && !s.fourColor) { s.fourColor = true; const fc = m.querySelector('.switch[data-k="fourColor"]'); if (fc) fc.classList.add('on'); }
+        this.saveSettings();
         $$('.theme-opt', m).forEach((x) => x.classList.toggle('on', x === b));
       }));
       $$('#set-game button', m).forEach((b) => (b.onclick = () => { this.toggleGame(b.dataset.k); this.markGameButtons($$('#set-game button', m)); }));
