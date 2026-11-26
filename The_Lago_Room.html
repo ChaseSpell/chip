@@ -446,6 +446,7 @@ body.portrait #drawer { width: 100vw; border-left: none; }
 .cn-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
 .cn-line { font-size: 14px; margin: 2px 0; }
 .cn-why { font-size: 14px; margin-top: 3px; line-height: 1.45; }
+.cn-head .cn-bluff { margin: 0; vertical-align: 0; } .cn-bluffwhy { font-style: italic; }
 table.stats { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 table.stats th { text-align: right; font-weight: 700; color: var(--accent-hi); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; padding: 6px 4px; border-bottom: 2px solid var(--panel-line); }
 table.stats td { text-align: right; padding: 8px 4px; border-bottom: 1px solid var(--panel-line); }
@@ -2485,10 +2486,35 @@ window.TD = window.TD || {};
         why: res.samples[res.top] ? res.samples[res.top].reason : '',
         userWhy: ut !== res.top && res.samples[ut] ? res.samples[ut].reason : '',
         alt: alt && verdict === 'mixed' ? label(alt) : '', altWhy: alt && verdict === 'mixed' && res.samples[alt] ? res.samples[alt].reason : '',
-        eq: res.eq, potOdds: opts.toCall ? opts.toCall / (opts.pot + opts.toCall) : 0, toCall: opts.toCall
+        eq: res.eq, potOdds: opts.toCall ? opts.toCall / (opts.pot + opts.toCall) : 0, toCall: opts.toCall,
+        bluff: ut === 'raise' ? this.userBluffKind(p, res.eq) : ''
       });
       this.coachStats[verdict]++;
       TD.AI.coachCommit(p, res, ut);
+    }
+    // (Nov 26, his ask) A bet or raise after a draw with very little equity is named for what it is, whether or not
+    // the AI agrees with it: on the river a bluff, before the river a bluff that denies the other hands the chance to
+    // draw and realize their equity; when the bettor stood pat on the last draw, a snow.
+    // Before the river: equity against the ranges here under 60% of a fair share (30% heads-up, 20% three-way).
+    // On the river: the hand wins under half a fair share when called (25% heads-up) and isn't ahead of the range
+    // as a whole (under 50%), so the bet makes money only when better hands fold.
+    // Standing pat with a pair or worse (in Badugi, a three-card hand or worse) and betting is a snow whatever the equity.
+    userBluffKind(p, eq) {
+      if (this.street < 1) return '';
+      const nOpp = this.players.filter((o) => o !== p && !o.folded && !o.empty && !o.sitOut).length;
+      if (!nOpp) return '';
+      const fair = 1 / (nOpp + 1);
+      const mc = (o) => { try { return TD.AI.mcEquity(this, p, o); } catch (e) { return null; } };
+      if (eq === null || eq === undefined) eq = mc({ mode: 'bet' });
+      let low = false;
+      if (eq !== null) {
+        if (this.street < 3) low = eq < 0.6 * fair;
+        else if (eq < 0.5) { const ec = eq < 0.6 * fair * 0.5 ? eq : mc({ mode: 'bet', hypoCall: true }); low = ec !== null && ec < 0.5 * fair; }
+      }
+      const pat = p.draws.length > 0 && p.draws[p.draws.length - 1] === 0;
+      const junkPat = pat && TD.handName(p.hand).cat !== 0;
+      if (!low && !junkPat) return '';
+      return pat ? 'snow' : 'bluff';
     }
     coachNoteDraw(p, drawIdx, discardIdx, res, cmp) {
       if (!res || !cmp) return;
@@ -2807,6 +2833,20 @@ window.TD = window.TD || {};
   };
 
   TD.Game = Game;
+  // Review text for a user bet or raise the coach reads as a bluff or a snow (n: a coach note with n.bluff set)
+  TD.bluffNoteText = function (n) {
+    const act = n.user === 'bet' ? 'bet' : n.user === 'cap' ? 'cap' : 'raise';
+    const river = n.street === 3;
+    let t = n.bluff === 'snow'
+      ? 'Read as a snow: you stood pat with a hand that seldom wins a showdown when called, and your ' + act + ' represents a made hand. ' +
+        (river ? 'It makes money only when better hands fold.' : 'It works by getting the other hands to fold before they can realize their equity.')
+      : river ? 'Read as a bluff: better hands call this ' + act + ' and worse ones mostly fold, so it makes money only when better hands fold.'
+        : 'Read as a bluff: your hand has little equity right now, so your ' + act + ' works by getting the other hands to fold before they can realize their equity.';
+    if (n.verdict === 'agree') t += ' The AI makes the same play here.';
+    else if (n.verdict === 'mixed') t += ' The AI ' + (n.bluff === 'snow' ? 'snows' : 'bluffs') + ' here part of the time.';
+    else t += ' The AI would ' + n.ai + ' here instead (reasons below).';
+    return t;
+  };
   TD.CONST = { SB, BB, SMALL, BIG, CAP_BETS, BUYIN, STREET_NAMES, POS6, DEFAULT_STAKES };
   TD.makeStakes = makeStakes;
   TD.sleep = sleep;
@@ -3403,18 +3443,38 @@ window.TD = window.TD || {};
     };
   }
 
-  // Brian Rast's big blind mix (Chase, Nov 25): top third of the BB's one-card draws flat 10%, the rest 50%
-  function bbOneMix(sc, opts) {
-    const top = sc >= (A5 ? 94 : 90);
-    const flat = !opts.canRaise || R() < (top ? 0.1 : 0.5);
-    return { flat, why: 'Mixed (Brian Rast): from the big blind, the one-card draws I play are flat-called some of the time so a call doesn\'t announce a weak draw. ' + (top ? 'In the top third of them, this one flats 10% of the time and 3-bets 90%.' : 'Outside the top third of them, this one flats half the time and 3-bets half the time.') };
+  // a hand the bot plays as a one-card draw at the first draw (not one of the weak one-card draws it never draws one to there)
+  function oneCardPlan(info, mem) {
+    return info.kind === 'one' && mem.flexAgg !== false && !mem.snowPlan && !TD.weakFirstOne(info.mask);
   }
+  // Nov 26 (his hand #32, all three games): "all 1 card draws before the 1st draw should be raised and reraised".
+  // Whatever line picked a call or a check, a one-card draw that can still raise raises instead; and a hand that
+  // did just call or check (a two-card draw, or call-and-draw-two) doesn't then draw one at the first draw.
+  const ONE_RAISE = 'Every one-card draw I play before the first draw is raised and reraised, never just called, so a call doesn\'t give away a weak draw.';
   function predraw(game, p, opts) {
+    let r = predrawCore(game, p, opts);
+    const mem = p.bot;
+    if ((r.type === 'call' || r.type === 'check') && opts.canRaise && !mem.snowPlan) {
+      const info = TD.predrawInfo(p.hand);
+      if (oneCardPlan(info, mem)) {
+        const lvl = game.betLevel, d = describe(info);
+        const what = lvl <= 1 ? 'Raise' : lvl === 2 ? '3-bet' : lvl === 3 ? '4-bet' : 'Cap it';
+        mem.plan = { draw: 1 };
+        r = act('raise', what + ' with ' + d + ', planning to draw one. ' + ONE_RAISE, 'value');
+      }
+    }
+    if (r.type === 'raise' || r.type === 'bet') mem.flatPre = false;
+    else if ((r.type === 'call' || r.type === 'check') && opts.canRaise) mem.flatPre = true;
+    return r;
+  }
+  function predrawCore(game, p, opts) {
     const info = TD.predrawInfo(p.hand);
     const c = predrawCtx(game, p);
     const sc = info.score, pos = c.pos, mem = p.bot;
     if (mem.flexAgg === undefined) {
-      mem.flexAgg = info.style === 'flex-straight' ? R() < 0.65 : info.style === 'flex-eight' ? R() < 0.35 : null;
+      // flex-eight (an eight one-card draw with a premium two-card draw under it, like 8-4-3-2): always raise and
+      // draw one (Nov 26, his hand #32: "calling is never correct here"); flex-straight still mixes call-and-draw-two
+      mem.flexAgg = info.style === 'flex-straight' ? R() < 0.65 : info.style === 'flex-eight' ? true : null;
       if (mem.flexAgg === true) mem.plan = { draw: 1 };
       else if (mem.flexAgg === false) mem.plan = { draw: info.style === 'flex-straight' ? 2 : 2 };
     }
@@ -3429,8 +3489,6 @@ window.TD = window.TD || {};
     const core = info.two.mask ? mk(TD.maskStr(info.two.mask).split('-').reverse().join('-')) : '';
     let flatWhy;
     if (mem.flexAgg === false && info.style === 'flex-straight') flatWhy = d + ': chose to call and draw two this time — the raise-and-draw-1 vs call-and-draw-2 decision is mixed for balance (notes: it depends on opponent, position and number of players).';
-    else if (mem.flexAgg === false && info.style === 'flex-eight') flatWhy = d + ' with a premium ' + core + ' underneath: flat call and plan to draw two to ' + core + ' (mixed with raising and drawing one for balance).';
-    else if (info.kind === 'one') flatWhy = d + ': flat call (mixed).';
     else flatWhy = d + ' — ' + twoTierText(info.two.score || sc) + '. Notes: almost always flat call with two-card draws.';
     const lvl = c.level;
     // SS2 snowing: sporadically, when holding three of a key low card (three deuces, three sevens ...)
@@ -3451,7 +3509,7 @@ window.TD = window.TD || {};
     // ---------- unopened ----------
     if (lvl === 1) {
       if (pos === 'BB') {
-        if (agg && opts.canRaise) return act('raise', 'BB option with ' + d + ': raising — one-card draws/pat hands are raised to keep the range strong.', 'value');
+        if ((agg || oneCardPlan(info, mem)) && opts.canRaise) return act('raise', 'BB option with ' + d + ': raise. Every one-card draw I play before the first draw is raised and reraised, never just checked or called, so a check doesn\'t give away a weak draw.', 'value');
         return act('check', 'BB option: check with ' + d + '.');
       }
       if (c.limpers.length === 0) {
@@ -3504,9 +3562,8 @@ window.TD = window.TD || {};
         if (c.openerPos === 'SB' && c.opps === 1) {
           const s48 = anteShift(game, 'BB', 48);
           if (info.kind === 'one' && mem.flexAgg !== false && (agg || sc >= 48 + s48)) {
-            const mix = bbOneMix(sc, opts);
-            if (mix.flat) { mem.rastFlat = true; return act('call', 'Blind vs blind with ' + d + ': flat-call and draw one. ' + mix.why, 'balance'); }
-            return act('raise', 'Blind vs blind with ' + d + ': 3-bet and draw one. ' + mix.why, 'value');
+            if (opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet and draw one. Every one-card draw I play before the first draw is raised and reraised, never flat-called, so a call doesn\'t announce a weak draw.', 'value');
+            return act('call', 'Blind vs blind with ' + d + ': call and draw one (no raise left).');
           }
           if (agg && opts.canRaise) return act('raise', 'Blind vs blind with ' + d + ': 3-bet — Notes: when continuing with a one-card draw facing an open, always 3-bet rather than flat.', 'value');
           if (sc >= 48 + s48) return act('call', 'BB vs SB heads-up with ' + d + '. Notes: call one more bet with anything remotely playable (even a 3-card draw to 3-4) — position plus 3-to-1 odds.' + (sc < 48 ? anteNote(game, 'BB', s48) : ''));
@@ -3520,15 +3577,11 @@ window.TD = window.TD || {};
         const sB = anteShift(game, 'BB', openRef('BTN'));
         const inBB = inRange(info, 'BTN', sB), inBBStd = inRange(info, 'BTN', 0);
         const bbNote = inBB !== inBBStd ? anteNote(game, 'BB', sB) : '';
-        // Chase (Nov 25), from Brian Rast: from the big blind, the one-card draws it plays mix flat-calling in, so a
-        // call doesn't announce a weak draw: the top third of them (2-7 score 90+, A-5 94+: about a third of the
-        // one-card draws in the BB defence range) flat 10% of the time and 3-bet 90%; the rest flat half the time
+        // Nov 26 (his hand #32): "calling is never correct here ... for all three games, all 1 card draws before the
+        // 1st draw should be raised and reraised". The Brian Rast big-blind flat-call mix (v91-v92) is gone: from the
+        // big blind every one-card draw it plays 3-bets the open.
         const oneBB = info.kind === 'one' && mem.flexAgg !== false && (agg || inBB);
-        if (oneBB) {
-          const mix = bbOneMix(sc, opts);
-          if (mix.flat) { mem.rastFlat = true; return act('call', 'BB vs the ' + c.openerPos + ' open with ' + d + ': flat-call and draw one. ' + mix.why, 'balance'); }
-          return act('raise', 'BB vs the ' + c.openerPos + ' open with ' + d + ': 3-bet and draw one. ' + mix.why + bbNote, 'value');
-        }
+        if (oneBB && opts.canRaise) return act('raise', 'BB vs the ' + c.openerPos + ' open with ' + d + ': 3-bet and draw one. Every one-card draw I play before the first draw is raised and reraised, never flat-called: a flat call would tell him the draw is a weak one.' + bbNote, 'value');
         if ((agg || (oneOrPat && inBB)) && opts.canRaise) return act('raise', 'BB with ' + d + ': 3-bet. ' + (agg ? aggWhy : 'MMG: from the blinds, 3-bet the one-card draws and pat hands you play rather than flat-calling them.') + bbNote, 'value');
         // SS2: with a really strong draw in the BB against a late-position raiser, punish him by reraising — kept
         // as a minority play: MMG and the notes mostly flat two-card draws (ToP ch. 4: more often with big antes)
@@ -3823,6 +3876,14 @@ window.TD = window.TD || {};
     // first draw: no one-card draws to a nine or worse (2-7, Chase's rule); A-5 (SS2): none to a seven or worse.
     // With three draws to come, a two-card draw makes a better hand than that too often.
     let firstNote = '';
+    // a hand that only called or checked before the first draw (with a raise still possible) doesn't draw one now:
+    // every one-card draw it plays is raised and reraised predraw, so the call and the draw agree
+    if (k === 0 && mem.flatPre && !mem.snow && cands.some((c) => c.n === 1) && cands.some((c) => c.n !== 1)) {
+      const one = cands.find((c) => c.n === 1);
+      const wasPick = one === cands[0];
+      cands = cands.filter((c) => c.n !== 1);
+      if (wasPick) firstNote = ' Not drawing one to ' + hstr(one.keep) + ': I only called before the draw, and every one-card draw I play is raised and reraised there, so this hand plays as the two-card draw it called with.';
+    }
     if (k === 0 && cands.some((c) => c.n >= 2)) {
       const weak = cands.filter((c) => c.n === 1 && TD.weakFirstOne(c.mask));
       // Chase (Nov 23): a deuce-less seven draw with a six (7-6-5-3, 7-6-4-3, 7-6-5-4) mixes. Keep the six and
@@ -3974,7 +4035,7 @@ window.TD = window.TD || {};
       if (planned && (mem.plan.opened || planned.val >= cands[0].val * 0.78)) {
         choice = planned;
         if (mem.plan.opened) firstNote = '';
-        reason = 'Draw ' + planned.n + ' to ' + hstr(planned.keep) + (mem.plan.opened ? ', as planned when I opened it: a three-card draw raised to steal the blinds draws three.' : ' as planned predraw (' + (planned.n === 1 ? (mem.rastFlat ? 'flat-called from the big blind and drawing one' : 'raised and drawing one') : 'flat-called and drawing two') + ').');
+        reason = 'Draw ' + planned.n + ' to ' + hstr(planned.keep) + (mem.plan.opened ? ', as planned when I opened it: a three-card draw raised to steal the blinds draws three.' : ' as planned predraw (' + (planned.n === 1 ? 'raised and drawing one' : 'flat-called and drawing two') + ').');
       }
     }
 
@@ -5668,7 +5729,6 @@ window.TD = window.TD || {};
   // paired deals each, big bets per hand vs folding, drawing one) gave 7-4-2 call +0.24 / 3-bet -0.01, 7-5-3 +0.11 /
   // +0.01, 7-6-5 +0.06 / -0.09, 8-4-A +0.10 / -0.18, 8-6-4 -0.02 / -0.24, 8-4-2 -0.26 / -0.27, 9-4-A -0.16 / -0.51,
   // 9-6-A -0.30 / -0.56. The calls are marginal, so these hands fold.
-  const bbTopDraw = (i) => i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('2'));
   function threeBetRange(i, opPos, myPos) {
     const late = LATE.includes(opPos);
     if (i.kind === 'pat') return i.t <= (late ? lv('K') : lv('Q'));
@@ -5746,10 +5806,10 @@ window.TD = window.TD || {};
     const late = LATE.includes(model.opener);
     switch (model.key) {
       case 'open': return rfi(i, model.pos) ? 1 : rfi(i, LOOSER[model.pos] || 'BTN') ? (h ? 0.8 : 0.3) : out;
-      case '3bet': return threeBetRange(i, 'BTN') ? 1 : (model.pos === 'BB' && i.kind === 'three' && !i.broken && i.t <= lv('7')) ? 0.5 : (h && callThreeBetRange(i, 1, true)) ? 0.5 : out;
+      case '3bet': return threeBetRange(i, 'BTN') ? 1 : (model.pos === 'BB' && i.kind === 'three' && !i.broken && i.t <= lv('7')) ? (['LJ', 'HJ'].includes(model.opener) ? 0.5 : 1) : (h && callThreeBetRange(i, 1, true)) ? 0.5 : out;
       case '4bet': return fourBetRange(i) ? 1 : threeBetRange(i, 'BTN') ? 0.25 : out;
       case 'call': return coldCallRange(i, model.opener || 'CO') ? (threeBetRange(i, model.opener) ? 0.25 : 1) : h && bbDefendRange(i, 'BTN') ? 0.6 : out;
-      case 'bbdefend': if (i.kind === 'three' && !i.broken && i.t <= lv('7')) return bbTopDraw(i) ? 0.1 : 0.5;
+      case 'bbdefend': if (i.kind === 'three' && !i.broken && i.t <= lv('7')) return ['LJ', 'HJ'].includes(model.opener) ? (bbTopDraw(i) ? 0.1 : 0.5) : h ? 0.3 : out; // Rast mix vs early opens only (Nov 26)
         return bbDefendRange(i, model.opener || 'BTN') ? (threeBetRange(i, model.opener) ? 0.3 : 1) : out * 1.5;
       case 'call3': return callThreeBetRange(i, 1, late) ? (fourBetRange(i) ? 0.35 : 1) : (model.opener === model.pos && OPENER_DEF.includes(model.pos) && rfi(i, model.pos)) ? 1 : (i.kind === 'two' && model.opener === model.pos && rfi(i, model.pos)) ? 0.7 : h && bbDefendRange(i, 'BTN') ? 0.4 : out; // Chase (Nov 22): two-card openers continue vs a 3-bet, all of them in position
       case 'limp': return rfi(i, 'BTN') ? 0.6 : 0.25;
@@ -6139,7 +6199,29 @@ window.TD = window.TD || {};
     return clamp((userPosterior(game).stealFold - 0.55) * 2, 0, 0.6); // chance to open one notch wider
   }
   const lvSortAscCards = (cs) => cs.slice().sort((x, y) => TD.rankOf(x) - TD.rankOf(y));
+  // Nov 26 (his hand #32, all three games): "all 1 card draws before the 1st draw should be raised and reraised".
+  // Whatever line picked a call or a check, a three-card hand that would draw one at the first draw raises instead
+  // (and then draws one, as planned); a three-card hand that did just call or check draws two at the first draw.
+  const ONE_RAISE = 'Every one-card draw I play before the first draw is raised and reraised, never just called, so a call doesn\'t give away a weak draw.';
   function predraw(game, p, opts) {
+    let r = predrawCore(game, p, opts);
+    const mem = p.bot, i = infoOf(p.hand);
+    if ((r.type === 'call' || r.type === 'check') && opts.canRaise && i.kind === 'three' && !mem.snow && !mem.rastFlat) {
+      if (!mem.drawTwoFirst && (mem.keepTri || i.t <= lv('6'))) {
+        const lvl = game.betLevel, what = lvl <= 1 ? 'Raise' : lvl === 2 ? '3-bet' : lvl === 3 ? '4-bet' : 'Cap it';
+        mem.keepTri = keyOf(i.keep);
+        mem.keepTriWhy = 'as planned when I raised before the first draw.';
+        r = act('raise', what + ' with ' + describe(Object.assign({}, i, { breakTo: null })) + ', planning to draw one. ' + ONE_RAISE, 'value');
+      } else {
+        mem.keepTri = null; mem.keepTriWhy = null;
+        mem.drawTwoFirst = true; // only called: draw two at the first draw, not one
+      }
+    }
+    return r;
+  }
+  const EARLY_OPEN = ['LJ', 'HJ']; // Badugi: the big blind's Rast flat-call mix applies against these opens only
+  const bbTopDraw = (i) => i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('2'));
+  function predrawCore(game, p, opts) {
     const i = infoOf(p.hand);
     const c = predrawCtx(game, p);
     const pos = c.pos, d = describe(i), mem = p.bot;
@@ -6191,20 +6273,28 @@ window.TD = window.TD || {};
         if (R() < kr) return act('raise', '3-bet the ' + op + ' raise from ' + where + ' with ' + d + ', planning to stand pat. ' + unbr + (kr >= 0.999 ? vsWhat : vsWhat + ' it mixes: 3-bet ' + Math.round(kr * 100) + '% of the time, fold the rest.'), 'value');
         return act('fold', 'Fold ' + d + ' from ' + where + ' to the ' + op + ' raise. ' + unbr + vsWhat + (kr <= 0.001 ? ' it folds.' : ' it mixes: fold ' + Math.round((1 - kr) * 100) + '% of the time, 3-bet the rest.'));
       }
-      // Chase (Nov 25), from Brian Rast: from the big blind, the one-card draws it plays (three-card sevens and better)
-      // mix flat-calling in, so a call doesn't announce a weak draw: the top third of them (fives and better, and
-      // 6-2-A) flat 10% of the time and 3-bet 90%; the rest flat and 3-bet half the time each. Either way it draws one.
+      // The one-card draws the big blind plays (three-card sevens and better) 3-bet the open and draw one.
+      // Nov 26 (his words): one-card draws are raised and reraised before the first draw in all three games, but in
+      // Badugi the big blind keeps Brian Rast's flat-call mix against an early-position open (LJ, HJ): "since there
+      // are only 4 cards to a hand, and early position raisers dont have two card draws in their range", the
+      // strongest one-card draws (fives and better, and 6-2-A) flat 10% and 3-bet 90%, the rest flat half the time.
+      // Against later opens they always 3-bet.
       if (pos === 'BB' && opts.canRaise && i.kind === 'three' && !i.broken && i.t <= lv('7') && bbDefendRange(i, op, multi)) {
-        const top = bbTopDraw(i), fr = top ? 0.1 : 0.5;
         const dd = describe(Object.assign({}, i, { breakTo: null }));
-        const mixWhy = 'Mixed (Brian Rast): from the big blind, the one-card draws I play are flat-called some of the time so a call doesn\'t announce a weak draw. ' + (top ? 'In the top third of them, this one flats 10% of the time and 3-bets 90%.' : 'Outside the top third of them, this one flats half the time and 3-bets half the time.');
         mem.keepTri = keyOf(i.keep);
-        if (R() < fr) {
-          mem.keepTriWhy = 'as planned when I flat-called from the big blind.';
-          return act('call', 'Flat-call the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'balance');
+        if (EARLY_OPEN.includes(op)) {
+          const top = bbTopDraw(i), fr = top ? 0.1 : 0.5;
+          const mixWhy = 'Mixed (Brian Rast): against an early-position open, which holds no two-card draws in Badugi, the big blind flat-calls some of its one-card draws so a call doesn\'t announce a weak draw. ' + (top ? 'In the strongest third of them, this one flats 10% of the time and 3-bets 90%.' : 'Outside the strongest third of them, this one flats half the time and 3-bets half the time.');
+          if (R() < fr) {
+            mem.rastFlat = true;
+            mem.keepTriWhy = 'as planned when I flat-called from the big blind.';
+            return act('call', 'Flat-call the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'balance');
+          }
+          mem.keepTriWhy = 'as planned when I 3-bet from the big blind.';
+          return act('raise', '3-bet the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'value');
         }
         mem.keepTriWhy = 'as planned when I 3-bet from the big blind.';
-        return act('raise', '3-bet the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + mixWhy, 'value');
+        return act('raise', '3-bet the ' + op + ' raise from the big blind with ' + dd + ', planning to draw one. ' + ONE_RAISE, 'value');
       }
       if (opts.canRaise && threeBetRange(i, op) && !(multi && i.kind === 'pat' && i.t >= lv('K'))) {
         return act('raise', '3-bet the ' + op + ' raise with ' + d + (i.kind === 'pat' ? ' — Mastering Mixed Games: pat badugis never cold-call; 3-bet them, all the same way.' : i.broken ? ' — Mastering Mixed Games: a great one-card draw is worth more than the rough badugi, so 3-bet to get it heads-up and break it.' : ' — a strong one-card draw: 3-bet to push equity and get heads-up (Mastering Mixed Games; Notes: 3-bet rather than flat a one-card draw).'), 'value');
@@ -6446,6 +6536,9 @@ window.TD = window.TD || {};
     const ip = isIP(game, p, opps);
     const hn = TD.handName(hand);
     let cands = badugiKeeps(game, p, TD.keepOptions(hand, d, p.discards));
+    // a three-card hand that only called (or checked) before the first draw draws two now: every one-card draw it
+    // plays is raised and reraised predraw, so the call and the draw agree (Nov 26, his hand #32)
+    if (k === 0 && mem.drawTwoFirst && !mem.snow && !mem.keepTri && !mem.breakFirst && cands.some((x) => x.n >= 2)) cands = cands.filter((x) => x.n !== 1);
     const drewThis = opps.filter((o) => o.draws.length > k).map((o) => o.draws[k]);
     const oppPat = opps.some((o) => (o.draws.length > k ? o.draws[k] : o.draws[k - 1]) === 0 && o.draws.length > 0);
     const desc = (cd) => (cd.n === 0 ? 'stand pat with ' + hn.short : cd.keep.length ? 'draw ' + cd.n + ' to ' + hstr(cd.keep) : 'draw four');
@@ -7163,7 +7256,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 110;
+  TD.VERSION = 112;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -8666,7 +8759,8 @@ window.TD = window.TD || {};
         const vb = n.verdict === 'agree' ? '<span class="vb agree">✓ Same as AI</span>' : n.verdict === 'mixed' ? '<span class="vb mixed">≈ ' + (n.phase === 'draw' ? 'Close' : 'AI mixes') + '</span>' : '<span class="vb differs">✗ AI differs</span>';
         const pl = every && n.seat !== undefined ? h.players[n.seat] : null;
         const as = pl ? (pl.isHuman ? 'You' : escapeHTML(pl.name)) + ' (' + pl.pos + ')' : '';
-        let body = '<div class="cn-head"><span class="st">' + streetName(n) + '</span>' + (as ? '<b class="cn-seat">' + as + '</b>' : '') + vb + '</div>';
+        const bk = n.bluff ? '<span class="tagb ' + n.bluff + ' cn-bluff">' + (n.bluff === 'snow' ? 'Snow' : n.street === 3 ? 'Bluff' : 'Bluff · denial') + '</span>' : '';
+        let body = '<div class="cn-head"><span class="st">' + streetName(n) + '</span>' + (as ? '<b class="cn-seat">' + as + '</b>' : '') + vb + bk + '</div>';
         body += '<div class="cn-line">You' + (pl && !pl.isHuman ? ' as ' + escapeHTML(pl.name) : '') + ': <b>' + escapeHTML(n.user) + '</b> &nbsp;·&nbsp; AI: <b>' + escapeHTML(n.ai) + '</b>' + (n.dist && n.verdict !== 'agree' ? ' <span class="muted">(' + escapeHTML(n.dist) + ')</span>' : '') + '</div>';
         // no simulated equity percentages here; only the comparison and exact arithmetic (the price of a call)
         if (n.phase === 'draw' && n.eqAI !== undefined && n.verdict !== 'agree') {
@@ -8676,6 +8770,7 @@ window.TD = window.TD || {};
           const pot = n.toCall / n.potOdds - n.toCall;
           body += '<div class="cn-line muted">The price: ' + money(n.toCall) + ' to call into a ' + money(pot) + ' pot — getting ' + (pot / n.toCall).toFixed(1) + '-to-1, so a call needs ' + Math.round(n.potOdds * 100) + '% to break even.</div>';
         }
+        if (n.bluff) body += '<div class="cn-why cn-bluffwhy">' + escapeHTML(TD.bluffNoteText(n)) + '</div>';
         if (n.verdict === 'agree') body += '<div class="cn-why muted">' + escapeHTML(n.why) + '</div>';
         else {
           body += '<div class="cn-why"><b>Why the AI would ' + escapeHTML(n.ai) + ':</b> ' + escapeHTML(n.why) + '</div>';
