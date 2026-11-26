@@ -1589,9 +1589,18 @@ window.TD = window.TD || {};
   // straight draw too (7-6-5-3: only a deuce makes a good seven, a four makes a straight). It's a weak draw:
   // on the first draw, draw two to the three-card hand under it (7-5-3) instead, hoping to catch a deuce.
   const DEUCELESS_ONE = A5 ? [] : ['3457', '3467', '3567', '4567', '3456'].map(levelMask);
+  // Nov 26 (2-7 hand #11, 8-7-4-2 on the first draw): an 8-7 one-card draw is rough. On the first draw throw the eight
+  // and draw two to the seven under it (7-4-2): SS2 "you want to play strong hands that can make the nuts... if you are
+  // drawing rough, you'll often be drawing to a loser"; throwing the eight keeps hands better than 8-7 possible along the
+  // way (reduction), and 7-4-2 has robust equity and implied odds, where the 8-7 draw out of position has reverse implied
+  // odds on later streets. Smoother eights (8-6, 8-5, 8-4 like 8-4-3-2) still draw one; on the 2nd and 3rd draws the
+  // 8-7 draw is allowed again. A-5's analog (7-5-3-A: throw the seven) is the rule above: no seven draws at the first.
+  const SEVEN_BIT = 1 << 5, EIGHT_BIT = 1 << 6;
+  const roughEightOne = (m) => !A5 && (m & EIGHT_BIT) && (m & SEVEN_BIT) && 31 - Math.clz32(m) + 2 === 8;
   function weakFirstOne(m) {
     if (POP[m] !== 4) return false;
     if (DEUCELESS_ONE.includes(m)) return true;
+    if (roughEightOne(m)) return true;
     return 31 - Math.clz32(m) + 2 >= (A5 ? 8 : 9);
   }
   // Never draw to a jack low or worse in 2-7, on any draw round, and never to a ten low or worse in A-5 (Nov 26, from a
@@ -1810,6 +1819,14 @@ window.TD = window.TD || {};
     for (let sub = (m - 1) & m; sub > 0; sub = (sub - 1) & m) if (POP[sub] >= 2 && POP[sub] <= 3) best = Math.max(best, PSCORE[sub]);
     if (PSCORE[m] >= best) PSCORE[m] = Math.max(1, best - 1);
   }
+  // Nov 26: an 8-7 one-card draw draws two at the first draw (weakFirstOne), so predraw it plays as the two-card draw
+  // under it (8-7-4-2 is a 7-4-2 two-card draw): flat-called like any two-card draw, not raised as a one-card draw
+  if (!A5) for (let m = 1; m < 8192; m++) {
+    if (POP[m] !== 4 || !roughEightOne(m)) continue;
+    let best3 = 0;
+    for (let b = 0; b < 13; b++) if (m & (1 << b)) best3 = Math.max(best3, PSCORE[m ^ (1 << b)]);
+    if (PSCORE[m] >= best3) PSCORE[m] = Math.max(1, best3 - 1);
+  }
   /* A-5 predraw scores: Super System 2's A-5 section (notes/a5-ss2-notes.md, sent by the user
      2026-11-19), written on the same score scale as the 2-7 notes so the position ranges carry over.
      - One-card draws, strongest first: A-2-3-4 ... 2-3-5-6. No one-card draws to a seven: with
@@ -1846,6 +1863,14 @@ window.TD = window.TD || {};
       ['A25', 82], ['235', 81], ['A45', 80], ['245', 79], ['345', 78], ['A26', 77], ['A36', 76], ['236', 75],
       ['A46', 74], ['246', 73], ['346', 72], ['A56', 71], ['256', 70], ['356', 64], ['456', 58]], 2);
     ss2([['A2', 58], ['A3', 57], ['23', 56]], 3);
+    // every seven draw scores below the two-card draw under it, so predraw it is that two-card draw (Nov 26: 7-5-3-A was
+    // the one exception, read as a one-card draw over A-3-5; it draws two to 5-3-A at the first draw, so it plays as one)
+    for (let m = 1; m < 8192; m++) {
+      if (POP[m] !== 4 || !weakFirstOne(m)) continue;
+      let best3 = 0;
+      for (let b = 0; b < 13; b++) if (m & (1 << b)) best3 = Math.max(best3, PSCORE[m ^ (1 << b)]);
+      if (PSCORE[m] >= best3) PSCORE[m] = Math.max(1, best3 - 1);
+    }
   }
   // best pattern among sub-masks of each mask
   const PBEST = new Int8Array(8192), PBESTARG = new Int16Array(8192);
@@ -4031,7 +4056,10 @@ window.TD = window.TD || {};
         if (contender) {
           const top = Math.max(...contender.keep.map(TD.rankOf));
           if (!A5 && top <= 7) { const twos = cands.filter((c) => c.n === 2); if (twos.length) cands = twos; } // deuce-less seven: draw two (Chase)
+          if (!A5 && top === 8 && cands.some((c) => c.n === 2)) cands = cands.filter((c) => c.n === 2 || c.n === 0); // an 8-7: throw the eight, draw two
+          const twoKeep = !A5 && top === 8 && cands.find((c) => c.n === 2);
           firstNote = A5 ? mk(' SS2: no one-card draws to a seven or worse on the first draw (with A-2-3-7, draw two to A-2-3), so not drawing one to ') + hstr(contender.keep) + mk('.')
+            : top === 8 ? ' Not drawing one to ' + hstr(contender.keep) + ': on the first draw an 8-7 draw is too rough, so throw the eight and draw two' + (twoKeep ? ' to ' + hstr(twoKeep.keep) : '') + '. SS2: play hands that can make the nuts. Drawing smooth makes smooth hands, while drawing rough often draws to a loser. Throwing the eight keeps hands better than 8-7 possible along the way, and the smooth two-card draw has robust equity and implied odds (it can make the best sevens), where the 8-7 draw has reverse implied odds on the later draws, above all out of position. On the 2nd draw drawing one to an 8-7 can be right.'
             : top <= 7 ? ' Not drawing one to ' + hstr(contender.keep) + ': with no deuce it is a weak draw. Only a deuce makes a good seven, and the missing card makes a straight. SS2: the deuce is the key card, and most hands you play should contain one. So draw two, hoping to catch a deuce or make a hand worth patting.'
             : ' Not drawing one to ' + hstr(contender.keep) + ': on the first draw, drawing one to a ' + (top === 9 ? 'nine is a marginal play at best' : TD.RANK_WORD[top].toLowerCase() + ' is never right') + '. With three draws to come, the two-card draw ends up with a better hand too often.';
         }
@@ -7449,7 +7477,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 115;
+  TD.VERSION = 116;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
