@@ -4603,6 +4603,9 @@ window.TD = window.TD || {};
     if (!r && c.opp && c.toCall === 0 && st <= 2 && c.myLast > 0 && c.oppLast === c.myLast && c.drawing && !c.improved) {
       r = act('check', 'Equal draws and I didn\'t improve: check' + (c.ip ? ' back' : '') + ' (drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) + '). Standard play is to check unimproved after an even draw, in or out of position' + (c.ip ? '' : ', even with the betting lead') + '. MMG: unimproved, you are barely ahead at best, and ' + (c.ip ? 'getting check-raised would be a disaster.' : 'if he improved a bet gets raised.'), 'standard');
     }
+    // Nov 26 (hand #23), multiway before the last draw: the player who closes the action bets every time it's checked
+    // to when it drew no more cards than anyone and fewer than someone, so a player in front of it can check
+    if (!r) r = closerBet(c) || checkToCloser(c) || closerAnswer(c);
     if (!r) {
       if (st === 1) r = flopRules(c);
       else if (st === 2) r = turnRules(c);
@@ -4679,6 +4682,56 @@ window.TD = window.TD || {};
     return act('check', 'I called ' + what + ' after the ' + after + ' draw and then we both stood pat: check to the player in position — the standard play. ' +
       (his === 'raise' ? 'Raising and then standing pat behind my pat hand represents a strong made hand, so ' + (nut ? 'with ' + mk(c.hn.short) + ' I check intending to check-raise.' : 'a hand like ' + mk(c.hn.short) + ' is too weak to lead for value into that range.')
         : (nut ? 'With ' + mk(c.hn.short) + ' I check intending to check-raise.' : 'Leading into his pat range with ' + mk(c.hn.short) + ' only gets called by better.')), 'standard');
+  }
+
+  // Nov 26 (his 2-7 hand #23: SB drew two, BB drew four, BTN drew two; Review wanted the SB to bet). Multiway, before the
+  // last draw, the player who closes the action and drew no more cards than anyone, and fewer than someone, bets every
+  // time it's checked to: checking behind would give the player drawing more a free draw. So the players in front of it
+  // can check, tied with it in cards drawn, without that free draw ever happening. Same in all three games (Badugi: the
+  // closer drew one, since an unimproved two-card draw there takes the free card).
+  const whoTxt = (o) => (o.isHuman ? 'you' : o.name);
+  const capTxt = (s) => s[0].toUpperCase() + s.slice(1);
+  function sureCloser(game, p, st, maxK) {
+    const opps = opponentsOf(game, p);
+    const after = opps.filter((q) => game.actOrder(q.seat) > game.actOrder(p.seat));
+    if (opps.length < 2 || !after.length) return null;
+    const closer = after.reduce((a, b) => (game.actOrder(b.seat) > game.actOrder(a.seat) ? b : a));
+    const k = closer.draws[st - 1];
+    if (closer.allIn || k == null || k > maxK) return null;
+    const others = game.activePlayers().filter((q) => q !== closer);
+    if (!others.every((q) => q.draws[st - 1] >= k)) return null;
+    const more = others.filter((q) => q !== p && !q.allIn && q.draws[st - 1] > k);
+    return more.length ? { closer, k, more } : null;
+  }
+  const moreTxt = (more, st) => more.map((q) => whoTxt(q) + ' (drew ' + q.draws[st - 1] + ')').join(' and ');
+  function checkToCloser(c) {
+    if (c.toCall > 0 || c.dRem < 1 || c.N < 2 || c.ip || c.cardAhead || c.p.bot.snow || c.myLast == null) return null;
+    // tied with the closer in cards drawn; a player behind who drew fewer has the betting lead (flopRules' MMG check)
+    const sc = sureCloser(c.game, c.p, c.st, 2);
+    if (!sc || sc.k !== c.myLast) return null;
+    c.p.bot.sureCloser = c.st;
+    return act('check', 'Check, ' + (c.drawing ? 'drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) : mk(c.hn.short)) + '. ' + capTxt(whoTxt(sc.closer)) + (sc.closer.isHuman ? ' close' : ' closes') + ' the action and drew ' + sc.k + ', the same as me, a card ahead of ' + moreTxt(sc.more, c.st) +
+      ': checked to, the closer bets every time rather than give the bigger draw a free draw. So my check gives no free draw, and I don\'t have to build the pot out of position with a draw that is only even with the closer.', 'standard');
+  }
+  function closerBet(c) {
+    if (c.toCall > 0 || c.dRem < 1 || c.N < 2 || !c.ip || c.cardAhead || c.p.bot.snow || c.allInOpp || c.myLast == null || c.myLast > 2 || c.nextDraw > 2) return null;
+    if (!c.oppsLast.every((n) => n >= c.myLast)) return null;
+    const more = c.opps.filter((q) => q.draws[c.st - 1] > c.myLast);
+    if (!more.length) return null;
+    return act('bet', 'Bet, ' + (c.drawing ? 'drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) : mk(c.hn.short)) + '. It was checked to me, last to act, and I drew ' + c.myLast + ', a card ahead of ' + moreTxt(more, c.st) +
+      ': checking behind would give the bigger draw a free draw, so the player who closes the action bets every time here.', 'card-ahead');
+  }
+  // after checking to the sure bettor, facing its bet. Sims (tests/multiway_check_sim.js, 660 paired deals over four
+  // hands in 2-7 and A-5, Nov 26): leading, check-calling and check-raising came out within noise of each other (check
+  // minus bet -0.06 to +0.01 big bets, check-raise minus check-call -0.32 to +0.73, each about 0.13 to 0.4 standard
+  // error). So the check stands, the main answer is the usual call-or-fold, and a quarter of the draws check-raise so
+  // the closer's automatic bet always risks a raise (the raise also makes the bigger draw call two bets cold).
+  const CLOSER_CR = 0.25;
+  function closerAnswer(c) {
+    if (c.p.bot.sureCloser !== c.st || c.toCall === 0 || c.lvl !== 1 || !c.canRaise || c.allInOpp) return null;
+    if (!(c.drawing && c.nextDraw <= 2) || R() >= CLOSER_CR) return null;
+    const left = c.opps.filter((q) => !q.allIn && q.roundBet < c.game.currentBet);
+    return act('raise', 'Check-raise, drawing ' + c.nextDraw + ' to ' + hstr(c.keepNow) + '. I checked to the closer, who bets every hand here, so the bet says little about its hand; a check-raise now and then (about ' + Math.round(CLOSER_CR * 100) + '% of the time, otherwise I just call) keeps that automatic bet honest' + (left.length ? ' and makes ' + moreTxt(left, c.st).replace(/ \(drew \d\)/g, '') + ' call two bets cold to keep drawing' : '') + '. Simulated, checking and then calling or check-raising come out about even.', 'check-raise');
   }
 
   // re-raise discipline: 3-bets and beyond need a near-nut hand
@@ -5276,10 +5329,10 @@ window.TD = window.TD || {};
       const binds = m && m.applies;
       const why = binds ? mdfHead(c, m) + ' A made eight belongs to the part of my range that defends.'
         : (m && m.kind === 'none' ? 'MDF doesn\'t bind against a bettor with position and the stronger range (' + m.edge.why + '), but the price does: ' : 'The price: ') + priceTxt(c) + '.';
-      // he raised last street, I called and stood pat first, and he stood pat behind me:
-      // that line is polarized — strong made hands or snows (a breakable hand would have drawn)
+      // he raised last street and I called; then we both stood pat. The order of the pats depends on position
+      // (Nov 26, hand #36): in position he stood pat first, out of position he stood pat behind me.
       if (c.opp && c.st === 3 && calledHimLastStreet(c) === 'raise') {
-        return act('call', 'Both pat and he bets: call with ' + mk(hn.short) + '. His range is polarized — he raised, then stood pat behind my pat hand, which only makes sense with a strong made hand or a snow (a breakable made hand would have drawn after I stood pat). My made eight loses to the strong hands but beats every snow, so it is a bluff-catcher. ' + why, binds ? 'mdf' : 'standard');
+        return act('call', 'Both pat and he bets: call with ' + mk(hn.short) + '. ' + bothPatRaiserTxt(c) + ' ' + why, binds ? 'mdf' : 'standard');
       }
       return act('call', 'Both pat and he bets: call with ' + mk(hn.short) + '. ' + why, binds ? 'mdf' : '');
     }
@@ -5325,6 +5378,51 @@ window.TD = window.TD || {};
 
   // exact price of a call: pot odds and the break-even share they require
   function pct1(x) { const v = Math.round(x * 1000) / 10; return (v % 1 ? v.toFixed(1) : v.toFixed(0)) + '%'; }
+  // Place of a made low among all the made lows of this game (1 = the nuts: 7-5-4-3-2 in 2-7, the wheel in A-5).
+  // Suits are ignored; in 2-7 straights don't count as made lows.
+  function lowNo(hand) {
+    const m = TD.rankMaskOf(hand);
+    if (POP[m] !== 5 || TD.isStraightMask(m)) return 0;
+    let n = 1;
+    for (let x = 31; x < m; x++) if (POP[x] === 5 && !TD.isStraightMask(x)) n++;
+    return n;
+  }
+  // His bet or raise on the betting round before this one, in words: bet / raised / check-raised / 3-bet / capped it.
+  function hisLastAggTxt(c) {
+    const acts = c.game.actions.filter((a) => a.street === c.st - 1);
+    let lvl = 0, word = '';
+    acts.forEach((a, i) => {
+      if (a.type !== 'bet' && a.type !== 'raise') return;
+      lvl++;
+      if (a.seat !== c.opp.seat) return;
+      const checkedFirst = acts.slice(0, i).some((b) => b.seat === c.opp.seat && b.type === 'check');
+      word = lvl === 1 ? 'bet' : lvl === 2 ? (checkedFirst ? 'check-raised' : 'raised') : lvl === 3 ? '3-bet' : 'capped it';
+    });
+    return word || 'raised';
+  }
+  // River, both pat, he raised (or re-raised) after the 2nd draw, I called, and now he bets: read his line in the
+  // order it happened. In position he stood pat first, while I could still draw: mostly strong made hands, some snows,
+  // and now and then an overplayed medium hand standing pat to get me to break. Out of position I stood pat first and
+  // he stood pat behind me: a breakable made hand would usually have drawn then, so it's strong made hands or snows.
+  function bothPatRaiserTxt(c) {
+    const hn = c.hn, top = hn.top, sec = hn.second;
+    const after = ['', '1st', '2nd', '3rd'][c.st - 1];
+    const no = lowNo(c.hand), noTxt = no ? ' (' + mk('#' + no) + ')' : '';
+    const his = hisLastAggTxt(c);
+    const seven = top <= 7, smooth8 = top === 8 && sec <= 6;
+    if (c.ip) {
+      const line = 'His range is polarized — he ' + his + ' after the ' + after + ' draw, then stood pat on the last draw, so his range is mostly strong made hands, some snows, and maybe occasionally an overplayed medium-strength made hand trying to overrepresent its strength in an attempt to induce me to break my hand.';
+      const mine = seven ? 'My made seven' + noTxt + ' beats some of the value bets in his range as well as the snows, but it still loses to his best hands.'
+        : smooth8 ? 'My strong made eight' + noTxt + ' might beat a few of the value bets in his range, but it\'s mostly a bluff-catcher.'
+          : 'My made eight' + noTxt + ' loses to nearly all of the value bets in his range, so it\'s a bluff-catcher: it beats the snows and most of the overplayed medium hands.';
+      return line + ' ' + mine;
+    }
+    const line = 'His range is polarized — he ' + his + ' after the ' + after + ' draw, I stood pat first, and he stood pat behind me. That only makes sense with a strong made hand or a snow: a breakable made hand would usually have drawn once it saw me stand pat.';
+    const mine = seven ? 'My made seven' + noTxt + ' beats some of his made hands as well as every snow, but it still loses to his best hands.'
+      : smooth8 ? 'My strong made eight' + noTxt + ' might beat a few of his made hands, but it\'s mostly a bluff-catcher.'
+        : 'My made eight' + noTxt + ' loses to the strong hands but beats every snow, so it is a bluff-catcher.';
+    return line + ' ' + mine;
+  }
   function priceTxt(c) { return 'getting ' + (c.pot / c.toCall).toFixed(1) + '-to-1, need ' + Math.round(c.potOdds * 100) + '% to break even'; }
 
   function pairOf(hand) {
@@ -7016,6 +7114,21 @@ window.TD = window.TD || {};
     if (share >= 1 - foldMax) return act('fold', r.reason + ' ' + head + ' This hand is among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), the part MDF lets me fold.', r.tag);
     return act('call', 'Call, ' + c.txt + '. ' + head + ' This hand is not among the weakest of them (about ' + Math.round(share * 100) + '% of my range here is stronger), so it is part of the range that has to defend.', 'mdf');
   }
+  // Nov 26 (hand #23): the live player last to act after me, when it drew no more cards than anyone (one at most here:
+  // an unimproved two-card draw takes the free card in Badugi) and fewer than someone other than me
+  function sureCloserBD(game, p, st) {
+    const opps = opponentsOf(game, p);
+    const after = opps.filter((q) => game.actOrder(q.seat) > game.actOrder(p.seat));
+    if (opps.length < 2 || !after.length) return null;
+    const closer = after.reduce((a, b) => (game.actOrder(b.seat) > game.actOrder(a.seat) ? b : a));
+    const k = closer.draws[st - 1];
+    if (closer.allIn || k == null || k > 1) return null;
+    const others = game.activePlayers().filter((q) => q !== closer);
+    if (!others.every((q) => q.draws[st - 1] >= k)) return null;
+    const more = others.filter((q) => q !== p && !q.allIn && q.draws[st - 1] > k);
+    return more.length ? { closer, k, more } : null;
+  }
+  const moreTxtBD = (more, st) => more.map((q) => nameOf(q) + ' (drew ' + q.draws[st - 1] + ')').join(' and ');
   const AHEAD_LO = 0.40, AHEAD_HI = 0.47;
   function drawStreet(c, fair) {
     const { game, p } = c;
@@ -7033,6 +7146,20 @@ window.TD = window.TD || {};
         const lead = leadBehind.isHuman ? 'you drew fewer cards than I did, so you have' : leadBehind.name + ' drew fewer cards than I did, so has';
         if (c.made && !c.drawing) { p.bot.crPlan = c.st; return act('check', 'Check the ' + hn0(c) + ' to check-raise. Mastering Mixed Games: ' + lead + ' the drawing lead; having made a badugi, check-raise every time (pat now, so there is nothing left to disguise, and even a rough badugi can make a better king or queen break).', 'check-raise'); }
         return act('check', 'Check, ' + c.txt + '. Mastering Mixed Games: ' + lead + ' the drawing lead — always check to the player with the drawing lead, and with a one-card draw out of position just call (a check-raise shows my hand the moment I draw one).');
+      }
+      // Nov 26 (hand #23, all three games): multiway, the player who closes the action drew one, no more than anyone and
+      // fewer than someone. Checked to, it bets every time rather than give the bigger draw a free draw, so a one-card
+      // draw tied with it checks in front of it; and as that closer, bet.
+      if (c.N >= 2 && c.drawing && !fewer && !p.bot.snow && myLast === 1) {
+        if (c.ip && c.nextDraw === 1 && c.oppsLast.every((n) => n >= 1) && !c.opps.some((o) => o.allIn)) {
+          const more = c.opps.filter((o) => o.draws[c.st - 1] > 1);
+          if (more.length) return act('bet', 'Bet, ' + c.txt + '. It was checked to me, last to act, and I drew 1, a card ahead of ' + moreTxtBD(more, c.st) + ': checking behind would give the bigger draw a free draw, so the player who closes the action bets every time here.', 'card-ahead');
+        }
+        const sc = !c.ip ? sureCloserBD(game, p, c.st) : null;
+        if (sc && sc.k === myLast) {
+          p.bot.sureCloser = c.st;
+          return act('check', 'Check, ' + c.txt + '. ' + nameOf(sc.closer).replace(/^./, (x) => x.toUpperCase()) + (sc.closer.isHuman ? ' close' : ' closes') + ' the action and drew 1, the same as me, a card ahead of ' + moreTxtBD(sc.more, c.st) + ': checked to, the closer bets every time rather than give the bigger draw a free draw. So my check gives no free draw, and I don\'t have to build the pot out of position with a draw that is only even with the closer.', 'standard');
+        }
       }
       // (Nov 24, Hand #111) heads-up out of position, equal draws, and the player behind me made the last bet or raise
       // before the draw: the action checks to the last aggressor, who bets often when checked to, so a made badugi I
@@ -7209,7 +7336,7 @@ window.TD = window.TD || {};
         if (R() < 0.5) return act('bet', why + '. A 9 badugi is one of the rougher hands I freeze with, which check back about half the time so he can\'t count on a check-raise working; this time I bet.', 'value');
         return act('check', 'Check back the ' + c.txt + ' (mixed, about half the time). ' + why + ', but the rougher ones like a 9 badugi check back about half the time, so he can\'t count on a check-raise working.', 'balance');
       }
-      if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. Notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.', 'value');
+      if (cappedPatRange(c) && t <= lv('Q')) return act('bet', 'Bet the ' + c.txt + ' for value. ' + (c.ip ? 'We both stood pat, and he checked his pat hand to me on the turn and again now — a pat badugi better than mine would rarely check twice, so his range is condensed and this is a value bet.' : 'Notes: we both stood pat and he checked his pat hand behind on the turn — he would very rarely check back a pat badugi better than mine there, so his range is condensed and this is a value bet.'), 'value');
       // Chase (Nov 21): out of position after we both drew on the last draw (1,1). He calls one bet with any badugi he
       // made and bluff-catches with good three-card hands, so bet every badugi for value, but keep a check-raising range
       // (very strong badugis plus a few bluffs): a six badugi or better checks to check-raise about 15% of the time. The
@@ -7477,7 +7604,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 116;
+  TD.VERSION = 118;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
