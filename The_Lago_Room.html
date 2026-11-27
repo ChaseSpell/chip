@@ -4736,7 +4736,7 @@ window.TD = window.TD || {};
 
   // re-raise discipline: 3-bets and beyond need a near-nut hand
   function gateRaise(c, r) {
-    if (r.type !== 'raise' || c.toCall === 0 || r.tag === 'two-way') return r; // Chase's two-way 3-bet is planned in advance
+    if (r.type !== 'raise' || c.toCall === 0 || r.tag === 'two-way' || r.noGate) return r; // Chase's two-way 3-bet is planned in advance
     // notes: "In general, you should only raise the river with a strong eight or a seven."
     // (deliberate bluff-raises with a snow are part of a polarized range and pass through)
     if (c.st === 3 && r.tag !== 'bluff') {
@@ -5178,16 +5178,39 @@ window.TD = window.TD || {};
       return act('call', why + ': call with ' + mk(hn.short) + '.', 'standard');
     }
 
-    // SS2: my river bet got raised — opponents rarely raise with a 9, 10 or J; maybe with an 8, surely with a 7
+    // SS2: my river bet got raised — opponents rarely raise with a 9, 10 or J; maybe with an 8, surely with a 7.
+    // Bets are counted from the real level: facing a raise, a re-raise is a 3-bet; facing a 3-bet, a re-raise is the
+    // 4-bet that caps the street (a bet and three raises, CAP_BETS) — there is never a fifth bet.
     if (c.iBet && toCall > 0 && c.lvl >= 2) {
+      const heCR = c.lvl === 2 && game.actions.some((a) => a.street === c.st && a.seat === opp.seat && a.type === 'check');
+      const ledBoth = c.lvl === 2 && !c.ip && !heCR && !mePat && !oppPat;
+      const facing = c.lvl === 2 ? (heCR ? 'My river bet got check-raised' : 'My river bet got raised') : c.lvl === 3 ? 'My river raise got 3-bet' : 'He capped the river with a 4-bet';
+      const reWord = c.lvl === 2 ? '3-bet' : '4-bet (the cap)';
+      // Nov 26 (his 2-7 hand #63; all lowball games, A-5 one rank lower): heads-up, we both drew on the last draw,
+      // I bet first and got raised. My lead can be as light as a jack, so the raise in position comes from many
+      // hands worse than a seven, and they usually call a 3-bet: 3-bet any seven.
+      // A-5 (Nov 27, his words): "a 7 low or better is required to bet and then reraise the river after the last draw
+      // goes 1,1. Even rough sevens are not good enough": A-5 sixes and 7-5 or better 3-bet, 7-6 just calls. The text
+      // is written in 2-7 terms and moved down one rank for A-5 ("any seven or an 8-6" reads "any six or a 7-5").
+      const ledRaise = A5 ? top === 7 || (top === 8 && sec <= 6) : top === 7;
+      if (ledBoth && high && ledRaise && c.canRaise) {
+        const r = act('raise', (myLast === 1 && oppLast === 1 ? 'Both drew one' : 'We both drew') + ' on the last draw and I bet first: 3-bet with ' + mk(hn.short) + ' — ' + (A5 ? 'any seven or an 8-6 or better 3-bets here, but not a rough eight (8-7)' : 'any seven 3-bets here') + '. My lead can be as light as a jack, so his raise in position comes from many hands worse than ' + (A5 ? 'mine' : 'a seven') + ' raising for value, and he usually calls a 3-bet with them.', 'value');
+        r.noGate = true;
+        return r;
+      }
       if (high && top >= 9) {
         const shift = userBluffShift(game, opp, 2.5, -0.15, 0.35);
-        if (R() < 0.75 - shift || (c.potOdds > 0.1 && shift <= 0)) return act('fold', 'My river bet with ' + mk(hn.short) + ' got raised: fold. SS2: river raises rarely come from nines, tens or jacks — expect an eight or, more likely, a seven.' + (shift < 0 ? userBluffNote(game, opp, shift) : ''), 'discipline');
-        return act('call', 'River raise: call once with ' + mk(hn.short) + (shift > 0 ? ' (mixed).' + userBluffNote(game, opp, shift) : ' — the pot is huge (mixed).'));
+        if (R() < 0.75 - shift || (c.potOdds > 0.1 && shift <= 0)) return act('fold', facing + ' with ' + mk(hn.short) + ': fold. SS2: river raises rarely come from nines, tens or jacks — expect an eight or, more likely, a seven.' + (shift < 0 ? userBluffNote(game, opp, shift) : ''), 'discipline');
+        return act('call', facing + ': call once with ' + mk(hn.short) + (shift > 0 ? ' (mixed).' + userBluffNote(game, opp, shift) : ' — the pot is huge (mixed).'));
       }
-      if (high && (A5 ? top === 6 : top === 7 && sec === 5) && c.canRaise) return act('raise', 'Re-raise with the nuts (' + mk(hn.short) + ').', 'value');
-      if (!high) return act('fold', 'My river bluff with ' + mk(hn.long) + ' got raised: fold.', 'discipline');
-      return act('call', 'My river bet got raised: call with ' + mk(hn.short) + '. SS2: only the nuts (7-5-4-3-2) goes to five bets on the river — just call.');
+      if (high && (A5 ? top === 6 : top === 7 && sec === 5) && c.canRaise) return act('raise', facing + ': ' + reWord + ' with the nuts (' + mk(hn.short) + ').', 'value');
+      if (!high) return act('fold', (c.lvl === 2 ? 'My river bluff with ' + mk(hn.long) + ' got ' + (heCR ? 'check-raised' : 'raised') : facing + ' and my ' + mk(hn.long) + ' is a bluff') + ': fold.', 'discipline');
+      const whyCall = c.lvl >= 4 ? 'the river is capped, so calling is all that is left'
+        : c.lvl === 3 ? 'SS2: only the nuts (7-5-4-3-2) caps the river with the 4-bet — just call'
+        : heCR ? 'a river check-raise is a strong range; SS2: only the nuts (7-5-4-3-2) 3-bets it — just call'
+        : ledBoth ? (A5 ? 'we both drew, and here only a seven or an 8-6 or better 3-bets; ' + (top === 8 ? 'a rough eight (8-7) just calls the raise' : 'a nine or worse just calls the raise') : 'we both drew, and here only a seven 3-bets; an eight just calls the raise')
+        : 'SS2: only the nuts (7-5-4-3-2) 3-bets here — just call';
+      return act('call', facing + ': call with ' + mk(hn.short) + '. ' + whyCall[0].toUpperCase() + whyCall.slice(1) + '.');
     }
 
     if (!mePat && !oppPat) {
@@ -5213,6 +5236,16 @@ window.TD = window.TD || {};
         return act('check', lab + ': give up with ' + mk(hn.long) + '. Notes: the river is no time to get fancy.');
       }
       if (strong && c.canRaise && c.lvl === 1) return act('raise', lab + ': raise with ' + mk(hn.short) + '. Notes: only raise the river with a strong eight or a seven.', 'value');
+      // Nov 27 (after his hand #63): in position, after we both drew and he bet first, his lead can be as light as a
+      // jack, so every 8-6 raises for value too: it wins well over half the time when called and still gains after
+      // calling the 3-bets his sevens make. Smooth 8-7s stay a call: they would have to fold to the 3-bet to gain, and
+      // MDF doesn't allow it, since my bluff-raises already use up the share of my raises that may fold to a 3-bet.
+      if (!A5 && c.ip && c.lvl === 1 && c.canRaise && high && top === 8 && sec === 6 && !game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type !== 'draw')) {
+        const r = act('raise', lab + ' and he bet first: raise with ' + mk(hn.short) + '. His lead can be as light as a jack, so an 8-6 wins well over half the time when he calls, and it still gains after calling the 3-bet his sevens make. A smooth 8-7 just calls: it would have to fold to that 3-bet to gain, and MDF doesn\'t allow that, because my bluff-raises already take up the share of my raises that may fold.', 'value');
+        r.noGate = true;
+        return r;
+      }
+      if (!A5 && c.ip && c.lvl === 1 && high && top === 8 && sec === 7 && !game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type !== 'draw')) return act('call', lab + ' and he bet first: call with ' + mk(hn.short) + '. A smooth 8-7 wins more than half the time when he calls a raise, but his sevens 3-bet it, and calling that 3-bet gives the gain back. Folding to the 3-bet would make the raise pay, but MDF doesn\'t allow it: my bluff-raises already take up the share of my raises that may fold.');
       if (jOrBetter) return act('call', lab + ': call with ' + mk(hn.short) + '. Notes: always call with a jack or better here.');
       if (qToDeuces) {
         const shift = userBluffShift(game, opp, 2.5, -0.25, 0.2);
@@ -7604,7 +7637,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 118;
+  TD.VERSION = 121;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
