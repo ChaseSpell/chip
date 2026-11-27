@@ -4128,9 +4128,12 @@ window.TD = window.TD || {};
       // MMG: out of position you can't see his draw first, so pat every nine or better; pat a ten only when the
       // draw under it is rough (like an 8-7), break it with a strong one (a seven draw)
       if (opps.length === 1 && !ip && opps[0].draws[k - 1] > 0 && rsD[0] <= 10) {
-        const strongUnder = Math.max(...oneC.keep.map(TD.rankOf)) <= 7;
+        // a strong draw underneath: a seven draw holds the seven (Nov 27); 2-7 draws like 6-5-4-2 need the seven to
+        // come and are weaker. A-5 one rank lower: a six draw, or a wheel draw, which is stronger still.
+        const underTop = Math.max(...oneC.keep.map(TD.rankOf));
+        const strongUnder = A5 ? underTop <= 7 : underTop === 7;
         if (rsD[0] <= 9 || !strongUnder) return { discard: [], reason: '3rd draw: stand pat with ' + mk(hn.short) + '. MMG: out of position, pat all nines or better' + (rsD[0] === 10 ? ', and a ten when the draw under it is rough (' + hstr(oneC.keep) + ')' : '') + '.', tag: '' };
-        return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the ten and draw to ' + hstr(oneC.keep) + '. MMG: out of position, pat a ten only without a strong draw underneath — this is a seven draw.', tag: '' };
+        return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the ten and draw to ' + hstr(oneC.keep) + '. MMG: out of position, pat a ten only without a strong draw underneath — this is ' + (underTop === 7 ? 'a seven draw' : 'a wheel draw') + '.', tag: '' };
       }
       if (opps.length === 1 && !ip && rsD[0] === 11) {
         return { discard: keepIdx(hand, oneC.keep), reason: '3rd draw: break the jack and draw to ' + hstr(oneC.keep) + '. SS2: out of position, without knowing whether he draws or stands pat, always draw with a jack.', tag: '' };
@@ -5074,9 +5077,22 @@ window.TD = window.TD || {};
     if (opp && ip && toCall > 0 && c.lvl === 1 && c.canRaise && nextDraw === 1 && c.premiumDraw && c.oppLast === 0 && c.deadWheel >= 2 && !isCallingStation(game, opp) && R() < 0.3 * PLAY_F) {
       return act('raise', 'Making a play: raise his pat bet with a premium draw (' + hstr(c.keepNow) + ') and valuable discards. SS2: spend an extra bet hoping to make him break or fold a nine/eight — I still have a draw if he doesn\'t (never against a calling station).', 'play');
     }
-    // SS2: drawing one to a seven — always call one bet going into the last draw
-    if (toCall > 0 && c.lvl === 1 && nextDraw === 1 && Math.max(...c.keepNow.map(TD.rankOf)) <= 7) {
+    // SS2 (2-7 chapter): drawing one to a seven — always call one bet going into the last draw. Nov 27 (his words):
+    // "For a draw to be considered a 'one card draw to a 7' ... the draw must already contain a 7", so 6-5-4-2 doesn't
+    // qualify (it needs the seven to come); those draws are left to the price. His words: "this piece of advice is
+    // from the 2-7 chapter and only applies to 2-7", so A-5 one-card draws are always left to the price here.
+    if (!A5 && toCall > 0 && c.lvl === 1 && nextDraw === 1 && Math.max(...c.keepNow.map(TD.rankOf)) === 7) {
       return act('call', 'Drawing one to ' + hstr(c.keepNow) + ': call. SS2: a one-card draw to a seven is always worth one bet before the last draw.');
+    }
+    // ... and a 2-7 one-card draw under a seven draw (6-5-4-2, no seven yet) is not covered by that line: the price
+    // decides, and the reason says what the draw is (Nov 27)
+    if (!A5 && toCall > 0 && c.lvl === 1 && nextDraw === 1 && c.drawing && Math.max(...c.keepNow.map(TD.rankOf)) < 7) {
+      const behind = game.players.filter((q) => q !== p && !q.folded && !q.allIn && q.roundBet < game.currentBet).length;
+      const need = c.potOdds - 0.03 + 0.02 * Math.min(2, behind);
+      const what = ' This isn\'t a one-card draw to a seven: there is no seven in it yet, so the seven has to come (and some cards make a straight). That makes it weaker than a seven draw, and SS2\'s "always worth one bet" doesn\'t cover it, so the price decides.';
+      const eqTxt = 'about ' + pct(c.E) + ' against his likely range, ' + priceTxt(c) + (behind ? ' (players still to act behind me could raise)' : '');
+      if (c.E >= need) return act('call', 'Drawing one to ' + hstr(c.keepNow) + ': call — ' + eqTxt + '.' + what);
+      return act('fold', 'Drawing one to ' + hstr(c.keepNow) + ': fold — only ' + eqTxt + '.' + what);
     }
     // in position, we bet the draw and got check-raised: expect him pat, plan first
     if (opp && ip && c.iBet && toCall > 0 && c.drawing) {
@@ -5093,8 +5109,12 @@ window.TD = window.TD || {};
     if (c.drawing && toCall >= 2 * unit && p.roundBet === 0) {
       const top = Math.max(...c.keepNow.map(TD.rankOf)), bb = c.pot / unit;
       if (top >= 8) return act('fold', 'Still drawing (to ' + hstr(c.keepNow) + ') and facing two big bets. MMG: always fold an eight draw here — you can\'t even tell whether it is live. Notes agree: fold unless the pot is huge.');
-      if (bb < 11) return act('fold', 'Still drawing (to ' + hstr(c.keepNow) + ') and facing two big bets with ' + bb.toFixed(1) + ' big bets in the pot. MMG: a seven draw needs about 11 big bets in the pot to call two bets cold.');
-      return act('call', 'Drawing to ' + hstr(c.keepNow) + ' facing two big bets, but the pot holds ' + bb.toFixed(1) + ' big bets. MMG: with a seven draw, a pot over about 11 big bets is enough to call two bets cold.', 'mdf');
+      // 2-7: a seven draw holds the seven (Nov 27). A draw under it (6-5-4-2) still needs the seven to come, so it is
+      // weaker and needs at least the seven draw's pot; above that the price decides. A-5 unchanged (level 7 or lower).
+      const sevenDraw = A5 ? top <= 7 : top === 7;
+      if (!A5 && top < 7 && bb < 11) return act('fold', 'Still drawing (to ' + hstr(c.keepNow) + ') and facing two big bets with ' + bb.toFixed(1) + ' big bets in the pot. This draw has no seven yet: it needs the seven to come, so it is weaker than a seven draw, and MMG puts even a seven draw at about 11 big bets in the pot to call two bets cold.');
+      if (sevenDraw && bb < 11) return act('fold', 'Still drawing (to ' + hstr(c.keepNow) + ') and facing two big bets with ' + bb.toFixed(1) + ' big bets in the pot. MMG: a seven draw needs about 11 big bets in the pot to call two bets cold.');
+      if (sevenDraw) return act('call', 'Drawing to ' + hstr(c.keepNow) + ' facing two big bets, but the pot holds ' + bb.toFixed(1) + ' big bets. MMG: with a seven draw, a pot over about 11 big bets is enough to call two bets cold.', 'mdf');
     }
     // rough 8 / 9 raised after the 2nd draw
     if (opp && c.iBet && toCall > 0 && c.made && nextDraw === 0 && ((hn.top === 8 && hn.second >= 7) || (hn.top === 9 && hn.second >= 7))) {
@@ -7637,7 +7657,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 121;
+  TD.VERSION = 122;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
