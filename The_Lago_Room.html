@@ -4956,6 +4956,11 @@ window.TD = window.TD || {};
   // the range raise. 'rough' marks the weaker end (2-7 8-7-5-4, A-5 the 7-6s), which mixes its river bet after a freeze.
   function printedRanks(hand) { return hand.map((x) => { const r = TD.trueRank(x); return A5 && r === 14 ? 1 : r; }).sort((a, b) => b - a); }
   function lexCmp(a, b) { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; }
+  // Nov 27 (his 2-7 hand): against a bettor who stood pat, a check-raise needs a hand ahead of most of his pat betting
+  // range: about 8-6-5-3-2 or better (A-5 one rank lower, 7-5-4-2-A). A T-8 or a rough eight checks and calls or folds.
+  const PAT_CR_BAR = A5 ? [7, 5, 4, 2, 1] : [8, 6, 5, 3, 2];
+  const PAT_CR_TXT = '8-6-5-3-2'; // written in 2-7 terms; A-5 reasons move it down one rank (7-5-4-2-A)
+  function patCheckRaiseOK(c) { return !!c.made && c.hn.cat === 0 && lexCmp(printedRanks(c.hand), PAT_CR_BAR) <= 0; }
   function freezeClass(c) {
     if (!c.made || c.hn.cat !== 0) return null;
     const r = printedRanks(c.hand);
@@ -5070,8 +5075,21 @@ window.TD = window.TD || {};
       const f = clamp((c.E - AHEAD_LO) / (AHEAD_HI - AHEAD_LO), 0, 1);
       return act('check', 'Made ' + mk(hn.short) + ' after being a card behind (I drew ' + myLast + ', he drew ' + c.oppLast + '): check, planning to check-raise. He is a card ahead of my draw, so he bets every hand when checked to; my pat hand is about ' + Math.round(c.E * 100) + '% against that range' + (f >= 1 ? ', enough to check-raise every time.' : f > 0 ? ', close to the line, so the check-raise mixes (about ' + Math.round(f * 100) + '%).' : ', short of the check-raise line, so I plan to call.'), f > 0 ? 'check-raise' : '');
     }
-    // SS2: I was a card behind going into this round and made my hand — check-raise (strong) or check-call (rough)
-    if (opp && !ip && toCall === 0 && c.made && nextDraw === 0 && myLast > c.oppLast) {
+    // Nov 27 (his 2-7 hand, all lowball games; A-5 one rank lower): out of position, I drew and made a hand, and he stood
+    // pat on this draw. He isn't drawing, so the SS2 card-behind check-raise (made to stop a free draw and to make him
+    // break) doesn't apply: his bet comes from pat hands. Check; check-raise only about 8-6-5-3-2 or better, and with
+    // anything weaker call or fold by the price when he bets.
+    if (opp && !ip && toCall === 0 && c.made && nextDraw === 0 && myLast >= 1 && c.oppLast === 0) {
+      if (patCheckRaiseOK(c) && c.canRaise !== false) {
+        p.bot.crPlan = c.st;
+        return act('check', 'Made ' + mk(hn.short) + ' and he stood pat: check, planning to check-raise. He isn\'t drawing, so his bet comes from pat hands, and a check-raise needs a hand ahead of most of them: about ' + PAT_CR_TXT + ' or better. This one is.', 'check-raise');
+      }
+      p.bot.patCheck = c.st;
+      return act('check', 'Made ' + mk(hn.short) + ' and he stood pat: check, then call or fold by the price. He isn\'t drawing, so there is no free draw to stop, and his bet comes from pat hands; a check-raise needs about ' + PAT_CR_TXT + ' or better, and ' + mk(hn.short) + ' is too weak for that.');
+    }
+    // SS2: I was a card behind going into this round and made my hand — check-raise (strong) or check-call (rough).
+    // Only against an opponent who drew (still drawing); against a pat bettor the rule above decides.
+    if (opp && !ip && toCall === 0 && c.made && nextDraw === 0 && myLast > c.oppLast && c.oppLast >= 1) {
       if (strongPat || R() < 0.4) {
         p.bot.crPlan = c.st;
         return act('check', 'Made ' + mk(hn.short) + ' after being a card behind — check, planning to check-raise. SS2: he will bet automatically to avoid giving a free draw; ' + (strongPat
@@ -5106,6 +5124,14 @@ window.TD = window.TD || {};
       return act('bet', (nextDraw === 0 ? 'Pat ' + mk(hn.short) : 'Drawing ' + nextDraw) + ' vs opponents drawing ' + c.oppsLast.join(', ') + ': bet. SS2: needing fewer cards than him, bet whatever your position — free cards are too costly with one draw to come.', 'card-ahead');
     }
     if (p.bot.checkCall === c.st && toCall > 0 && c.lvl === 1) return act('call', 'Check-call as planned with ' + mk(hn.short) + ', then stay pat.');
+    // Nov 27: I checked a made hand to a player who stood pat on this draw, and he bets. Check-raise only about
+    // 8-6-5-3-2 or better (A-5 7-5-4-2-A); anything weaker calls or folds by the price, and makes no play-raise
+    if (opp && !ip && toCall > 0 && c.lvl === 1 && c.made && nextDraw === 0 && myLast >= 1 && c.oppLast === 0 && game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type === 'check')) {
+      if (patCheckRaiseOK(c) && c.canRaise) return act('raise', 'Check-raise with ' + mk(hn.short) + '. He stood pat and bets, so his range is pat hands, and about ' + PAT_CR_TXT + ' or better is ahead of enough of them to raise.', 'value');
+      const pr = 'about ' + pct(c.E) + ' against his pat betting range, ' + priceTxt(c);
+      if (c.E >= c.potOdds) return act('call', 'Call with ' + mk(hn.short) + ': ' + pr + '. He stood pat and bets, so a check-raise would need about ' + PAT_CR_TXT + ' or better; this hand just calls.');
+      return act('fold', 'Fold ' + mk(hn.short) + ': only ' + pr + '. He stood pat and bets, so his range is pat hands, and a check-raise would need about ' + PAT_CR_TXT + ' or better.');
+    }
     if (p.bot.behindCR === c.st && toCall > 0) { const ah = cardAheadRaise(c, { always: true }); if (ah) return ah; }
     // SS2: raise with a seven, 8-5 or 8-6 — especially multiway, to pressure the drawers
     if (toCall > 0 && c.lvl === 1 && c.canRaise && strongPat && (c.N >= 2 || !ip || rs[0] <= 7 || rs[1] <= 5)) {
@@ -5347,7 +5373,10 @@ window.TD = window.TD || {};
     if (oppPat && !mePat) {
       const patEarly = opp.draws[1] === 0;
       if (toCall > 0) {
-        if (c.lvl === 1 && c.canRaise) {
+        const iChk = !c.ip && game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type === 'check');
+        // Nov 27: out of position after checking, this raise is a check-raise into a pat hand: about 8-6-5-3-2 or better
+        if (iChk && c.lvl === 1 && c.canRaise && patCheckRaiseOK(c)) return act('raise', 'He stood pat and bets after I checked; I drew and made ' + mk(hn.short) + ': check-raise. Against a pat bettor a check-raise takes about ' + PAT_CR_TXT + ' or better, and this one is.', 'value');
+        if (!iChk && c.lvl === 1 && c.canRaise) {
           if (strong) return act('raise', 'He stood pat and bets; I drew and made ' + mk(hn.short) + ' — a premium hand, raise. Notes: don\'t raise unless premium (8-6 is the borderline).', 'value');
           if (high && top === 8 && sec === 6 && R() < 0.4) return act('raise', 'Raise with 8-6 vs his pat bet (borderline — mixed). Notes: against aggressive opponents you can raise an 8-6.', 'balance');
         }
@@ -5381,7 +5410,7 @@ window.TD = window.TD || {};
       // out of position: I drew into his pat hand
       if (eightPlus) {
         const aggressiveOpp = opp.isHuman && opp.stats.hands >= 20 && opp.stats.pfr / opp.stats.hands > 0.28;
-        if (aggressiveOpp && R() < 0.5) { p.bot.crPlan = c.st; return act('check', 'Made ' + mk(hn.short) + ' out of position into his pat hand: check to check-raise. SS2: against an aggressive opponent who will bet a nine or ten, go for the check-raise.', 'check-raise'); }
+        if (aggressiveOpp && patCheckRaiseOK(c) && R() < 0.5) { p.bot.crPlan = c.st; return act('check', 'Made ' + mk(hn.short) + ' out of position into his pat hand: check to check-raise. SS2: against an aggressive opponent who will bet a nine or ten, go for the check-raise; against a pat hand that takes about ' + PAT_CR_TXT + ' or better, and this one is.', 'check-raise'); }
         return act('bet', 'Made ' + mk(hn.short) + ' out of position into his pat hand: bet right out. SS2: betting out is the safer line — worse pat hands call, better ones seldom raise.', 'value');
       }
       if (hn.cat === 1 && c.oppPrev > 0 && R() < 0.15) {
@@ -7724,7 +7753,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 124;
+  TD.VERSION = 125;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
