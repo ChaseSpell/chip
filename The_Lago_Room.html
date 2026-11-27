@@ -2217,6 +2217,9 @@ window.TD = window.TD || {};
       }
       this.gameKey = TD.GAME;
       this.fastForward = false;
+      // v124: the user asked to be out of this hand (Zoom "Fold now", or End session): kept for the whole hand, so
+      // a draw or a later betting round folds them instead of asking (it used to be lost at the next street)
+      this.foldPending = false;
       // Play every seat (only with Zoom off): the user makes every player's decisions, one seat at a time.
       // Fixed for the whole hand; a change in Settings applies from the next hand.
       // Seat training (Chase, Nov 24): the user plays every hand from one seat, folded to them predraw.
@@ -2482,8 +2485,8 @@ window.TD = window.TD || {};
         { const t = this.say(p, 'folds', 'fold'), f = t + ' ' + this.cardsTxt(p.hand); this.log(this.canSee(p) ? f : t, 'act', f); }
         // Zoom: the user's hand is over — play the rest out instantly and deal the next hand
         if (p.isHuman && !this.allSeats && this.settings && this.settings.zoom !== false) {
-          this.fastForward = true;
-          if (this.ui.setFastForward) this.ui.setFastForward(true);
+          this.fastForward = true; this.foldPending = false;
+          if (this.ui.setFastForward && !this.ui.ff) this.ui.setFastForward(true); // keeps End session's banner
         }
         if (this.ui.foldCards) this.ui.foldCards(this, p.seat);
       } else if (type === 'check') {
@@ -2679,6 +2682,14 @@ window.TD = window.TD || {};
           const run = () => { if (!coach.done) { coach.done = true; try { coach.res = TD.AI.coachDraw(this, p); } catch (e) { console.error(e); } } };
           const timer = this.coachEnabled === false ? null : setTimeout(run, 80);
           discardIdx = await this.ui.requestDraw(this, p);
+          if (discardIdx && discardIdx.fold) {
+            // v124: folded at the draw (a Zoom fast fold made earlier, or End session): no draw is declared
+            if (timer !== null) clearTimeout(timer);
+            this.foldAtDraw(p);
+            this.ui.setTurn(this, -1);
+            await this.ui.update(this, {});
+            continue;
+          }
           discardIdx = Array.from(new Set(discardIdx)).filter((i) => i >= 0 && i < TD.HAND_SIZE).sort((a, b) => a - b);
           if (timer !== null) {
             clearTimeout(timer); run();
@@ -2741,6 +2752,16 @@ window.TD = window.TD || {};
       }
       await this.ui.update(this, {});
       this.inDraw = false;
+    }
+
+    // v124: the user's hand is mucked during a draw (they asked to be out of the hand). Like a fold in a betting
+    // round, but nothing to call: their chips stay in the pot.
+    foldAtDraw(p) {
+      p.folded = true; p.acted = true; p.lastAction = 'Fold';
+      this.muck.push(...p.hand);
+      this.record(p.seat, 'fold');
+      { const t = this.say(p, 'folds', 'fold'), f = t + ' ' + this.cardsTxt(p.hand); this.log(this.canSee(p) ? f : t, 'act', f); }
+      if (this.ui.foldCards) this.ui.foldCards(this, p.seat);
     }
 
     /* ---------- showdown & pots ---------- */
@@ -7703,7 +7724,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 123;
+  TD.VERSION = 124;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -8096,9 +8117,12 @@ window.TD = window.TD || {};
       g.fastForward = true;
       this.setFastForward(true, ['Session over', 'Saved in the Session log']);
       if (!me.folded && !me.allIn) {
+        // v124: kept on the game for the rest of the hand, so a draw or a later bet folds you too (the old
+        // pre-action was cleared at the next street, and you were given live buttons again)
+        g.foldPending = true;
         this.preAction = 'fastfold';
         if (this.actNow) this.actNow({ type: 'fold', forceFold: true });
-        else if (this.drawNow) this.drawNow();
+        else if (this.drawNow) this.drawNow(true); // at a draw: folded now (it used to stand pat)
       }
     }
     // Session log > Resume at the table: the session opens between hands (at once if none is being played)
@@ -8788,6 +8812,7 @@ window.TD = window.TD || {};
       return this.askAction(game, p, opts);
     }
     askAction(game, p, opts) {
+      if (game.foldPending && !game.allSeats) { this.preAction = null; this.renderPre(); return Promise.resolve({ type: 'fold', forceFold: true }); }
       if (this.preAction && !game.allSeats) {
         const pa = this.preAction;
         this.preAction = null;
@@ -8798,7 +8823,7 @@ window.TD = window.TD || {};
       }
       Sound.turn();
       return new Promise((resolve) => {
-        const done = (a) => { this.actNow = null; this.clearButtons(); this.renderPre(); resolve(a); };
+        const done = (a) => { this.actNow = null; this.lastActAt = Date.now(); this.clearButtons(); this.renderPre(); resolve(a); };
         this.actNow = done; // End session: fold at once
         const box = $('#action-btns');
         box.innerHTML = '';
@@ -8836,13 +8861,17 @@ window.TD = window.TD || {};
       const show = !g.allSeats && g.handNo > 0 && p.isHuman && p.hand.length === TD.HAND_SIZE && !p.folded && !p.allIn && !g.inDraw && !myTurn && g.activePlayers().length > 1 && !g.handOver;
       if (!show || this.ff || $('#action-btns').children.length) { box.innerHTML = ''; return; }
       const items = [['checkfold', 'Check / Fold'], ['callany', 'Check / Call any']];
-      if (this.settings.zoom !== false) items.push(['fastfold', 'Fold now']); // Zoom: fold out of turn and move on at once
+      // Zoom: fold out of turn and move on at once. v124: not offered while your own bet or raise is the one to call
+      // (folding then only gives the pot away; a stray second tap on Raise used to land on it)
+      if (this.settings.zoom !== false && !(g.currentBet > 0 && p.roundBet >= g.currentBet)) items.push(['fastfold', 'Fold now']);
       box.innerHTML = '';
       for (const [k, lbl] of items) {
         const d = document.createElement('div');
         d.className = 'pre' + (this.preAction === k ? ' on' : '');
         d.innerHTML = '<span class="box"></span>' + lbl;
-        d.onclick = () => { if (k === 'fastfold') { this.fastFold(); return; } this.preAction = this.preAction === k ? null : k; this.renderPre(); };
+        d.onclick = () => {
+          if (Date.now() - (this.lastActAt || 0) < 500) return; // v124: the second tap of a double tap on an action button
+          if (k === 'fastfold') { this.fastFold(); return; } this.preAction = this.preAction === k ? null : k; this.renderPre(); };
         box.appendChild(d);
       }
     }
@@ -8853,6 +8882,7 @@ window.TD = window.TD || {};
       const g = this.game;
       if (!g || g.handOver || this.settings.zoom === false) return;
       this.preAction = 'fastfold';
+      g.foldPending = true; // v124: kept for the whole hand (a draw folds you too)
       g.fastForward = true;
       this.setFastForward(true);
     }
@@ -8957,6 +8987,7 @@ window.TD = window.TD || {};
       return this.askDraw(game, p);
     }
     askDraw(game, p) {
+      if (game.foldPending && !game.allSeats) return Promise.resolve({ fold: true }); // v124: you asked to be out of the hand
       Sound.turn();
       return new Promise((resolve) => {
         const hc = $('#hero-cards');
@@ -8972,9 +9003,10 @@ window.TD = window.TD || {};
           return (q.isHuman ? 'You' : q.name) + ' ' + (n === undefined ? '…' : n === 0 ? 'pat' : n);
         });
         $('#action-msg').textContent = (game.allSeats ? this.seatName(game, p) + ' · ' : '') + ['1st', '2nd', '3rd'][k] + ' draw · tap cards to discard · ' + others.join(' · ');
-        const done = () => {
+        const done = (fold) => {
           this.drawNow = null;
-          const idx = $$('.card.sel', hc).map((e) => +e.dataset.hi);
+          this.lastActAt = Date.now();
+          const idx = fold === true ? { fold: true } : $$('.card.sel', hc).map((e) => +e.dataset.hi);
           this.drawMode = false;
           this.heroSel.clear();
           hc.classList.remove('selectable');
@@ -8989,8 +9021,9 @@ window.TD = window.TD || {};
         const draw = document.createElement('button');
         draw.className = 'abtn draw';
         box.appendChild(pat); box.appendChild(draw);
-        draw.onclick = done;
-        this.drawNow = () => pat.click(); // End session: stand pat now, fold at the next bet
+        draw.onclick = () => done();
+        // End session at the draw: folded now (v124; it used to stand pat and lose the fold at the next street)
+        this.drawNow = () => { $$('.card', hc).forEach((c) => c.classList.toggle('sel', false)); this.heroSel.clear(); done(true); };
         // one button at a time: Stand Pat while no cards are marked, otherwise Draw N
         this.updateDrawButtons = () => {
           const n = $$('.card.sel', hc).length;
