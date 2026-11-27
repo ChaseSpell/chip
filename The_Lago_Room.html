@@ -5424,6 +5424,22 @@ window.TD = window.TD || {};
       return null;
     }
     if (mePat && !oppPat) {
+      // Nov 27 (his 2-7 hand: pat 9-8-3-2-2 in position, he drew one and checked): a pat pair or worse is a snow, not a
+      // rough made hand, so it never gets the made-hand value text. Checked down it wins only against his worst misses
+      // (smaller pairs), so its value is in the bet: a player who drew and made an eight or better usually bets into a pat
+      // hand (SS2, the same rule the bots follow), so his check is mostly misses, and they fold. Sims of his hand against
+      // the bots' own play: 23 of the 34 cards he could catch check, all 23 fold to the bet; betting gains about 4.5 big
+      // bets over checking back. A calling station is the exception. Same in A-5.
+      if (toCall === 0 && hn.cat !== 0 && !c.allInOpp) {
+        const X = (c.pot + c.unit) / c.unit, b = riverBlockers(p, c.hand);
+        const drew = oppLast === 1 ? 'drew one' : 'drew ' + oppLast;
+        const lw = hn.long.toLowerCase(), art = /^(two pair|three|four)/.test(lw) ? '' : 'a ';
+        const snow = 'I stood pat with ' + mk(hn.short) + ', ' + art + mk(lw) + ', so this is a snow: checked down it wins only against his worst misses, so all its value is in the bet.';
+        const need = ' The bet risks 1 big bet to win ' + X.toFixed(1) + ', so it needs him to fold only about 1 time in ' + (X + 1).toFixed(1) + '.' + (b.n ? ' My cards also block his good hands (' + riverBlockTxt(b) + ').' : '');
+        if (isCallingStation(game, opp)) return act('check', (c.ip ? 'Check back. ' : 'Check. ') + snow + ' But a snow works only when he folds, and this player calls too often, so I give up the pot rather than pay him off.');
+        if (c.ip) return act('bet', 'He ' + drew + ' and checked: bet. ' + snow + ' SS2: a player who drew and made an eight or better usually bets right out into a pat hand, so his check is mostly missed draws, and they fold to a bet; my pat represents the made hand.' + need, 'snow');
+        return act('bet', 'He ' + drew + ' and I act first: bet. ' + snow + ' My pat represents a made hand, and betting it is what a made hand does here; his missed draws fold, while a check lets him take the pot with any made hand or bet his misses as bluffs.' + need, 'snow');
+      }
       if (toCall === 0) {
         const patEarlyMe = c.myPrev === 0; // I was already pat before the last draw
         if (!c.ip) {
@@ -5436,6 +5452,7 @@ window.TD = window.TD || {};
             return act('bet', 'Pat ' + mk(hn.short) + ' vs a drawing opponent: bet. SS2: usually just bet it and collect the value. Notes: betting is preferred to checking the strongest hands, since a raise lets me 3-bet (three bets beat the two a check-raise gets).', 'value');
           }
           if (high && top === 8 && !(rough8 && patEarlyMe)) return act('bet', 'Pat ' + mk(hn.short) + ': bet. SS2: bet an eight you stood pat with after the second draw — he may call with a weak hand or a nine.', 'value');
+          if (high && top >= 12) return act('check', 'Pat ' + mk(hn.short) + ' out of position vs a drawing opponent: check. It beats only his missed draws, which fold to a bet, so betting gains nothing; checked down, it still wins against his misses.');
           return act('check', 'Pat ' + mk(hn.short) + ' out of position vs a drawing opponent: check (and call one bet). SS2: check a nine, ten or jack — and a rough eight you stood pat with early; if he made a hand you would lose two bets.');
         }
         if (strong) return act('bet', 'I\'m pat, he drew: bet ' + mk(hn.short) + ' for value — strong enough that made hands pay.', 'value');
@@ -5444,9 +5461,13 @@ window.TD = window.TD || {};
           if (R() < 0.3) return act('bet', 'Thin value bet with 8-6 (mixed).', 'value');
           return act('check', 'Check back 8-6 vs the drawing opponent (mixed) — worse hands rarely call here.');
         }
-        return act('check', 'Pat ' + mk(hn.short) + ' in position vs a drawing opponent who checked: check back. Notes/SS2: the problem with betting a rough eight here is that a worse hand will rarely call.');
+        // a rough eight gets the notes' line; a nine or worse is weaker still, and a queen or worse wins only against his misses
+        if (high && top >= 12) return act('check', 'Pat ' + mk(hn.short) + ' in position vs a drawing opponent who checked: check back. It beats only his missed draws, and they fold to a bet, so a bet is called only by hands that beat it; checked down, it still wins against his misses.');
+        return act('check', 'Pat ' + mk(hn.short) + ' in position vs a drawing opponent who checked: check back. Notes/SS2: the problem with betting a rough eight here is that a worse hand will rarely call' + (top >= 9 ? ', and a ' + (top === 9 ? 'nine' : top === 10 ? 'ten' : 'jack') + ' is weaker still: his misses fold and he calls only with hands that beat it.' : '.'));
       }
       if (c.lvl === 1 && c.canRaise && strong) return act('raise', 'He drew and bets into my pat ' + mk(hn.short) + ': raise — only with a strong eight or a seven.', 'value');
+      // a snow (pat pair or worse) facing his bet: the bots' own snows fold here, and so does the bottom of a pat range
+      if (hn.cat !== 0 && c.potOdds >= 0.07) return act('fold', 'He drew and bets into my pat ' + mk(hn.short) + ': fold. It is a snow (' + mk(hn.long.toLowerCase()) + '): his bet after drawing is a made hand or a missed draw bluffing, and my hand beats only his worst misses, so it is the bottom of my pat range and the part that folds.', 'snow');
       // Chase (Nov 21): the check-raising range holds a few bluffs, taken from my roughest pat hands
       const iChecked = game.actions.some((a) => a.street === c.st && a.seat === p.seat && a.type === 'check');
       if (!c.ip && iChecked && c.lvl === 1 && c.canRaise && high && top >= 10 && !isCallingStation(game, opp) && R() < 0.12) return act('raise', 'Check-raise bluff with ' + mk(hn.short) + '. Notes: my river check-raising range against a player who drew is polarized, very strong hands and a few bluffs; my roughest pat hands are the bluffs, and a made eight or nine he bet may fold.', 'bluff');
@@ -5712,7 +5733,7 @@ window.TD = window.TD || {};
     return { same: false, aiKeep, userKeep, eqAI, eqUser };
   }
 
-  TD.AI = { _twoWay: twoWayHand, _cands: candidates, decideBet, decideDraw: decideDrawSafe, mcEquity, OPEN_THR, predrawKey, coachBet, coachCommit, coachDraw, coachDrawCompare, normType, hstr: hstrPlain,
+  TD.AI = { _twoWay: twoWayHand, _cands: candidates, _mcBetEV: mcBetEV, decideBet, decideDraw: decideDrawSafe, mcEquity, OPEN_THR, predrawKey, coachBet, coachCommit, coachDraw, coachDrawCompare, normType, hstr: hstrPlain,
     userPosterior, bluffFreqVs, riverCallLik, isCallingStation,
     _mdf: { mdfSpot, rangeEdge, selfShareAbove }, _top: { userNoCheckRaise, stealWiden, userFoldsRiver, anteShift, anteOf, scoreTail, openRef, inRange, RANGE } }; // exposed for the test page
  }
@@ -7548,6 +7569,15 @@ window.TD = window.TD || {};
       if (c.N === 1 && triBet > 0 && c.opp.draws[2] > 0 && !userFoldsLight(game, c.opp) && R() < triBet) {
         return act('bet', 'Bet the ' + c.txt + ' for value (mixed: about ' + Math.round(triBet * 100) + '% of the time; the stronger the three-card hand, the more often it bets, and ' + (hasLead ? 'more often with the betting lead' : 'less often without the betting lead, since my bet reads as a badugi and weaker three-card hands fold') + '). Notes: a strong three-card hand keeps its non-robust equity when the draw misses, beating almost every other unimproved three-card hand at showdown, so after we both drew it is a value bet that hopes he bluff-catches with a weaker three-card hand. Mastering Mixed Games agrees: a player who drew on the last draw should expect some bluffs and pays off with slightly worse three-cards. If raised, I fold.', 'value');
       }
+      // Nov 27 (his 2-7 hand, same bug here): I stood pat on the last draw with no badugi and he drew: that is a snow, not
+      // a busted draw. Checked down it loses to nearly every hand he can have (his misses are three-card hands too), so
+      // its value is in the bet; his check after drawing is mostly misses, and they fold. A calling station is the exception.
+      if (c.N === 1 && !c.made && triBet === 0 && p.draws[2] === 0 && c.opp.draws[2] > 0 && !c.opp.allIn) {
+        const X = (c.pot + c.unit) / c.unit, drew = c.opp.draws[2] === 1 ? 'drew one' : 'drew ' + c.opp.draws[2];
+        const snow = 'I stood pat with ' + hstr(p.hand) + ' (' + hn.long.toLowerCase() + '), so this is a snow: checked down it loses to almost every hand he can have, his missed draws included, so all its value is in the bet.';
+        if (isCallingStation(game, c.opp)) return act('check', (c.ip ? 'Check back. ' : 'Check. ') + snow + ' But a snow works only when he folds, and this player calls too often, so I give up the pot.');
+        return act('bet', 'He ' + drew + (c.ip ? ' and checked: bet. ' : ' and I act first: bet. ') + snow + ' Badugi players respect a pat hand, and ' + (c.ip ? 'his check after drawing is mostly missed draws, which fold to a bet' : 'his missed draws fold to a bet') + '. The bet risks 1 big bet to win ' + X.toFixed(1) + ', so it needs him to fold only about 1 time in ' + (X + 1).toFixed(1) + '.', 'snow');
+      }
       if (c.N === 1 && triBet > 0 && !c.ip && c.opp.draws[2] > 0) return act('check', 'Check the ' + c.txt + ', planning to call a bet as a bluff catcher. Notes: strong three-card hands mix value bets and checks here; after checking they do most of the bluff-catching, since this hand beats every missed draw that bluffs.');
       // Chase (Nov 23): leading into, or betting behind the check of, a player who stood pat on the last draw after I
       // drew: 1 bluff for every X value bets, X = the pot odds my bet offers him (8.5-to-1 means 1 per 8.5)
@@ -7753,7 +7783,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 125;
+  TD.VERSION = 126;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
