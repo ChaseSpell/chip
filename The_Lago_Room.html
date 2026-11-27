@@ -1658,6 +1658,24 @@ window.TD = window.TD || {};
         }
         bs[m] = best; ba[m] = arg;
       }
+      if (d === 3) keepEightDeuce(bs, ba);
+    }
+  }
+  // First draw (Nov 27, from a 2-7 hand report): holding a deuce, an eight and a three through six (8-3-2, 8-4-2,
+  // 8-5-2, 8-6-2), always draw two (or fewer); throwing the eight to draw three to a two-card draw like 4-2 is never
+  // right. A-5 one rank lower: an ace, a seven and a deuce through five (7-2-A to 7-5-A). Levels: bit 0 = deuce (A-5
+  // ace), bits 1-4 = three to six, bit 6 = eight. The bots' 8-7-2 mix (7-6-A in A-5) is in ai.js decideDraw.
+  const EIGHT_DEUCE = (m) => (m & 1) && (m & EIGHT_BIT) && (m & 0b11110);
+  function keepEightDeuce(bs, ba) {
+    const Vd = V[3];
+    for (let m = 0; m < 8192; m++) {
+      if (POP[m] > 5 || !EIGHT_DEUCE(m) || POP[ba[m]] >= 3) continue;
+      let best = -1, arg = 0;
+      for (let s = m; s; s = (s - 1) & m) {
+        if (POP[s] < 3 || POP[s] > 4 || (s & ROUGH_KEEP) || weakFirstOne(s)) continue;
+        if (Vd[s] > best) { best = Vd[s]; arg = s; }
+      }
+      if (arg) { bs[m] = best; ba[m] = arg; }
     }
   }
   const t0 = performance.now();
@@ -4065,6 +4083,34 @@ window.TD = window.TD || {};
         }
       }
     }
+    // First draw (Nov 27, 2-7 hand #94, K-J-8-4-2 in the BB): holding a deuce and an eight, always draw two with 8-3-2,
+    // 8-4-2, 8-5-2 or 8-6-2; drawing three to 4-2 is never right there. With 8-7-2 the bot mixes: draw three to 7-2
+    // when drawing smooth to a robust hand matters (multiway, or heads-up against a strong range), otherwise mostly draw
+    // two. A-5 one rank lower (levels): ace, seven and a deuce through five draw two; 7-6-A mixes. Badugi: not used.
+    if (k === 0 && !mem.snow) {
+      const lv = new Set(hand.map(TD.rankOf));
+      const W8 = 'eight'; // written in 2-7 terms: Review shifts it one rank down in A-5
+      if (lv.has(2) && lv.has(8) && [3, 4, 5, 6].some((r) => lv.has(r)) && cands.some((c) => c.n >= 3) && cands.some((c) => c.n <= 2)) {
+        const three = cands.find((c) => c.n >= 3);
+        cands = cands.filter((c) => c.n <= 2);
+        const two = cands.find((c) => c.n === 2);
+        if (two && !firstNote) firstNote = ' Keeping the ' + W8 + ' rather than drawing three to ' + hstr(three.keep) + ': on the first draw, with 8-3-2, 8-4-2, 8-5-2 or 8-6-2, always draw two. Drawing three is never right there.';
+      } else if (lv.has(2) && lv.has(8) && lv.has(7) && ![3, 4, 5, 6].some((r) => lv.has(r))) {
+        const pick = (levels) => { const ks = []; for (const L of levels) { const c = hand.find((x) => TD.rankOf(x) === L && !ks.includes(x)); if (c) ks.push(c); } return TD.cardsForMask(hand, TD.rankMaskOf(ks)); };
+        const k872 = pick([8, 7, 2]), k72 = pick([7, 2]);
+        if (mem.eightSevenDeuce === undefined) {
+          const strong = opps.some((o) => strongPreRange(game, o));
+          mem.e72Ctx = opps.length > 1 ? 'multi' : strong ? 'strong' : 'weak';
+          mem.eightSevenDeuce = R() < { multi: 0.85, strong: 0.6, weak: 0.2 }[mem.e72Ctx] ? 3 : 2;
+        }
+        const ctxTxt = mem.e72Ctx === 'multi' ? 'This pot is multiway, where drawing smooth to a robust hand matters, so I usually draw three.'
+          : mem.e72Ctx === 'strong' ? 'Heads-up against a strong range (an early open or a reraise), where drawing smooth to a robust hand matters, so I draw three more often than not.'
+            : 'Heads-up against a relatively weaker range, so I usually keep the ' + W8 + ' and draw two.';
+        const why = ' With 8-7-2 on the first draw I mix between drawing two and drawing three to 7-2: drawing three is right multiway, or whenever drawing smooth to a robust hand matters. ' + ctxTxt;
+        const keep = mem.eightSevenDeuce === 3 ? k72 : k872;
+        return { discard: keepIdx(hand, keep), reason: '1st draw: draw ' + (5 - keep.length) + ' to ' + hstr(keep) + '.' + why, tag: '' };
+      }
+    }
     // Chase (Nov 24): never draw one to a nine or worse on the second draw. A 9-8 draw is too rough, and a
     // smoother nine (9-7-4-2) draws two to its premium two-card draw for the implied odds of a wheel.
     if (!A5 && k === 1 && cands.some((c) => c.n === 2)) {
@@ -4276,7 +4322,7 @@ window.TD = window.TD || {};
     }
     let r = which + ' draw: draw ' + choice.n + (choice.keep.length ? ' to ' + hstr(choice.keep) : '') + eqTxt + '.';
     if (alt && alt.n === 0) {
-      r += ' Breaking the pat ' + mk(hn.short) + '.';
+      if (hn.top <= 11) r += ' Breaking the pat ' + mk(hn.short) + '.'; // a queen or king low is no pat hand worth naming
       if (k === 0 && hn.top === 9) r += ' Notes: pat 9-5-4-3-2 type hands are broken early.';
       if (k === 2 && hn.top === 11) r += ' Notes: a pat jack vs a one-card draw is close; this one breaks to a strong draw with river implied odds.';
     } else if (alt && choice.eq !== undefined) {
@@ -7657,7 +7703,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 122;
+  TD.VERSION = 123;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
