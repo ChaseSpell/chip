@@ -433,7 +433,7 @@ body.portrait #drawer { width: 100vw; border-left: none; }
 .tagb.snow { background: #2c4b6e; color: #dcebfa; } .tagb.freeze { background: #2a5d6a; color: #d9f5fb; } .tagb.play { background: #6e3a2a; color: #ffe2d3; }
 .tagb.mdf { background: #3f5a2a; color: #e6f8d4; } .tagb.bluff { background: #7a2235; color: #ffe0e6; } .tagb.check-raise { background: #5c3a7a; color: #f0e2ff; }
 .tagb.steal { background: #6a5520; color: #fff1c9; } .tagb.isolate { background: #23524a; color: #d6fff7; } .tagb.card-ahead { background: #234e7a; color: #dcecff; }
-.tagb.two-way { background: #5a4a1e; color: #fff3cf; }
+.tagb.two-way { background: #5a4a1e; color: #fff3cf; } .tagb.flat-pat { background: #6e2a4a; color: #ffdcec; }
 .tagb.robust { background: #2a5a3c; color: #dbf7e5; } .tagb.denial { background: #5e4a2a; color: #fbead2; }
 .rv-empty, .muted { color: var(--muted); font-style: italic; }
 .rv-player.coach { border-color: var(--accent); }
@@ -2608,7 +2608,8 @@ window.TD = window.TD || {};
         userWhy: ut !== res.top && res.samples[ut] ? res.samples[ut].reason : '',
         alt: alt && verdict === 'mixed' ? label(alt) : '', altWhy: alt && verdict === 'mixed' && res.samples[alt] ? res.samples[alt].reason : '',
         eq: res.eq, potOdds: opts.toCall ? opts.toCall / (opts.pot + opts.toCall) : 0, toCall: opts.toCall,
-        bluff: ut === 'raise' ? this.userBluffKind(p, res.eq) : ''
+        bluff: ut === 'raise' ? this.userBluffKind(p, res.eq) : '',
+        canRaise: !!opts.canRaise
       });
       this.coachStats[verdict]++;
       TD.AI.coachCommit(p, res, ut);
@@ -2642,9 +2643,19 @@ window.TD = window.TD || {};
       const hs = TD.AI.hstr;
       const desc = (keep) => (keep.length === TD.HAND_SIZE ? 'stand pat' : 'draw ' + (TD.HAND_SIZE - keep.length) + (keep.length ? ' to ' + hs(keep) : ''));
       const verdict = cmp.same ? 'agree' : (cmp.eqUser >= cmp.eqAI - 0.02 ? 'mixed' : 'differs');
+      // Nov 28 (his 2-7 hand #43): calling before the first draw and then standing pat at it is flagged, all three
+      // games. A hand that stands pat on the first draw is raised before it; a flat call announces a weak pat hand.
+      let flatPat = '';
+      if (drawIdx === 0 && cmp.userKeep.length === TD.HAND_SIZE) {
+        const pre = this.coachNotes.filter((n) => n.seat === p.seat && n.phase === 'bet' && n.street === 0);
+        const raised = this.actions.some((a) => a.street === 0 && a.seat === p.seat && (a.type === 'raise' || a.type === 'bet'));
+        if (!raised && pre.some((n) => (n.user === 'call' || n.user === 'check') && n.canRaise)) {
+          flatPat = 'You only ' + (pre.some((n) => n.user === 'call') ? 'called' : 'checked') + ' before the draw and then stood pat. A hand you stand pat with on the first draw should be raised and reraised before the draw, never just called: calling and then standing pat tells everyone the pat hand is a weak one, since a strong one would have raised. The AI raises these hands before the draw.';
+        }
+      }
       this.coachNotes.push({
         seat: p.seat, street: drawIdx + 1, phase: 'draw', user: desc(cmp.userKeep), ai: desc(cmp.aiKeep), verdict, why: res.reason,
-        eqAI: cmp.eqAI, eqUser: cmp.eqUser
+        eqAI: cmp.eqAI, eqUser: cmp.eqUser, flatPat
       });
       this.coachStats[verdict]++;
     }
@@ -3628,9 +3639,34 @@ window.TD = window.TD || {};
         r = act('raise', what + ' with ' + d + ', planning to draw one. ' + ONE_RAISE, 'value');
       }
     }
+    // Nov 28 (his 2-7 hand #43, BB 9-7-5-4-3 called the SB's open, then stood pat): "the BB should always 3bet
+    // predraw when intending to stand pat". A hand that would stand pat at the first draw after only calling (a
+    // call rules out drawing one there, see above) raises instead; and a hand that did only call or check never
+    // stands pat at the first draw (decideDraw). 2-7 and A-5 (one rank lower comes from the card levels).
+    // (a hand with an explicit call-and-draw-two plan, the flex-straight mix, keeps it and draws two)
+    if ((r.type === 'call' || r.type === 'check') && opts.canRaise && !mem.snowPlan && mem.flexAgg !== false && patAfterFlat(p.hand)) {
+      const info = TD.predrawInfo(p.hand);
+      const lvl = game.betLevel, d = describe(info);
+      const what = lvl <= 1 ? 'Raise' : lvl === 2 ? '3-bet' : lvl === 3 ? '4-bet' : 'Cap it';
+      const brk = info.kind !== 'pat' || firstDrawPick(p.hand) !== 0;
+      r = act('raise', what + ' with ' + (info.kind === 'pat' ? d : hstr(p.hand) + ' (' + d + ')') + '. ' + PAT_RAISE + (brk ? ' At the draw I may still break it and draw instead.' : ''), 'value');
+    }
+    // flatPre: the last action before the first draw was a call or check with a raise still possible (an opener
+    // that calls a 3-bet included: one-card draws and pat hands are reraised there too)
     if (r.type === 'raise' || r.type === 'bet') mem.flatPre = false;
     else if ((r.type === 'call' || r.type === 'check') && opts.canRaise) mem.flatPre = true;
     return r;
+  }
+  const PAT_RAISE = 'A hand I would stand pat with on the first draw is raised and reraised before the draw, never just called or checked: calling and then standing pat tells everyone the pat hand is a weak one.';
+  // the first-draw pick by draw value alone (no table context): 0 = stand pat
+  function firstDrawPick(hand) { const cs = candidates(hand, 3); return cs.length ? cs[0].n : 5; }
+  // a made hand that, once a flat call rules out drawing one, would stand pat at the first draw: standing pat is the
+  // top choice by draw value, or close enough to the best draw (within 0.03) that the draw's simulations often pick it
+  function patAfterFlat(hand) {
+    if (!TD.isMadeLow(hand)) return false;
+    const cs = candidates(hand, 3).filter((c) => c.n !== 1);
+    const pat = cs.find((c) => c.n === 0), other = cs.find((c) => c.n !== 0);
+    return !!pat && (!other || pat.val >= other.val - 0.03);
   }
   function predrawCore(game, p, opts) {
     const info = TD.predrawInfo(p.hand);
@@ -4055,6 +4091,14 @@ window.TD = window.TD || {};
       const wasPick = one === cands[0];
       cands = cands.filter((c) => c.n !== 1);
       if (wasPick) firstNote = ' Not drawing one to ' + hstr(one.keep) + ': I only called before the draw, and every one-card draw I play is raised and reraised there, so this hand plays as the two-card draw it called with.';
+    }
+    // Nov 28 (hand #43): a hand that only called or checked before the first draw doesn't stand pat at it either; a
+    // hand that stands pat there was raised before the draw (predraw)
+    if (k === 0 && mem.flatPre && !mem.snow && cands.some((c) => c.n === 0) && cands.some((c) => c.n !== 0)) {
+      const pat = cands.find((c) => c.n === 0);
+      const wasPick = pat === cands[0];
+      cands = cands.filter((c) => c.n !== 0);
+      if (wasPick) firstNote = ' Not standing pat: I only called before the draw, and a hand I stand pat with on the first draw is raised and reraised there, so this hand plays as the draw it called with.';
     }
     if (k === 0 && cands.some((c) => c.n >= 2)) {
       const weak = cands.filter((c) => c.n === 1 && TD.weakFirstOne(c.mask));
@@ -5733,7 +5777,7 @@ window.TD = window.TD || {};
     return { same: false, aiKeep, userKeep, eqAI, eqUser };
   }
 
-  TD.AI = { _twoWay: twoWayHand, _cands: candidates, _mcBetEV: mcBetEV, decideBet, decideDraw: decideDrawSafe, mcEquity, OPEN_THR, predrawKey, coachBet, coachCommit, coachDraw, coachDrawCompare, normType, hstr: hstrPlain,
+  TD.AI = { _twoWay: twoWayHand, _cands: candidates, _patAfterFlat: patAfterFlat, _mcBetEV: mcBetEV, decideBet, decideDraw: decideDrawSafe, mcEquity, OPEN_THR, predrawKey, coachBet, coachCommit, coachDraw, coachDrawCompare, normType, hstr: hstrPlain,
     userPosterior, bluffFreqVs, riverCallLik, isCallingStation,
     _mdf: { mdfSpot, rangeEdge, selfShareAbove }, _top: { userNoCheckRaise, stealWiden, userFoldsRiver, anteShift, anteOf, scoreTail, openRef, inRange, RANGE } }; // exposed for the test page
  }
@@ -6669,6 +6713,14 @@ window.TD = window.TD || {};
   function predraw(game, p, opts) {
     let r = predrawCore(game, p, opts);
     const mem = p.bot, i = infoOf(p.hand);
+    // Nov 28 (his 2-7 hand #43, all three games): a hand I may stand pat with at the first draw is raised before it,
+    // never just called. A badugi the predraw ranges play as its three-card hand (a jack, queen or king badugi over a
+    // 6-5 three-card hand) used to call the big blind's defence and then often stood pat; it raises instead.
+    if ((r.type === 'call' || r.type === 'check') && opts.canRaise && i.broken && !mem.snow && !mem.rastFlat && !raisedBefore(game, p)) {
+      const lvl = game.betLevel, what = lvl <= 1 ? 'Raise' : lvl === 2 ? '3-bet' : lvl === 3 ? '4-bet' : 'Cap it';
+      mem.keepTri = null; mem.keepTriWhy = null; mem.drawTwoFirst = false;
+      r = act('raise', what + ' with a ' + hstr(i.pat.keep) + ' badugi (' + hstr(i.keep) + ' under it). ' + PAT_RAISE + ' At the draw I may still break it to ' + hstr(i.keep) + ' and draw one.', 'value');
+    }
     if ((r.type === 'call' || r.type === 'check') && opts.canRaise && i.kind === 'three' && !mem.snow && !mem.rastFlat) {
       if (!mem.drawTwoFirst && (mem.keepTri || i.t <= lv('6'))) {
         const lvl = game.betLevel, what = lvl <= 1 ? 'Raise' : lvl === 2 ? '3-bet' : lvl === 3 ? '4-bet' : 'Cap it';
@@ -6680,8 +6732,13 @@ window.TD = window.TD || {};
         mem.drawTwoFirst = true; // only called: draw two at the first draw, not one
       }
     }
+    // flatPre: only called or checked before the first draw, with a raise still possible, and never raised there
+    if (r.type === 'raise' || r.type === 'bet') mem.flatPre = false;
+    else if ((r.type === 'call' || r.type === 'check') && opts.canRaise && !raisedBefore(game, p)) mem.flatPre = true;
     return r;
   }
+  const raisedBefore = (game, p) => game.actions.some((a) => a.street === 0 && a.seat === p.seat && (a.type === 'raise' || a.type === 'bet'));
+  const PAT_RAISE = 'A hand I may stand pat with on the first draw is raised and reraised before the draw, never just called or checked: calling and then standing pat tells everyone the pat hand is a weak one.';
   const EARLY_OPEN = ['LJ', 'HJ']; // Badugi: the big blind's Rast flat-call mix applies against these opens only
   const bbTopDraw = (i) => i.t <= lv('5') || (i.t === lv('6') && i.s2 <= lv('2'));
   function predrawCore(game, p, opts) {
@@ -7017,6 +7074,8 @@ window.TD = window.TD || {};
     // a three-card hand that only called (or checked) before the first draw draws two now: every one-card draw it
     // plays is raised and reraised predraw, so the call and the draw agree (Nov 26, his hand #32)
     if (k === 0 && mem.drawTwoFirst && !mem.snow && !mem.keepTri && !mem.breakFirst && cands.some((x) => x.n >= 2)) cands = cands.filter((x) => x.n !== 1);
+    // Nov 28 (hand #43): a hand that only called or checked before the first draw doesn't stand pat at it either
+    if (k === 0 && mem.flatPre && !mem.snow && cands.some((x) => x.n === 0) && cands.some((x) => x.n !== 0)) cands = cands.filter((x) => x.n !== 0);
     const drewThis = opps.filter((o) => o.draws.length > k).map((o) => o.draws[k]);
     const oppPat = opps.some((o) => (o.draws.length > k ? o.draws[k] : o.draws[k - 1]) === 0 && o.draws.length > 0);
     const desc = (cd) => (cd.n === 0 ? 'stand pat with ' + hn.short : cd.keep.length ? 'draw ' + cd.n + ' to ' + hstr(cd.keep) : 'draw four');
@@ -7847,7 +7906,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 128;
+  TD.VERSION = 129;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
@@ -9372,7 +9431,8 @@ window.TD = window.TD || {};
         const pl = every && n.seat !== undefined ? h.players[n.seat] : null;
         const as = pl ? (pl.isHuman ? 'You' : escapeHTML(pl.name)) + ' (' + pl.pos + ')' : '';
         const bk = n.bluff ? '<span class="tagb ' + n.bluff + ' cn-bluff">' + (n.bluff === 'snow' ? 'Snow' : n.street === 3 ? 'Bluff' : 'Bluff · denial') + '</span>' : '';
-        let body = '<div class="cn-head"><span class="st">' + streetName(n) + '</span>' + (as ? '<b class="cn-seat">' + as + '</b>' : '') + vb + bk + '</div>';
+        const fk = n.flatPat ? '<span class="tagb flat-pat cn-flatpat">Called, then pat</span>' : '';
+        let body = '<div class="cn-head"><span class="st">' + streetName(n) + '</span>' + (as ? '<b class="cn-seat">' + as + '</b>' : '') + vb + bk + fk + '</div>';
         body += '<div class="cn-line">You' + (pl && !pl.isHuman ? ' as ' + escapeHTML(pl.name) : '') + ': <b>' + escapeHTML(n.user) + '</b> &nbsp;·&nbsp; AI: <b>' + escapeHTML(n.ai) + '</b>' + (n.dist && n.verdict !== 'agree' ? ' <span class="muted">(' + escapeHTML(n.dist) + ')</span>' : '') + '</div>';
         // no simulated equity percentages here; only the comparison and exact arithmetic (the price of a call)
         if (n.phase === 'draw' && n.eqAI !== undefined && n.verdict !== 'agree') {
@@ -9383,6 +9443,7 @@ window.TD = window.TD || {};
           body += '<div class="cn-line muted">The price: ' + money(n.toCall) + ' to call into a ' + money(pot) + ' pot — getting ' + (pot / n.toCall).toFixed(1) + '-to-1, so a call needs ' + Math.round(n.potOdds * 100) + '% to break even.</div>';
         }
         if (n.bluff) body += '<div class="cn-why cn-bluffwhy">' + escapeHTML(TD.bluffNoteText(n)) + '</div>';
+        if (n.flatPat) body += '<div class="cn-why cn-flatpatwhy">' + escapeHTML(n.flatPat) + '</div>';
         if (n.verdict === 'agree') body += '<div class="cn-why muted">' + escapeHTML(n.why) + '</div>';
         else {
           body += '<div class="cn-why"><b>Why the AI would ' + escapeHTML(n.ai) + ':</b> ' + escapeHTML(n.why) + '</div>';
