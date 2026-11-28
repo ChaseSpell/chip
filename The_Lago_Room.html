@@ -6958,6 +6958,21 @@ window.TD = window.TD || {};
     if (reraised) return null;
     return { choice: pat, why: ' ' + (o.isHuman ? 'You' : o.name) + ' drew ' + o.draws[0] + ' at the 1st draw, so most of ' + (o.isHuman ? 'your' : 'that') + ' range has no badugi yet: a jack badugi or better stands pat against it (Mastering Mixed Games: having made a badugi, check-raise and stand pat).' };
   }
+  // Nov 28 (his hand #96 follow-up): out of position after the 1st or 2nd draw, I drew and made a queen or king badugi
+  // and the player behind me stood pat. Such a weak badugi is likely beaten by a pat hand, so break it whenever the three
+  // cards under it are a draw with robust equity (seven-high or better: Q-4-3-A breaks to 4-3-A); with a rough three-card
+  // under it (Q-T-8-5) never break, since the draw would have no robust equity: stand pat and check-call or check-fold.
+  function vsPatBreak(game, p, k, cands, opps) {
+    if (k < 1 || k > 2 || !(p.draws[k - 1] >= 1) || TD.handName(p.hand).cat !== 0 || lvDesc(p.hand)[0] < lv('Q')) return null;
+    const o = opps.find((q) => q.draws[k - 1] === 0 && game.actOrder(q.seat) > game.actOrder(p.seat));
+    if (!o) return null;
+    const pat = cands.find((x) => x.n === 0);
+    const one = cands.filter((x) => x.n === 1 && x.keep.length === 3).sort((a, b) => lvDesc(a.keep)[0] - lvDesc(b.keep)[0] || b.val - a.val)[0];
+    const w = TD.RANK_WORD[lvDesc(p.hand)[0]].toLowerCase(), who = nameOf(o);
+    if (one && lvDesc(one.keep)[0] <= lv('7')) return { choice: one, why: ' Breaking the ' + w + ' badugi: ' + who + ' stood pat, and a ' + w + ' badugi is likely beaten by a pat hand, while ' + hstr(one.keep) + ' underneath is a draw with robust equity.' };
+    if (pat) return { choice: pat, why: ' Standing pat with the ' + w + ' badugi: ' + who + ' stood pat, but the three cards under it are too rough to break to (a draw without robust equity), so I stand pat and call or fold.' };
+    return null;
+  }
   // (Nov 24, Hand #121) a made badugi is kept or broken to a three-card draw. It never draws three, and once I have
   // raised with it before the first draw (a 3-bet or 4-bet says pat), it doesn't break into a two-card draw either.
   function badugiKeeps(game, p, cands) {
@@ -6985,7 +7000,7 @@ window.TD = window.TD || {};
     let cands = badugiKeeps(game, p, TD.keepOptions(p.hand, 3 - st, p.discards));
     const fr = st === 0 ? firstDrawRough(cands, p.bot) : null;
     if (st === 0 && cands.some((x) => !roughTri(x))) cands = cands.filter((x) => !roughTri(x));
-    const bk = fr || patVsTwo(game, p, st, cands, opps) || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    const bk = fr || vsPatBreak(game, p, st, cands, opps) || patVsTwo(game, p, st, cands, opps) || bookKeep(st, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     const cc = bk ? { choice: bk.choice, alt: null } : closeKeep(game, p, st, cands, opps, ip);
     const oppDraws = {};
     for (const o of opps) oppDraws[o.seat] = o.draws.length;
@@ -7098,7 +7113,7 @@ window.TD = window.TD || {};
     if (k === 2 && pat && drewThis.length === opps.length && drewThis.every((n) => n > 0) && opps.length === 1) {
       return { discard: [], reason: '3rd draw: stand pat with ' + hn.short + ' — he drew ' + drewThis[0] + ' in front of me, so he has no badugi yet and must hit to beat any badugi.', tag: '' };
     }
-    const bk = patVsTwo(game, p, k, cands, opps) || bookKeep(k, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
+    const bk = vsPatBreak(game, p, k, cands, opps) || patVsTwo(game, p, k, cands, opps) || bookKeep(k, cands, opps.some((o) => o.draws.length && o.draws[o.draws.length - 1] === 0));
     if (bk) {
       const plan0 = mem.drawPlan && mem.drawPlan.k === k ? mem.drawPlan : null;
       mem.drawPlan = null;
@@ -7175,6 +7190,21 @@ window.TD = window.TD || {};
     }
     // planned check-raise
     if (!r && mem.crPlan === st && c.toCall > 0 && c.canRaise && c.lvl === 1) r = act('raise', 'Check-raise as planned with ' + c.txt + '.', 'check-raise');
+    // facing the pat player's bet after I checked a made badugi to it (vsPatMix): check-raise or check-call, mixed
+    // (found from the hand itself, not only from memory, so Review gives the same answer when the user checked)
+    const patBehind = dRem > 0 && c.iChecked && p.draws[st - 1] >= 1 && opps.some((o) => o.draws[st - 1] === 0 && game.actOrder(o.seat) > game.actOrder(p.seat));
+    if (!r && (mem.vsPat === st || patBehind) && c.toCall > 0 && c.lvl === 1 && c.made && !c.drawing && !mem.snow && !(mem.crPlan === st)) {
+      const m = vsPatMix(c);
+      if (m.tier !== 'weak' && c.canRaise && R() < m.cr) r = act('raise', 'Check-raise with the ' + hn0(c) + ', planning to stand pat. ' + m.txt, m.tier === 'mid' ? 'balance' : 'check-raise');
+      else if (m.tier === 'weak') {
+        // a rough queen or king that can't break: it is often beaten, and finding out costs this bet and the bets still to
+        // come (reverse implied odds), so it needs about one more bet's worth of equity per draw left
+        const need = c.potOdds * (1 + dRem);
+        r = c.E >= need ? act('call', 'Call with the ' + hn0(c) + ', planning to stand pat — about ' + Math.round(c.E * 100) + '% against the betting range, enough for this bet and the ones still to come (' + priceTxt(c) + ').')
+          : act('fold', 'Fold the ' + hn0(c) + ' — too likely beaten by the pat hand (about ' + Math.round(c.E * 100) + '% against the betting range), and finding out costs this bet plus the bets still to come: with ' + dRem + ' draw' + (dRem > 1 ? 's' : '') + ' left I need about ' + Math.round(need * 100) + '%, and the cards under it are too rough to break to.');
+      }
+      else r = act('call', 'Call with the ' + hn0(c) + ', planning to stand pat. ' + m.txt, m.tier === 'mid' ? 'standard' : 'balance');
+    }
     if (!r && dRem > 0 && !mem.snow && !mem.snowAborted) r = snowStart(c);
     if (!r && st === 3) r = river(c, fair);
     if (!r) r = drawStreet(c, fair);
@@ -7299,6 +7329,28 @@ window.TD = window.TD || {};
     return more.length ? { closer, k, more } : null;
   }
   const moreTxtBD = (more, st) => more.map((q) => nameOf(q) + ' (drew ' + q.draws[st - 1] + ')').join(' and ');
+  // Nov 27 (his hand #96): out of position, I drew and made a badugi on the 1st or 2nd draw, and the player behind me
+  // stood pat (and bets when checked to). His strategy: the weakest badugis (queens and kings) check-call and break to
+  // draw again when the three cards under them are a robust draw (vsPatBreak: seven-high or better), and with a rough
+  // three-card under them stand pat and check-call or check-fold (never break to a draw without robust equity);
+  // middling badugis (jack down to eight) mostly check-call and stand pat, check-raising a few
+  // (5-10%) so the check-raise range isn't only very strong hands and snows; seven-or-better badugis mostly check-raise
+  // and stand pat, check-calling a few (10% for a seven, 5% for six or better) so the check-call range isn't condensed.
+  // A check-raise isn't meant to make a better hand break: a pat hand that is behind mine is drawing dead while it
+  // stays pat, so a worse pat hand staying pat is what I want. The river is different (no card-ahead bet there).
+  const VS_PAT_CR = { 8: 0.10, 9: 0.08, T: 0.06, J: 0.05 };
+  function vsPatMix(c) {
+    const t = c.hn.top, w = TD.RANK_WORD[t].toLowerCase();
+    if (t >= lv('Q')) return { tier: 'weak', cr: 0, txt: '' };
+    if (t >= lv('8')) {
+      const cr = VS_PAT_CR[Object.keys(VS_PAT_CR).find((k) => lv(k) === t)];
+      return { tier: 'mid', cr, txt: 'A middling badugi (jack down to eight) usually check-calls and stands pat; this ' + w + ' badugi check-raises about ' + Math.round(cr * 100) +
+        '% of the time, so my check-raise range isn\'t only very strong badugis and snows, which makes it harder to bluff-catch against. Calling keeps a worse pat hand in, and a worse pat hand that stays pat is drawing dead.' };
+    }
+    const cr = t === lv('7') ? 0.9 : 0.95;
+    return { tier: 'strong', cr, txt: 'A ' + w + ' badugi or better usually check-raises and stands pat, to build the pot against the worse pat hands that pay it off; about ' + Math.round((1 - cr) * 100) +
+      '% of the time it just check-calls, so my check-call range isn\'t only middling badugis.' };
+  }
   const AHEAD_LO = 0.40, AHEAD_HI = 0.47;
   function drawStreet(c, fair) {
     const { game, p } = c;
@@ -7314,7 +7366,19 @@ window.TD = window.TD || {};
     if (c.toCall === 0) {
       if (leadBehind) {
         const lead = leadBehind.isHuman ? 'you drew fewer cards than I did, so you have' : leadBehind.name + ' drew fewer cards than I did, so has';
-        if (c.made && !c.drawing) { p.bot.crPlan = c.st; return act('check', 'Check the ' + hn0(c) + ' to check-raise. Mastering Mixed Games: ' + lead + ' the drawing lead; having made a badugi, check-raise every time (pat now, so there is nothing left to disguise, and even a rough badugi can make a better king or queen break).', 'check-raise'); }
+        // Nov 27 (his hand #96, 1st and 2nd draws): I drew and made a badugi, and the player behind me stood pat. That
+        // player bets when checked to (a card ahead), so I check; how I continue depends on the badugi (vsPatMix).
+        if (c.made && leadBehind.draws[c.st - 1] === 0) {
+          const m = vsPatMix(c);
+          p.bot.vsPat = c.st;
+          const nm = nameOf(leadBehind), Nm = nm.replace(/^./, (x) => x.toUpperCase());
+          const why = Nm + ' stood pat behind me after I drew, so ' + nm + (leadBehind.isHuman ? ' bet' : ' bets') + ' when checked to (being a card ahead), and I check. ';
+          if (c.drawing) return act('check', 'Check, ' + c.txt + '. ' + why + 'A ' + TD.RANK_WORD[c.hn.top].toLowerCase() + ' badugi is likely beaten by a pat hand, and ' + hstr(c.keepNow) + ' underneath is a draw with robust equity: check, call, and break it to draw for a better badugi.', 'standard');
+          if (m.tier === 'weak') return act('check', 'Check the ' + hn0(c) + ', planning to stand pat. ' + why + 'A ' + TD.RANK_WORD[c.hn.top].toLowerCase() + ' badugi is too weak to raise into a pat hand, and the cards under it are too rough to break to: check, then call or fold by the price, counting the bets still to come.', 'standard');
+          if (m.tier === 'mid') return act('check', 'Check the ' + hn0(c) + ', planning to call and stand pat. ' + why + m.txt, 'standard');
+          return act('check', 'Check the ' + hn0(c) + ', planning to check-raise and stand pat. ' + why + m.txt, 'check-raise');
+        }
+        if (c.made && !c.drawing) { p.bot.crPlan = c.st; return act('check', 'Check the ' + hn0(c) + ' to check-raise. Mastering Mixed Games: ' + lead + ' the drawing lead and is still drawing, so bets when checked to without a badugi yet; having made a badugi, check-raise and stand pat.', 'check-raise'); }
         return act('check', 'Check, ' + c.txt + '. Mastering Mixed Games: ' + lead + ' the drawing lead — always check to the player with the drawing lead, and with a one-card draw out of position just call (a check-raise shows my hand the moment I draw one).');
       }
       // Nov 26 (hand #23, all three games): multiway, the player who closes the action drew one, no more than anyone and
@@ -7783,7 +7847,7 @@ window.TD = window.TD || {};
   const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
   const SUIT_KEYS = ['s', 'h', 'd', 'c'];
   // version shown at the bottom of Settings: raise it with every published update (live page and GitHub copy)
-  TD.VERSION = 126;
+  TD.VERSION = 128;
   // storage may be unavailable (sandboxed pages, private browsing, local files): never let it break the game
   const store = {
     get(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
